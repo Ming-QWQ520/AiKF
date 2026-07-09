@@ -1,4 +1,4 @@
-# AiKF · 樱追番
+# AiKF · 爱看番
 
 一款基于 Tauri 2 + Vue 3 + Vite 6 + TypeScript 的现代化追番桌面应用，融合 Material Design 3 色调与 Liquid Glass 毛玻璃风格。数据来源为 Anich 逆向 API。
 
