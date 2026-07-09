@@ -1,0 +1,28 @@
+[package]
+name = "aikf"
+version = "0.1.0"
+description = "樱追番 · Anich — Tauri + Vue3 anime tracking app"
+authors = ["AiKF"]
+edition = "2021"
+
+[lib]
+name = "aikf_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = ["custom-protocol"] }
+tauri-plugin-opener = "2"
+tauri-plugin-http = { version = "2", features = ["unsafe-headers"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls-native-roots"] }
+
+[profile.release]
+panic = "abort"
+codegen-units = 16
+lto = "thin"
+opt-level = "z"
+strip = true
