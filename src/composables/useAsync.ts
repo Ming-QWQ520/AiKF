@@ -5,6 +5,10 @@ export interface UseAsyncOptions {
   enabled?: Ref<unknown>;
   /** Run immediately on mount (default true). */
   immediate?: boolean;
+  /** Max retries on error (default 2). */
+  retries?: number;
+  /** Retry delay in ms (default 1000). */
+  retryDelay?: number;
 }
 
 export interface UseAsyncResult<T> {
@@ -20,6 +24,9 @@ export interface UseAsyncResult<T> {
  * Minimal reactive async-data composable for the Anich views.
  * Re-runs whenever the `source` ref (or getter) changes, OR when `enabled`
  * transitions to truthy. Only runs while `enabled` (if provided) is truthy.
+ *
+ * Includes automatic retry logic (default 2 retries with 1s delay) since the
+ * Anich API is occasionally slow/flaky.
  */
 export function useAsync<T>(
   factory: () => Promise<T>,
@@ -32,14 +39,31 @@ export function useAsync<T>(
   const isError = computed(() => error.value !== null);
 
   const enabled = opts.enabled ?? ref(true);
+  const maxRetries = opts.retries ?? 2;
+  const retryDelay = opts.retryDelay ?? 1000;
   let firstRun = true;
+
+  const runWithRetry = async (): Promise<T> => {
+    let lastErr: unknown = null;
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+      try {
+        return await factory();
+      } catch (e) {
+        lastErr = e;
+        if (attempt < maxRetries) {
+          await new Promise((r) => setTimeout(r, retryDelay * (attempt + 1)));
+        }
+      }
+    }
+    throw lastErr;
+  };
 
   const run = async () => {
     if (!enabled.value) return;
     if (firstRun) isLoading.value = true;
     isFetching.value = true;
     try {
-      const result = await factory();
+      const result = await runWithRetry();
       data.value = result as T;
       error.value = null;
     } catch (e) {

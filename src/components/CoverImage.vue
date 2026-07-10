@@ -38,6 +38,7 @@ const ratioClass = computed(
   <div
     :class="cn('relative overflow-hidden bg-gradient-to-br from-primary/15 via-secondary/10 to-tertiary/15', ratioClass, rounded, props.class)"
   >
+    <!-- shimmer placeholder (CSS-only, GPU-accelerated) -->
     <div v-if="!loaded && !errored" class="absolute inset-0 shimmer" />
     <img
       v-if="src && !errored"
@@ -49,7 +50,7 @@ const ratioClass = computed(
       draggable="false"
       @load="loaded = true"
       @error="errored = true"
-      :class="cn('h-full w-full object-cover transition-all duration-700 pointer-events-none select-none', loaded ? 'scale-100 opacity-100 blur-0' : 'scale-105 opacity-0 blur-md')"
+      :class="cn('h-full w-full object-cover pointer-events-none select-none will-change-[opacity,transform] transition-[opacity,transform] duration-500 ease-out', loaded ? 'scale-100 opacity-100 blur-0' : 'scale-105 opacity-0 blur-md')"
     />
     <div v-else class="absolute inset-0 flex items-center justify-center">
       <svg viewBox="0 0 24 24" fill="none" class="h-8 w-8 text-muted-foreground/60" stroke="currentColor" stroke-width="1.5">

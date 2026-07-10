@@ -69,16 +69,25 @@ function buildUrl(path: string, query?: Record<string, string | number | undefin
 }
 
 async function rustFetch(url: string, accept: string): Promise<{ bytes: Uint8Array; text: string }> {
-  const result = await invoke<{ status: number; ok: boolean; body: number[]; headers: Record<string, string> }>("anich_fetch", {
-    args: { url, headers: { Accept: accept } },
-  });
-  if (!result.ok) {
-    const text = new TextDecoder().decode(new Uint8Array(result.body));
-    throw new AnichAPIError(`GET failed`, result.status, url, text.slice(0, 512));
+  try {
+    const result = await invoke<{ status: number; ok: boolean; body: number[]; headers: Record<string, string> }>("anich_fetch", {
+      args: { url, headers: { Accept: accept } },
+    });
+    if (!result.ok) {
+      const text = new TextDecoder().decode(new Uint8Array(result.body));
+      throw new AnichAPIError(`GET failed (HTTP ${result.status})`, result.status, url, text.slice(0, 512));
+    }
+    const bytes = new Uint8Array(result.body);
+    const text = new TextDecoder().decode(bytes);
+    return { bytes, text };
+  } catch (e: any) {
+    // If the invoke itself failed (Rust error string), wrap it
+    if (e instanceof AnichAPIError) throw e;
+    throw new AnichAPIError(
+      typeof e === "string" ? e : (e?.message || "invoke failed"),
+      0, url, ""
+    );
   }
-  const bytes = new Uint8Array(result.body);
-  const text = new TextDecoder().decode(bytes);
-  return { bytes, text };
 }
 
 async function fetchBytes(path: string, query?: Record<string, string | number | undefined>): Promise<Uint8Array> {

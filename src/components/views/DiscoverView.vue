@@ -1,10 +1,11 @@
 <script setup lang="ts">
-import { computed, ref, onMounted, onBeforeUnmount, watch } from "vue";
-import { Play, ChevronLeft, ChevronRight, Flame, Clock, TrendingUp } from "lucide-vue-next";
+import { computed, ref } from "vue";
+import { Flame, Clock, TrendingUp } from "lucide-vue-next";
 import { anich } from "@/lib/anich/api-client";
 import { useUIStore } from "@/stores/ui";
 import { useAsync } from "@/composables/useAsync";
 import CoverImage from "@/components/CoverImage.vue";
+import HeroCarousel from "@/components/HeroCarousel.vue";
 import { weekdayLabel, formatRelative } from "@/lib/anich/format";
 import { cn } from "@/lib/utils";
 
@@ -14,21 +15,14 @@ const { data: latestData, isLoading: latestLoading } = useAsync(() => anich.late
 const { data: calData, isLoading: calLoading } = useAsync(() => anich.calendar(), { source: () => "cal" });
 const { data: listData, isLoading: listLoading } = useAsync(() => anich.list({ type: "tv", skip: 0 }), { source: () => "list" });
 
-// Hero carousel
-const heroSlides = computed(() => (latestData.value?.items ?? []).slice(0, 6));
-const heroIndex = ref(0);
-let heroTimer = 0;
-const nextHero = () => { if (heroSlides.value.length) heroIndex.value = (heroIndex.value + 1) % heroSlides.value.length; };
-const prevHero = () => { if (heroSlides.value.length) heroIndex.value = (heroIndex.value - 1 + heroSlides.value.length) % heroSlides.value.length; };
-const goToHero = (i: number) => { heroIndex.value = i; };
-const heroHovered = ref(false);
-watch(heroHovered, (h) => {
-  if (h) { if (heroTimer) { clearInterval(heroTimer); heroTimer = 0; } }
-  else { if (!heroTimer) heroTimer = window.setInterval(nextHero, 5000); }
-});
-onMounted(() => { heroTimer = window.setInterval(nextHero, 5000); });
-onBeforeUnmount(() => { if (heroTimer) clearInterval(heroTimer); });
-watch(heroSlides, (s) => { if (heroIndex.value >= s.length) heroIndex.value = 0; });
+// Carousel 1 — 今日更新 (today's latest updates)
+const todaySlides = computed(() =>
+  (latestData.value?.items ?? []).slice(0, 6).map((s) => ({ id: s.id, image: s.image, title: s.title, subtitle: s.name }))
+);
+// Carousel 2 — 热播榜 (hot ranking)
+const hotSlides = computed(() =>
+  (listData.value?.items ?? []).slice(0, 6).map((s) => ({ id: s.id, image: s.image, title: s.title, subtitle: s.tagline }))
+);
 
 // Weekly schedule
 const today = new Date().getDay();
@@ -36,8 +30,9 @@ const activeDay = ref(today);
 const days = computed(() => calData.value?.data ?? []);
 const activeDayList = computed(() => days.value.find((d) => d.sort % 7 === activeDay.value)?.list ?? []);
 
-// Right sidebar
+// Right sidebar — compact today's updates list
 const todayUpdates = computed(() => (latestData.value?.items ?? []).slice(0, 5));
+// Right sidebar — hot ranking list
 const hotRank = computed(() => (listData.value?.items ?? []).slice(0, 6));
 
 // Fresh grid
@@ -45,60 +40,21 @@ const fresh = computed(() => (listData.value?.items ?? []).slice(0, 12));
 </script>
 
 <template>
-  <div class="mx-auto flex max-w-[1400px] flex-col gap-6">
-    <!-- ── Top row: hero banner (left) + right sidebar (right) ── -->
-    <div class="flex gap-6">
-      <!-- Hero banner -->
-      <section
-        class="relative aspect-video flex-1 overflow-hidden rounded-2xl ring-1 ring-border/30"
-        @mouseenter="heroHovered = true"
-        @mouseleave="heroHovered = false"
+  <div class="mx-auto flex max-w-[1400px] flex-col gap-4 sm:gap-6">
+    <!-- ── Row 1: today-updates carousel (left) + right sidebar (right) ── -->
+    <div class="flex flex-col gap-4 lg:flex-row lg:gap-6">
+      <HeroCarousel
+        :slides="todaySlides"
+        badge="今日更新"
+        :is-loading="latestLoading"
+        class-name="flex-1"
+        @open="(id, cover) => ui.openDetail(id, cover)"
       >
-        <div v-if="latestLoading || heroSlides.length === 0" class="absolute inset-0 flex items-center justify-center bg-gradient-to-br from-primary/5 to-secondary/5">
-          <div class="h-8 w-8 animate-spin rounded-full border-2 border-border border-t-primary" />
-        </div>
-        <div
-          v-for="(item, i) in heroSlides"
-          v-show="i === heroIndex"
-          :key="item.id"
-          class="absolute inset-0"
-        >
-          <img :src="item.image" :alt="item.title" class="h-full w-full object-cover" draggable="false" loading="eager" />
-          <div class="absolute inset-0 bg-gradient-to-r from-black/80 via-black/30 to-transparent" />
-          <div class="absolute inset-0 bg-gradient-to-t from-black/70 to-transparent" />
-          <div class="absolute inset-0 flex flex-col justify-end p-6 sm:p-8">
-            <div class="max-w-md">
-              <span class="mb-2 inline-block rounded bg-primary px-2 py-0.5 text-[11px] font-bold text-primary-foreground">热播</span>
-              <h2 class="line-clamp-2 text-xl font-extrabold tracking-tight text-white sm:text-3xl">{{ item.title }}</h2>
-              <p v-if="item.name" class="mt-1.5 line-clamp-1 text-sm text-white/60">{{ item.name }}</p>
-              <button
-                @click="ui.openDetail(item.id, item.image)"
-                class="mt-4 flex items-center gap-2 rounded-lg bg-white px-5 py-2.5 text-sm font-bold text-black transition-colors hover:bg-white/90"
-              >
-                <Play class="h-4 w-4 fill-current" /> 立即观看
-              </button>
-            </div>
-          </div>
-        </div>
-        <template v-if="heroSlides.length > 1">
-          <button @click="prevHero" class="absolute left-3 top-1/2 z-10 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full bg-black/50 text-white hover:bg-black/70">
-            <ChevronLeft class="h-4 w-4" />
-          </button>
-          <button @click="nextHero" class="absolute right-3 top-1/2 z-10 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full bg-black/50 text-white hover:bg-black/70">
-            <ChevronRight class="h-4 w-4" />
-          </button>
-          <div class="absolute bottom-3 left-1/2 z-10 flex -translate-x-1/2 gap-1.5">
-            <button
-              v-for="(s, i) in heroSlides" :key="s.id" @click="goToHero(i)"
-              :class="cn('h-1.5 rounded-full transition-all', i === heroIndex ? 'w-5 bg-white' : 'w-1.5 bg-white/40')"
-            />
-          </div>
-        </template>
-      </section>
+        <template #badge-icon><Flame class="h-3 w-3" /></template>
+      </HeroCarousel>
 
-      <!-- Right sidebar (desktop only) -->
-      <aside class="hidden w-[280px] shrink-0 flex-col gap-6 lg:flex">
-        <!-- 今日更新 -->
+      <!-- Right sidebar (desktop only) — compact today's updates list -->
+      <aside class="hidden w-[240px] shrink-0 flex-col gap-6 xl:flex xl:w-[280px]">
         <div>
           <div class="mb-3 flex items-center gap-2">
             <Flame class="h-4 w-4 text-primary" />
@@ -121,15 +77,30 @@ const fresh = computed(() => (listData.value?.items ?? []).slice(0, 12));
             </button>
           </div>
         </div>
+      </aside>
+    </div>
 
-        <!-- 热播榜 -->
+    <!-- ── Row 2: hot-ranking carousel (left) + right sidebar (right) ── -->
+    <div class="flex flex-col gap-4 lg:flex-row lg:gap-6">
+      <HeroCarousel
+        :slides="hotSlides"
+        badge="热播榜"
+        :is-loading="listLoading"
+        class-name="flex-1"
+        @open="(id, cover) => ui.openDetail(id, cover)"
+      >
+        <template #badge-icon><TrendingUp class="h-3 w-3" /></template>
+      </HeroCarousel>
+
+      <!-- Right sidebar (desktop only) — hot ranking list -->
+      <aside class="hidden w-[240px] shrink-0 flex-col gap-6 xl:flex xl:w-[280px]">
         <div>
           <div class="mb-3 flex items-center gap-2">
             <TrendingUp class="h-4 w-4 text-primary" />
             <h4 class="text-sm font-bold text-foreground">热播榜</h4>
           </div>
           <div v-if="listLoading" class="space-y-2">
-            <div v-for="i in 4" :key="i" class="h-12 rounded-lg shimmer" />
+            <div v-for="i in 6" :key="i" class="h-9 rounded-lg shimmer" />
           </div>
           <div v-else class="space-y-1">
             <button

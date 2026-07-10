@@ -7,7 +7,8 @@ export type ViewKey =
   | "browse"
   | "search"
   | "library"
-  | "detail";
+  | "detail"
+  | "settings";
 
 export interface PlayerState {
   open: boolean;

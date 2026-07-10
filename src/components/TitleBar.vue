@@ -23,7 +23,7 @@ const close = async () => {
 <template>
   <div
     data-tauri-drag-region
-    class="flex h-10 shrink-0 select-none items-center justify-between border-b border-border/40 bg-background/70 px-4 backdrop-blur-xl"
+    class="flex h-10 shrink-0 select-none items-center justify-between border-b border-border/20 bg-transparent px-4"
   >
     <div data-tauri-drag-region class="flex items-center gap-2.5">
       <img src="/aikf-logo-128.png" alt="AiKF" class="h-5 w-5 rounded-md ring-1 ring-white/10" draggable="false" />

@@ -5,6 +5,7 @@ import { X, Play, Pause, Loader2, ListVideo, ChevronLeft, ChevronRight, ChevronD
 import { anich } from "@/lib/anich/api-client";
 import { useUIStore } from "@/stores/ui";
 import { useLibraryStore } from "@/stores/library";
+import { useSettingsStore } from "@/stores/settings";
 import { useAsync } from "@/composables/useAsync";
 import { cn } from "@/lib/utils";
 import TitleBar from "@/components/TitleBar.vue";
@@ -19,6 +20,7 @@ type Tab = "episodes";
 
 const ui = useUIStore();
 const library = useLibraryStore();
+const settings = useSettingsStore();
 
 const open = computed(() => ui.player.open);
 const bangumiID = computed(() => ui.player.bangumiID);
@@ -103,10 +105,16 @@ function classifySource(url: string): string {
 }
 function pickPreferred(sources: { url: string }[]): number {
   if (!sources.length) return 0;
-  // Default to 快手 (adkwai) source
-  const ks = sources.findIndex((s) => s.url.includes("adkwai.com"));
-  if (ks >= 0) return ks;
-  // Fallback: first HLS source
+  // Honor the user's default source setting
+  const pref = settings.data.defaultSource;
+  if (pref === "adkwai") {
+    const ks = sources.findIndex((s) => s.url.includes("adkwai.com"));
+    if (ks >= 0) return ks;
+  } else if (pref === "anich") {
+    const an = sources.findIndex((s) => s.url.includes("emmmm.eu.org"));
+    if (an >= 0) return an;
+  }
+  // "auto" or fallback: first HLS source, then direct, then first
   const h = sources.findIndex((s) => isHlsMedia(s.url));
   if (h >= 0) return h;
   const d = sources.findIndex((s) => isDirectMedia(s.url));
@@ -251,15 +259,25 @@ const onVideoMouseLeave = () => {
 let lastProgressSave = 0;
 const handleTimeUpdate = () => {
   const v = videoRef.value;
-  if (v) {
-    currentTime.value = v.currentTime;
-    duration.value = v.duration || 0;
-    const now = Date.now();
-    if (now - lastProgressSave > 5000 && bangumiID.value && duration.value > 0) {
-      lastProgressSave = now;
-      library.savePlaybackProgress(bangumiID.value, episode.value, v.currentTime, v.duration);
-    }
+  if (!v) return;
+  // Always keep duration fresh (needed by seek math)
+  duration.value = v.duration || 0;
+  // CRITICAL: while the user is dragging the progress bar OR the video element
+  // is internally seeking (HLS fragment still loading after v.currentTime = X),
+  // do NOT let @timeupdate overwrite currentTime.value — that is what causes the
+  // progress fill to "snap back" to the old position during a drag.
+  if (seeking || v.seeking) return;
+  currentTime.value = v.currentTime;
+  const now = Date.now();
+  if (now - lastProgressSave > 5000 && bangumiID.value && duration.value > 0) {
+    lastProgressSave = now;
+    library.savePlaybackProgress(bangumiID.value, episode.value, v.currentTime, v.duration);
   }
+};
+// When an internal seek finishes, immediately sync currentTime so the fill is accurate
+const handleSeeked = () => {
+  const v = videoRef.value;
+  if (v && !seeking) currentTime.value = v.currentTime;
 };
 
 const handlePlay = () => {
@@ -280,24 +298,78 @@ const toggleMute = () => {
   v.muted = !v.muted;
   isMuted.value = v.muted;
 };
-// Smooth progress bar dragging
+// Volume control
+const volume = ref(1);
+const showVolumeSlider = ref(false);
+const setVolume = (e: Event) => {
+  const v = videoRef.value;
+  if (!v) return;
+  const target = e.target as HTMLInputElement;
+  const val = parseFloat(target.value);
+  v.volume = val;
+  volume.value = val;
+  if (val === 0) { v.muted = true; isMuted.value = true; }
+  else { v.muted = false; isMuted.value = false; }
+};
+// Mouse wheel volume control on hover
+const onVolumeWheel = (e: WheelEvent) => {
+  e.preventDefault();
+  const v = videoRef.value;
+  if (!v) return;
+  const delta = e.deltaY < 0 ? 0.05 : -0.05;
+  const newVol = Math.max(0, Math.min(1, volume.value + delta));
+  v.volume = newVol;
+  volume.value = newVol;
+  if (newVol === 0) { v.muted = true; isMuted.value = true; }
+  else { v.muted = false; isMuted.value = false; }
+};
+
+// Smooth progress bar dragging — YouTube-style:
+// • While dragging, only the visual fill (currentTime.value) follows the mouse.
+// • The actual video.currentTime is set ONCE on mouseup, avoiding a storm of
+//   half-finished HLS seeks that cause jank and "snap-back".
 let seeking = false;
-const seekTo = (e: MouseEvent) => {
+let seekBarEl: HTMLElement | null = null;
+// Compute target time from a mouse clientX given the seek bar rect
+const seekTimeFromClientX = (clientX: number): number => {
+  if (!seekBarEl || !duration.value) return 0;
+  const rect = seekBarEl.getBoundingClientRect();
+  const pct = (clientX - rect.left) / rect.width;
+  return Math.max(0, Math.min(1, pct)) * duration.value;
+};
+// Update only the visual position (no actual video seek) — called on every mousemove
+const updateSeekVisual = (clientX: number) => {
+  currentTime.value = seekTimeFromClientX(clientX);
+};
+// Perform the real seek on the video element
+const commitSeek = (clientX: number) => {
   const v = videoRef.value;
   if (!v || !duration.value) return;
-  const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-  const pct = (e.clientX - rect.left) / rect.width;
-  v.currentTime = Math.max(0, Math.min(1, pct)) * duration.value;
+  const newTime = seekTimeFromClientX(clientX);
+  v.currentTime = newTime;
+  currentTime.value = newTime; // keep visual in sync until @seeked fires
 };
 const onProgressMouseDown = (e: MouseEvent) => {
   seeking = true;
-  seekTo(e);
+  seekBarEl = e.currentTarget as HTMLElement;
+  // On initial click: update visual immediately, and also commit the seek so
+  // clicking (not dragging) jumps right away.
+  updateSeekVisual(e.clientX);
+  commitSeek(e.clientX);
+  e.preventDefault();
+  e.stopPropagation();
 };
-const onProgressMouseMove = (e: MouseEvent) => {
+const onGlobalMouseMove = (e: MouseEvent) => {
   if (!seeking) return;
-  seekTo(e);
+  // Visual-only update during drag — smooth and lag-free
+  updateSeekVisual(e.clientX);
 };
-const onProgressMouseUp = () => { seeking = false; };
+const onGlobalMouseUp = (e: MouseEvent) => {
+  if (!seeking) return;
+  // Commit the final seek position to the video element
+  commitSeek(e.clientX);
+  seeking = false;
+};
 const seekBy = (delta: number) => {
   const v = videoRef.value;
   if (!v) return;
@@ -400,15 +472,19 @@ watch(
       hls = new Hls({
         enableWorker: true,
         lowLatencyMode: false,
-        // ── playback tuning (preload + buffer) ──
+        // ── continuous buffering (buffer size from user settings) ──
         autoStartLoad: true,
         startLevel: -1,
-        maxBufferLength: 60,        // buffer up to 60s ahead for smoother playback
-        maxMaxBufferLength: 120,    // hard cap
-        backBufferLength: 30,
-        // ── ABR ──
-        abrEwmaDefaultEstimate: 1e6,
-        abrBandWidthFactor: 0.95,
+        maxBufferLength: settings.data.bufferSize,   // forward buffer (60/120/300/600s)
+        maxMaxBufferLength: Math.max(600, settings.data.bufferSize * 6), // allow generous growth
+        backBufferLength: 0,             // never discard back buffer (instant seek-back)
+        maxBufferSize: 200 * 1000 * 1000, // 200MB memory cap — generous for continuous cache
+        maxBufferHole: 0.5,              // tolerate small gaps in buffer
+        nudgeMaxRetry: 10,               // nudge through stalls
+        nudgeOffset: 0.2,
+        // ── ABR (prefer higher quality, assume fast connection) ──
+        abrEwmaDefaultEstimate: 2e6,     // assume 2 Mbps by default
+        abrBandWidthFactor: 0.9,
         abrBandWidthUpFactor: 0.7,
         // ── error recovery ──
         manifestLoadingMaxRetry: 4,
@@ -418,7 +494,7 @@ watch(
         fragLoadingMaxRetry: 6,
         fragLoadingRetryDelay: 1000,
         // ── preload ──
-        startFragPrefetch: true,    // prefetch first fragment while loading manifest
+        startFragPrefetch: true,         // prefetch first fragment while loading manifest
         xhrSetup: (xhr) => {
           xhr.withCredentials = false;
         },
@@ -500,6 +576,8 @@ const saveVideoState = () => {
   const v = videoRef.value;
   if (v) {
     savedVideoState.value = { time: v.currentTime, paused: v.paused, muted: v.muted };
+    // Also sync isPlaying immediately
+    isPlaying.value = !v.paused;
   }
 };
 const restoreVideoState = () => {
@@ -509,8 +587,13 @@ const restoreVideoState = () => {
   if (savedVideoState.value) {
     v.currentTime = savedVideoState.value.time;
     v.muted = savedVideoState.value.muted;
+    // Sync isPlaying state BEFORE calling play/pause
+    isPlaying.value = !savedVideoState.value.paused;
     if (!savedVideoState.value.paused) {
-      v.play().catch(() => {});
+      v.play().then(() => { isPlaying.value = true; }).catch(() => { isPlaying.value = false; });
+    } else {
+      v.pause();
+      isPlaying.value = false;
     }
     savedVideoState.value = null;
     return;
@@ -527,11 +610,16 @@ const restoreVideoState = () => {
 
 const enterPip = () => {
   saveVideoState();
+  // Reset hover state so PiP starts with controls hidden (clean look)
+  videoHovered.value = false;
+  mouseIdle.value = false;
+  if (idleTimer) { clearTimeout(idleTimer); idleTimer = null; }
   pipMode.value = true;
   ui.openDetail(bangumiID.value!, ui.player.cover);
 };
 const exitPip = () => {
   saveVideoState();
+  videoHovered.value = false;
   pipMode.value = false;
   ui.setView("detail");
 };
@@ -549,9 +637,12 @@ const closeOrPip = () => {
 };
 
 // PiP dragging
-const pipPos = ref({ x: window.innerWidth - 340, y: window.innerHeight - 260 });
+const pipPos = ref({ x: window.innerWidth - 380, y: window.innerHeight - 220 });
 let pipDragging = false;
 let pipDragStart = { x: 0, y: 0 };
+// PiP width adapts to window size (smaller on narrow screens)
+const pipWidth = computed(() => Math.min(360, Math.max(240, Math.floor(window.innerWidth * 0.3))));
+const pipHeight = computed(() => Math.floor(pipWidth.value * 9 / 16));
 const onPipMouseDown = (e: MouseEvent) => {
   if ((e.target as HTMLElement).closest("button")) return;
   pipDragging = true;
@@ -561,8 +652,8 @@ const onPipMouseDown = (e: MouseEvent) => {
 const onPipMouseMove = (e: MouseEvent) => {
   if (!pipDragging) return;
   pipPos.value = {
-    x: Math.max(0, Math.min(window.innerWidth - 320, e.clientX - pipDragStart.x)),
-    y: Math.max(0, Math.min(window.innerHeight - 200, e.clientY - pipDragStart.y)),
+    x: Math.max(0, Math.min(window.innerWidth - pipWidth.value, e.clientX - pipDragStart.x)),
+    y: Math.max(0, Math.min(window.innerHeight - pipHeight.value, e.clientY - pipDragStart.y)),
   };
 };
 const onPipMouseUp = () => { pipDragging = false; };
@@ -570,10 +661,14 @@ const onPipMouseUp = () => { pipDragging = false; };
 onMounted(() => {
   window.addEventListener("mousemove", onPipMouseMove);
   window.addEventListener("mouseup", onPipMouseUp);
+  window.addEventListener("mousemove", onGlobalMouseMove);
+  window.addEventListener("mouseup", onGlobalMouseUp);
 });
 onBeforeUnmount(() => {
   window.removeEventListener("mousemove", onPipMouseMove);
   window.removeEventListener("mouseup", onPipMouseUp);
+  window.removeEventListener("mousemove", onGlobalMouseMove);
+  window.removeEventListener("mouseup", onGlobalMouseUp);
 });
 
 /** Manual re-test: run latency test, show results (do NOT auto-switch source). */
@@ -611,32 +706,31 @@ const retestLatency = async () => {
       </div>
 
       <!-- body -->
-      <div class="flex min-h-0 flex-1 flex-col gap-4 px-4 pb-4 sm:px-6 lg:flex-row">
-        <!-- video -->
-        <div class="relative flex min-h-0 flex-1 items-center justify-center">
-          <div class="relative aspect-video w-full max-w-6xl overflow-hidden rounded-2xl bg-black shadow-2xl ring-1 ring-white/5">
-            <div v-if="vodLoading" class="flex h-full flex-col items-center justify-center gap-3 text-white/70">
+      <div class="flex min-h-0 flex-1 gap-0 md:flex-row">
+        <!-- video (fills the entire left area, edge-to-edge) -->
+        <div class="relative min-h-0 min-w-0 flex-1 bg-black">
+            <div v-if="vodLoading" class="absolute inset-0 z-20 flex flex-col items-center justify-center gap-3 text-white/70">
               <Loader2 class="h-10 w-10 animate-spin text-primary" />
               <p class="text-sm">正在加载播放源…</p>
             </div>
-            <div v-else-if="vodIsError" class="flex h-full flex-col items-center justify-center gap-3 px-6 text-center text-white/70">
+            <div v-else-if="vodIsError" class="absolute inset-0 z-20 flex flex-col items-center justify-center gap-3 px-6 text-center text-white/70">
               <AlertCircle class="h-10 w-10 text-destructive" />
               <p class="text-sm">播放源加载失败</p>
               <button @click="vodRefetch()" class="rounded-full bg-white/10 px-4 py-1.5 text-xs text-white hover:bg-white/20">重试</button>
             </div>
-            <div v-else-if="sources.length === 0" class="flex h-full flex-col items-center justify-center gap-2 text-white/60">
+            <div v-else-if="sources.length === 0" class="absolute inset-0 z-20 flex flex-col items-center justify-center gap-2 text-white/60">
               <AlertCircle class="h-10 w-10" />
               <p class="text-sm">暂无可用的播放源</p>
             </div>
             <template v-else>
               <div
                 ref="videoContainerRef"
-                class="relative h-full w-full bg-black"
+                class="absolute inset-0 bg-black"
                 @mousemove="onVideoMouseMove"
                 @mouseleave="onVideoMouseLeave"
                 @fullscreenchange="onFullscreenChange"
               >
-                <video ref="videoRef" autoplay playsinline preload="auto" @play="handlePlay" @pause="handlePause" @error="handleVideoError" @timeupdate="handleTimeUpdate" @loadedmetadata="restoreVideoState" @click="togglePlay" class="h-full w-full" />
+                <video ref="videoRef" autoplay playsinline preload="auto" @play="handlePlay" @pause="handlePause" @error="handleVideoError" @timeupdate="handleTimeUpdate" @seeked="handleSeeked" @loadedmetadata="restoreVideoState" @click="togglePlay" class="h-full w-full object-contain" />
                 <div v-if="videoError" class="absolute inset-x-0 bottom-16 mx-auto max-w-md rounded-xl bg-destructive/90 px-4 py-2 text-center text-xs text-white">
                   {{ videoError }}
                 </div>
@@ -644,16 +738,12 @@ const retestLatency = async () => {
                 <!-- custom control bar (bottom, visible on hover / non-idle) -->
                 <Transition name="controls">
                   <div v-if="controlsVisible" class="absolute inset-x-0 bottom-0 z-10 bg-gradient-to-t from-black via-black/70 to-transparent pt-10">
-                    <!-- progress bar at the very bottom edge (smooth drag) -->
+                    <!-- progress bar at the very bottom edge (global drag) -->
                     <div
-                      class="group relative h-1 w-full cursor-pointer bg-white/15"
+                      class="group relative h-1 w-full cursor-pointer bg-white/15 transition-[height] duration-150 ease-out group-hover:h-2"
                       @mousedown="onProgressMouseDown"
-                      @mousemove="onProgressMouseMove"
-                      @mouseup="onProgressMouseUp"
-                      @mouseleave="onProgressMouseUp"
                     >
-                      <div class="absolute inset-y-0 left-0 bg-primary/80 transition-all group-hover:h-1.5" :style="{ width: progressPct + '%' }" />
-                      <div class="absolute top-1/2 h-3 w-3 -translate-y-1/2 rounded-full bg-white opacity-0 shadow-md transition-opacity group-hover:opacity-100" :style="{ left: `calc(${progressPct}% - 6px)` }" />
+                      <div class="absolute inset-y-0 left-0 bg-primary/80" :style="{ width: progressPct + '%' }" />
                     </div>
                     <!-- control buttons row -->
                     <div class="flex items-center gap-0.5 px-3 py-2">
@@ -664,11 +754,31 @@ const retestLatency = async () => {
                       </button>
                       <!-- divider -->
                       <div class="mx-1 h-5 w-px bg-white/15" />
-                      <!-- mute -->
-                      <button @click="toggleMute" class="state-layer flex h-8 w-8 items-center justify-center rounded-full text-white hover:bg-white/15" :aria-label="isMuted ? '取消静音' : '静音'">
-                        <VolumeX v-if="isMuted" class="h-4 w-4" />
-                        <Volume2 v-else class="h-4 w-4" />
-                      </button>
+                      <!-- volume control with hover slider -->
+                      <div
+                        class="relative flex items-center"
+                        @mouseenter="showVolumeSlider = true"
+                        @mouseleave="showVolumeSlider = false"
+                        @wheel.prevent="onVolumeWheel"
+                      >
+                        <button @click="toggleMute" class="state-layer flex h-8 w-8 items-center justify-center rounded-full text-white hover:bg-white/15" :aria-label="isMuted ? '取消静音' : '静音'">
+                          <VolumeX v-if="isMuted || volume === 0" class="h-4 w-4" />
+                          <Volume2 v-else class="h-4 w-4" />
+                        </button>
+                        <!-- vertical volume slider -->
+                        <Transition name="vol-slider">
+                          <div v-if="showVolumeSlider" class="absolute bottom-10 left-1/2 -translate-x-1/2 flex flex-col items-center rounded-lg bg-black/80 p-2 backdrop-blur-md">
+                            <input
+                              type="range" min="0" max="1" step="0.05"
+                              :value="isMuted ? 0 : volume"
+                              @input="setVolume"
+                              class="vol-slider-vertical"
+                              orient="vertical"
+                              style="writing-mode: bt-lr; -webkit-appearance: slider-vertical; width: 4px; height: 80px;"
+                            />
+                          </div>
+                        </Transition>
+                      </div>
                       <!-- seek back/forward -->
                       <button @click="seekBy(-10)" class="state-layer hidden h-8 w-8 items-center justify-center rounded-full text-white hover:bg-white/15 sm:flex" aria-label="后退10秒">
                         <RotateCcw class="h-4 w-4" />
@@ -697,14 +807,13 @@ const retestLatency = async () => {
                 <!-- slim progress bar when controls hidden (always at bottom, no time) -->
                 <Transition name="progress">
                   <div v-if="!controlsVisible && duration > 0" class="absolute inset-x-0 bottom-0 z-10">
-                    <div class="group relative h-1 w-full cursor-pointer bg-white/20" @click="seekTo">
+                    <div class="group relative h-1 w-full cursor-pointer bg-white/20 transition-[height] duration-150 ease-out group-hover:h-1.5" @click="(e: any) => { seekBarEl = e.currentTarget; commitSeek(e.clientX); }">
                       <div class="absolute inset-y-0 left-0 bg-primary/80" :style="{ width: progressPct + '%' }" />
                     </div>
                   </div>
                 </Transition>
               </div>
             </template>
-          </div>
         </div>
 
         <!-- side panel (collapsible) -->
@@ -712,14 +821,14 @@ const retestLatency = async () => {
           <!-- vertical collapse/expand toggle button (rectangle) -->
           <button
             @click="sidebarCollapsed = !sidebarCollapsed"
-            class="glass-strong glass-sheen state-layer my-3 hidden w-6 shrink-0 items-center justify-center rounded-l-xl text-white/70 hover:text-white lg:flex"
+            class="state-layer hidden w-6 shrink-0 items-center justify-center border-l border-white/10 bg-black/40 text-white/70 hover:bg-white/10 hover:text-white md:flex"
             :aria-label="sidebarCollapsed ? '展开侧栏' : '收起侧栏'"
           >
             <ChevronRight v-if="sidebarCollapsed" class="h-4 w-4" />
             <ChevronLeft v-else class="h-4 w-4" />
           </button>
           <Transition name="sidebar">
-            <div v-show="!sidebarCollapsed" class="glass-strong glass-sheen flex min-h-0 w-full flex-col rounded-2xl lg:w-96">
+            <div v-show="!sidebarCollapsed" class="flex min-h-0 w-full flex-col border-l border-white/10 bg-black/60 backdrop-blur-xl md:w-80 lg:w-96">
           <div class="flex gap-1 p-2.5">
             <button class="state-layer flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-primary py-2.5 text-xs font-semibold text-primary-foreground">
               <ListVideo class="h-3.5 w-3.5" /> 剧集列表
@@ -826,35 +935,48 @@ const retestLatency = async () => {
     </div>
   </Transition>
 
-  <!-- Picture-in-picture floating window (draggable) -->
+  <!-- Picture-in-picture floating window (draggable, 16:9) -->
   <Transition name="pip">
     <div
       v-if="open && bangumiID != null && pipMode"
-      class="fixed z-[100] w-[320px] overflow-hidden rounded-2xl bg-black shadow-2xl ring-1 ring-white/10"
-      :style="{ left: pipPos.x + 'px', top: pipPos.y + 'px' }"
+      class="fixed z-[100] overflow-hidden rounded-xl bg-black shadow-2xl ring-1 ring-white/10"
+      :style="{ left: pipPos.x + 'px', top: pipPos.y + 'px', width: pipWidth + 'px' }"
     >
-      <!-- draggable header bar -->
-      <div
-        class="flex cursor-move items-center justify-between bg-black/80 px-2 py-1.5"
-        @mousedown="onPipMouseDown"
-      >
-        <span class="line-clamp-1 text-[11px] font-semibold text-white">{{ ui.player.title }} · 第{{ episode }}话</span>
-        <div class="flex items-center gap-1">
-          <button @click="exitPip" class="flex h-6 w-6 items-center justify-center rounded-full bg-white/20 text-white hover:bg-white/30" aria-label="展开">
-            <Maximize class="h-3 w-3" />
-          </button>
-          <button @click="closeFromPip" class="flex h-6 w-6 items-center justify-center rounded-full bg-white/20 text-white hover:bg-destructive" aria-label="关闭">
-            <X class="h-3 w-3" />
-          </button>
-        </div>
-      </div>
-      <!-- video -->
+      <!-- video (16:9 aspect ratio, fills width) -->
       <div ref="videoContainerRef" class="relative aspect-video w-full bg-black" @mousemove="onVideoMouseMove" @mouseleave="onVideoMouseLeave" @fullscreenchange="onFullscreenChange">
-        <video ref="videoRef" autoplay playsinline @play="handlePlay" @pause="handlePause" @error="handleVideoError" @timeupdate="handleTimeUpdate" @loadedmetadata="restoreVideoState" @click="togglePlay" class="h-full w-full" />
-        <!-- mini progress bar at bottom -->
-        <div class="absolute inset-x-0 bottom-0 h-0.5 bg-white/20">
-          <div class="h-full bg-primary/80" :style="{ width: progressPct + '%' }" />
-        </div>
+        <video ref="videoRef" autoplay playsinline preload="auto" @play="handlePlay" @pause="handlePause" @error="handleVideoError" @timeupdate="handleTimeUpdate" @seeked="handleSeeked" @loadedmetadata="restoreVideoState" @click="togglePlay" class="h-full w-full" />
+        <!-- draggable overlay header — only visible on hover -->
+        <Transition name="pip-controls">
+          <div
+            v-if="videoHovered"
+            class="absolute inset-x-0 top-0 z-20 flex cursor-move items-center justify-between bg-gradient-to-b from-black/70 to-transparent px-2 py-1.5"
+            @mousedown="onPipMouseDown"
+          >
+            <span class="line-clamp-1 text-[10px] font-semibold text-white">{{ ui.player.title }} · 第{{ episode }}话</span>
+            <div class="flex items-center gap-1">
+              <button @click="exitPip" class="flex h-5 w-5 items-center justify-center rounded-full bg-white/20 text-white hover:bg-white/40" aria-label="展开">
+                <Maximize class="h-2.5 w-2.5" />
+              </button>
+              <button @click="closeFromPip" class="flex h-5 w-5 items-center justify-center rounded-full bg-white/20 text-white hover:bg-destructive" aria-label="关闭">
+                <X class="h-2.5 w-2.5" />
+              </button>
+            </div>
+          </div>
+        </Transition>
+        <!-- play/pause indicator (center, shows on click) -->
+        <Transition name="pip-controls">
+          <div v-if="videoHovered && !isPlaying" class="pointer-events-none absolute inset-0 flex items-center justify-center">
+            <div class="flex h-10 w-10 items-center justify-center rounded-full bg-black/50">
+              <Play class="h-5 w-5 fill-current text-white" />
+            </div>
+          </div>
+        </Transition>
+        <!-- mini progress bar at bottom — only visible on hover -->
+        <Transition name="pip-controls">
+          <div v-if="videoHovered" class="absolute inset-x-0 bottom-0 h-1 bg-white/20" @click.stop="(e: any) => { seekBarEl = e.currentTarget.parentElement; commitSeek(e.clientX); }">
+            <div class="h-full bg-primary/80" :style="{ width: progressPct + '%' }" />
+          </div>
+        </Transition>
       </div>
     </div>
   </Transition>
@@ -885,4 +1007,12 @@ const retestLatency = async () => {
 .source-list-leave-active { transition: all 0.25s ease; }
 .source-list-enter-from,
 .source-list-leave-to { opacity: 0; max-height: 0; }
+.vol-slider-enter-active,
+.vol-slider-leave-active { transition: opacity 0.15s ease, transform 0.15s ease; }
+.vol-slider-enter-from,
+.vol-slider-leave-to { opacity: 0; transform: translateY(8px); }
+.pip-controls-enter-active,
+.pip-controls-leave-active { transition: opacity 0.2s ease; }
+.pip-controls-enter-from,
+.pip-controls-leave-to { opacity: 0; }
 </style>

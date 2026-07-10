@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, onMounted, ref } from "vue";
+import { gsap } from "gsap";
 import { useLibraryStore } from "@/stores/library";
 import CoverImage from "./CoverImage.vue";
 
@@ -23,14 +24,30 @@ const library = useLibraryStore();
 const inLibrary = computed(() => !!library.entries[props.id]);
 
 const onClick = () => emit("select", props.id, props.image);
+
+// GSAP entrance animation
+const cardRef = ref<HTMLElement | null>(null);
+onMounted(() => {
+  if (cardRef.value) {
+    gsap.from(cardRef.value, {
+      opacity: 0,
+      y: 16,
+      duration: 0.4,
+      ease: "power2.out",
+      delay: Math.min((props.index ?? 0) * 0.025, 0.3),
+      clearProps: "opacity,transform",
+    });
+  }
+});
 </script>
 
 <template>
   <button
+    ref="cardRef"
     type="button"
     @click="onClick"
-    :style="{ animationDelay: `${Math.min((index ?? 0) * 0.03, 0.4)}s` }"
-    class="group relative flex flex-col text-left state-layer fade-up focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60 focus-visible:ring-offset-2 focus-visible:ring-offset-background rounded-2xl transition-transform duration-200 hover:-translate-y-1 active:scale-[0.98]"
+    style="content-visibility: auto; contain-intrinsic-size: 220px"
+    class="group relative flex flex-col text-left state-layer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60 focus-visible:ring-offset-2 focus-visible:ring-offset-background rounded-2xl transition-transform duration-200 hover:-translate-y-1 active:scale-[0.98]"
   >
     <div class="relative">
       <CoverImage
@@ -61,8 +78,3 @@ const onClick = () => emit("select", props.id, props.image);
     </div>
   </button>
 </template>
-
-<style scoped>
-.fade-up { animation: fadeUpCard 0.4s cubic-bezier(0.22, 1, 0.36, 1) both; }
-@keyframes fadeUpCard { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: translateY(0); } }
-</style>
