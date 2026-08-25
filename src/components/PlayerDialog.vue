@@ -280,6 +280,9 @@ function createArt(container: HTMLElement, url: string) {
   };
 
   try {
+    // Use minimal options first to avoid init errors. ArtPlayer is strict
+    // about option types — passing wrong-shaped objects in `controls` or
+    // `settings` can throw during construction.
     const options: any = {
       el: container,
       url: url,
@@ -310,7 +313,7 @@ function createArt(container: HTMLElement, url: string) {
           });
         },
       } : undefined,
-      autoplay: !savedVideoState, // Skip autoplay if restoring state (let restoreVideoState handle play)
+      autoplay: !savedVideoState,
       autoSize: false,
       autoMini: false,
       screenshot: true,
@@ -321,70 +324,40 @@ function createArt(container: HTMLElement, url: string) {
       aspectRatio: true,
       fullscreen: true,
       fullscreenWeb: true,
-      mini: false, // We have our own PiP
+      mini: false,
       pip: true,
       airplay: false,
       theme: "#fb7185",
       volume: 1,
       lang: "zh-cn",
-      // Hide ArtPlayer's own title bar (we use our own overlay)
       title: "",
-      // Auto-hide controls after 3s of inactivity in fullscreen
-      controls: [
-        {
-          position: "right",
-          html: '<svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>',
-          tooltip: "测速",
-          click: function () {
-            retestLatency();
-          },
-        },
-      ],
-      settings: [
-        {
-          html: "播放源",
-          tooltip: "切换播放源",
-          selector: sources.value.map((s, i) => ({
-            html: sourceLabel(s),
-            value: i,
-            default: i === effectiveIdx.value,
-          })),
-          onSelect: function (item: { html: string; value: number }) {
-            const idx = item.value as number;
-            pushLog(`Switching source via ArtPlayer setting: ${idx}`);
-            sourceIdx.value = idx;
-            triedSources.clear();
-            triedSources.add(idx);
-            return item.html;
-          },
-        },
-      ],
-      // Events
-      ready: () => {
-        pushLog("ArtPlayer ready");
-        if (savedVideoState) {
-          restoreVideoState();
-        } else if (bangumiID.value) {
-          // Restore from library playback progress
-          const progress = library.getPlaybackProgress(bangumiID.value, episode.value);
-          if (progress && progress.time > 5 && progress.time < progress.duration - 10) {
-            pushLog(`Restoring playback progress: ${Math.round(progress.time)}s`);
-            art!.currentTime = progress.time;
-          }
-        }
-      },
-      videoEvents: {
-        play: () => {
-          pushLog("video play — marking episode watched");
-          if (bangumiID.value) library.markEpisode(bangumiID.value, episode.value);
-        },
-        error: () => {
-          pushLog("video error event");
-          tryAutoAdvance(effectiveIdx.value);
-        },
-      },
     };
     art = new Artplayer(options);
+
+    // Register event handlers via .on() AFTER construction (more reliable
+    // than passing them in `videoEvents` option, which has type issues).
+    art.on("ready", () => {
+      pushLog("ArtPlayer ready");
+      if (savedVideoState) {
+        restoreVideoState();
+      } else if (bangumiID.value) {
+        const progress = library.getPlaybackProgress(bangumiID.value, episode.value);
+        if (progress && progress.time > 5 && progress.time < progress.duration - 10) {
+          pushLog(`Restoring playback progress: ${Math.round(progress.time)}s`);
+          try { art!.currentTime = progress.time; } catch (e) { pushLog(`seek failed: ${e}`); }
+        }
+      }
+    });
+
+    art.on("video:play", () => {
+      pushLog("video play — marking episode watched");
+      if (bangumiID.value) library.markEpisode(bangumiID.value, episode.value);
+    });
+
+    art.on("video:error", () => {
+      pushLog("video error event");
+      tryAutoAdvance(effectiveIdx.value);
+    });
 
     // Auto-save playback progress (throttled)
     let lastProgressSave = 0;
@@ -396,9 +369,13 @@ function createArt(container: HTMLElement, url: string) {
         library.savePlaybackProgress(bangumiID.value, episode.value, art.currentTime, art.duration);
       }
     });
+
+    pushLog("ArtPlayer instance created successfully");
   } catch (err) {
     logError("ArtPlayer creation failed:", err);
-    videoError.value = "播放器初始化失败";
+    pushLog(`Error details: ${err instanceof Error ? err.message : String(err)}`);
+    pushLog(`Error stack: ${err instanceof Error ? err.stack : "no stack"}`);
+    videoError.value = `播放器初始化失败: ${err instanceof Error ? err.message : String(err)}`;
   }
 }
 
@@ -587,10 +564,14 @@ watch(() => sources.value, (srcs) => {
               <p class="text-sm">暂无可用的播放源</p>
             </div>
             <template v-else>
-              <!-- ArtPlayer container — fills the video area -->
+              <!-- ArtPlayer container — fills the video area.
+                   ArtPlayer needs an explicit-size container at construction
+                   time. Using inline style w/h 100% ensures the container has
+                   a definite size even before layout settles. -->
               <div
                 ref="artContainerRef"
                 class="absolute inset-0 bg-black"
+                style="width: 100%; height: 100%;"
               ></div>
               <div v-if="videoError" class="absolute inset-x-0 bottom-16 mx-auto max-w-md rounded-xl bg-destructive/90 px-4 py-2 text-center text-xs text-white">
                 {{ videoError }}
