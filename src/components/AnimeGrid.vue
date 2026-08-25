@@ -25,9 +25,13 @@ const emit = defineEmits<{ (e: "select", id: number, cover?: string): void }>();
     </svg>
     <p class="text-sm text-muted-foreground">{{ emptyHint ?? "暂无内容" }}</p>
   </div>
-  <!-- True responsive grid: auto-fill + minmax(140px, 1fr) — column count is
-       driven by actual container width, never overflows. -->
-  <div v-else :class="cn('grid min-w-0 gap-x-3 gap-y-4 [grid-template-columns:repeat(auto-fill,minmax(140px,1fr))]')">
+  <!-- True responsive grid via inline style (Tailwind 4 arbitrary value
+       syntax doesn't reliably parse commas in grid-template-columns). -->
+  <div
+    v-else
+    :class="cn('grid min-w-0 gap-x-3 gap-y-4')"
+    style="grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));"
+  >
     <AnimeCard
       v-for="(item, i) in items"
       :key="`${item.id}-${i}`"

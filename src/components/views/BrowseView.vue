@@ -163,11 +163,16 @@ watch(() => filters.value.skip, () => window.scrollTo({ top: 0, behavior: "smoot
       <div v-else-if="items.length === 0" class="glass glass-sheen flex min-h-[200px] items-center justify-center rounded-3xl p-10 text-center text-muted-foreground">
         没有符合条件的番剧，试试调整筛选
       </div>
-      <!-- True responsive grid: auto-fill + minmax(140px, 1fr) means the
-           number of columns is determined by the actual available width,
-           not by breakpoints. This avoids both overflow (cards too wide)
-           and underutilization (too few columns on wide screens). -->
-      <div v-else class="grid min-w-0 gap-x-3 gap-y-4 [grid-template-columns:repeat(auto-fill,minmax(140px,1fr))]">
+      <!-- True responsive grid via inline style. Tailwind 4's arbitrary value
+           syntax [grid-template-columns:...] doesn't reliably parse commas,
+           so we use inline style for guaranteed correctness. auto-fill +
+           minmax(150px, 1fr) lets the browser choose column count based on
+           the actual container width. -->
+      <div
+        v-else
+        class="grid min-w-0 gap-x-3 gap-y-4"
+        style="grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));"
+      >
         <button
           v-for="item in items" :key="item.id"
           @click="ui.openDetail(item.id, item.image)"

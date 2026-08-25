@@ -278,7 +278,7 @@ const progressLabel = (entry: { currentEpisode: number; watchedEpisodes: number[
         <div class="mt-2 md:hidden"><SearchBar /></div>
       </header>
 
-      <main ref="mainRef" class="flex-1 overflow-y-auto px-3 pb-28 pt-4 sm:px-4 md:px-6 md:pb-12"><slot /></main>
+      <main ref="mainRef" class="flex-1 min-w-0 overflow-y-auto overflow-x-hidden px-3 pb-28 pt-4 sm:px-4 md:px-6 md:pb-12"><slot /></main>
     </div>
 
     <!-- ── mobile bottom nav ── -->
