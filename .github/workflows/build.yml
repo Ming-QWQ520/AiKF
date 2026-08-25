@@ -9,6 +9,7 @@ on:
       - "public/**"
       - "package.json"
       - "pnpm-lock.yaml"
+      - "pnpm-workspace.yaml"
       - "tsconfig.json"
       - "tsconfig.node.json"
       - "vite.config.ts"
@@ -39,29 +40,16 @@ jobs:
         with:
           fetch-depth: 1
 
-      - name: 🟢 Setup Node.js 20
-        uses: actions/setup-node@v4
-        with:
-          node-version: "20"
-
       - name: 📦 Install pnpm
         uses: pnpm/action-setup@v4
         with:
           version: 9
 
-      - name: 🗃️ Get pnpm store directory
-        id: pnpm-cache
-        shell: bash
-        run: |
-          echo "STORE_PATH=$(pnpm store path --silent)" >> $GITHUB_OUTPUT
-
-      - name: 💾 Cache pnpm dependencies
-        uses: actions/cache@v4
+      - name: 🟢 Setup Node.js 20 (with pnpm cache)
+        uses: actions/setup-node@v4
         with:
-          path: ${{ steps.pnpm-cache.outputs.STORE_PATH }}
-          key: ${{ runner.os }}-pnpm-${{ hashFiles('pnpm-lock.yaml') }}
-          restore-keys: |
-            ${{ runner.os }}-pnpm-
+          node-version: "20"
+          cache: 'pnpm'
 
       - name: 📥 Install dependencies
         run: pnpm install --frozen-lockfile
@@ -85,7 +73,7 @@ jobs:
   # Only triggered on push to main/master or manual dispatch.
   # ───────────────────────────────────────────────────────────────
   build-tauri:
-    name: Build Tauri (${{ matrix.os }})
+    name: Build Tauri (${{ matrix.label }})
     needs: build-frontend
     if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
     strategy:
@@ -111,15 +99,16 @@ jobs:
         with:
           fetch-depth: 1
 
-      - name: 🟢 Setup Node.js 20
-        uses: actions/setup-node@v4
-        with:
-          node-version: "20"
-
       - name: 📦 Install pnpm
         uses: pnpm/action-setup@v4
         with:
           version: 9
+
+      - name: 🟢 Setup Node.js 20 (with pnpm cache)
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: 'pnpm'
 
       - name: 🦀 Setup Rust toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -131,14 +120,6 @@ jobs:
         with:
           workspaces: src-tauri
           key: ${{ matrix.target }}
-
-      - name: 💾 Cache pnpm dependencies
-        uses: actions/cache@v4
-        with:
-          path: ~/.local/share/pnpm/store
-          key: ${{ runner.os }}-pnpm-${{ hashFiles('pnpm-lock.yaml') }}
-          restore-keys: |
-            ${{ runner.os }}-pnpm-
 
       - name: 📥 Install dependencies
         run: pnpm install --frozen-lockfile

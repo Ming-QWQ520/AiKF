@@ -1,2 +1,5 @@
 allowBuilds:
   esbuild: true
+# Declare an empty (single-project) packages list so `pnpm store path` and
+# other workspace-aware commands don't error out with "packages field missing".
+packages: []
