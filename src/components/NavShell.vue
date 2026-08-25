@@ -7,6 +7,12 @@ import { useLibraryStore } from "@/stores/library";
 import { cn } from "@/lib/utils";
 import SearchBar from "./SearchBar.vue";
 import ThemeToggle from "./ThemeToggle.vue";
+import {
+  NButton,
+  NIcon,
+  NBadge,
+  NTooltip,
+} from "naive-ui";
 
 const ui = useUIStore();
 const library = useLibraryStore();
@@ -14,6 +20,7 @@ const libraryCount = computed(() => library.count);
 const libraryList = computed(() => library.list.slice(0, 8));
 const libraryExpanded = ref(true);
 
+// Navigation items definition (kept in plain TS for both desktop + mobile)
 const navItems: { key: ViewKey; label: string; icon: any }[] = [
   { key: "discover", label: "发现", icon: Compass },
   { key: "calendar", label: "时间表", icon: CalendarDays },
@@ -110,54 +117,95 @@ const switchView = (key: ViewKey) => {
           </div>
         </div>
         <nav ref="navRef" class="mt-2.5 flex flex-col gap-1">
-          <button
+          <!--
+            Naive UI NButton is used to render each nav entry. We keep our own
+            active-state styling (primary fill) and GSAP `data-nav-key` hooks
+            on top of NButton so the slide animation still works.
+          -->
+          <NTooltip
             v-for="item in navItems"
             :key="item.key"
-            :data-nav-key="item.key"
-            type="button"
-            @click="switchView(item.key)"
-            :title="effectiveCollapsed ? item.label : undefined"
-            :class="cn('state-layer group relative flex w-full items-center rounded-2xl text-sm font-medium transition-colors will-change-transform', effectiveCollapsed ? 'justify-center px-2 py-2.5' : 'gap-3 px-3.5 py-2.5', ui.view === item.key ? 'bg-primary text-primary-foreground shadow-lg shadow-primary/25' : 'text-muted-foreground hover:bg-foreground/5 hover:text-foreground')"
+            placement="right"
+            :disabled="!effectiveCollapsed"
           >
-            <component :is="item.icon" class="h-5 w-5 shrink-0" />
-            <span v-if="!effectiveCollapsed" class="flex-1 text-left">{{ item.label }}</span>
-          </button>
+            <template #trigger>
+              <NButton
+                :data-nav-key="item.key"
+                quaternary
+                :type="ui.view === item.key ? 'primary' : 'default'"
+                :focusable="false"
+                :class="cn(
+                  'nav-btn state-layer group relative flex w-full items-center rounded-2xl text-sm font-medium transition-colors will-change-transform',
+                  effectiveCollapsed ? 'justify-center !px-2 !py-2.5' : 'gap-3 !px-3.5 !py-2.5',
+                  ui.view === item.key
+                    ? '!bg-primary !text-primary-foreground shadow-lg shadow-primary/25'
+                    : 'text-muted-foreground hover:!bg-foreground/5 hover:text-foreground'
+                )"
+                @click="switchView(item.key)"
+              >
+                <template #icon>
+                  <NIcon size="20"><component :is="item.icon" /></NIcon>
+                </template>
+                <span v-if="!effectiveCollapsed" class="flex-1 text-left">{{ item.label }}</span>
+              </NButton>
+            </template>
+            <span>{{ item.label }}</span>
+          </NTooltip>
         </nav>
       </div>
 
       <!-- 追番库展开区域 -->
       <div class="glass glass-sheen mt-3 flex min-h-0 flex-1 flex-col rounded-3xl p-2.5">
-        <button
-          type="button"
-          @click="ui.setView('library')"
-          :title="effectiveCollapsed ? '追番库' : undefined"
-          :class="cn('state-layer flex w-full items-center rounded-2xl text-left', effectiveCollapsed ? 'justify-center px-2 py-2' : 'gap-2 px-2 py-2')"
-        >
-          <span :class="cn('flex h-8 w-8 shrink-0 items-center justify-center rounded-xl', ui.view === 'library' ? 'bg-primary text-primary-foreground' : 'bg-foreground/5 text-muted-foreground')">
-            <Bookmark class="h-4 w-4" />
-          </span>
-          <template v-if="!effectiveCollapsed">
-            <div class="min-w-0 flex-1">
-              <p class="text-sm font-semibold text-foreground">追番库</p>
-              <p class="text-[10px] text-muted-foreground">{{ libraryCount }} 部</p>
-            </div>
-            <span
-              v-if="libraryCount > 0"
-              @click.stop="libraryExpanded = !libraryExpanded"
-              class="flex h-5 w-5 shrink-0 cursor-pointer items-center justify-center rounded text-muted-foreground hover:bg-foreground/10 hover:text-foreground"
+        <NTooltip placement="right" :disabled="!effectiveCollapsed">
+          <template #trigger>
+            <NButton
+              quaternary
+              :focusable="false"
+              :class="cn(
+                'state-layer flex w-full items-center rounded-2xl text-left',
+                effectiveCollapsed ? 'justify-center !px-2 !py-2' : 'gap-2 !px-2 !py-2'
+              )"
+              @click="ui.setView('library')"
             >
-              <ChevronDown v-if="libraryExpanded" class="h-3 w-3" />
-              <ChevronRight v-else class="h-3 w-3" />
-            </span>
+              <template #icon>
+                <NBadge :value="libraryCount" :max="99" :color="'#fb7185'" :offset="[-4, 4]">
+                  <span
+                    :class="cn(
+                      'flex h-8 w-8 shrink-0 items-center justify-center rounded-xl',
+                      ui.view === 'library' ? 'bg-primary text-primary-foreground' : 'bg-foreground/5 text-muted-foreground'
+                    )"
+                  >
+                    <NIcon size="16"><Bookmark /></NIcon>
+                  </span>
+                </NBadge>
+              </template>
+              <template v-if="!effectiveCollapsed">
+                <div class="min-w-0 flex-1">
+                  <p class="text-sm font-semibold text-foreground">追番库</p>
+                  <p class="text-[10px] text-muted-foreground">{{ libraryCount }} 部</p>
+                </div>
+                <span
+                  v-if="libraryCount > 0"
+                  @click.stop="libraryExpanded = !libraryExpanded"
+                  class="flex h-5 w-5 shrink-0 cursor-pointer items-center justify-center rounded text-muted-foreground hover:bg-foreground/10 hover:text-foreground"
+                >
+                  <ChevronDown v-if="libraryExpanded" class="h-3 w-3" />
+                  <ChevronRight v-else class="h-3 w-3" />
+                </span>
+              </template>
+            </NButton>
           </template>
-        </button>
+          <span>追番库 ({{ libraryCount }})</span>
+        </NTooltip>
+
         <div v-if="!effectiveCollapsed && libraryExpanded && libraryCount > 0" class="mt-2 min-h-0 flex-1 space-y-1 overflow-y-auto pr-1">
-          <button
+          <NButton
             v-for="entry in libraryList"
             :key="entry.id"
-            type="button"
+            quaternary
+            :focusable="false"
+            class="state-layer !w-full !justify-start !gap-2.5 !rounded-xl !p-1.5 !text-left hover:!bg-foreground/5"
             @click="ui.openDetail(entry.id, entry.image)"
-            class="state-layer flex w-full items-center gap-2.5 rounded-xl p-1.5 text-left hover:bg-foreground/5"
           >
             <img
               v-if="entry.image"
@@ -167,7 +215,7 @@ const switchView = (key: ViewKey) => {
               draggable="false"
             />
             <div v-else class="flex h-10 w-7 shrink-0 items-center justify-center rounded-md bg-foreground/10">
-              <Bookmark class="h-3 w-3 text-muted-foreground" />
+              <NIcon size="12" color="var(--muted-foreground)"><Bookmark /></NIcon>
             </div>
             <div class="min-w-0 flex-1">
               <p class="line-clamp-1 text-xs font-medium text-foreground">{{ entry.title || `#${entry.id}` }}</p>
@@ -175,7 +223,7 @@ const switchView = (key: ViewKey) => {
                 {{ entry.watchedEpisodes.length }}{{ entry.totalEpisodes > 0 ? `/${entry.totalEpisodes}` : "" }}话
               </p>
             </div>
-          </button>
+          </NButton>
         </div>
         <div v-else-if="!effectiveCollapsed && libraryExpanded && libraryCount === 0" class="mt-2 py-4 text-center">
           <p class="text-[11px] text-muted-foreground">追番库为空</p>
@@ -183,15 +231,29 @@ const switchView = (key: ViewKey) => {
       </div>
 
       <!-- 设置按钮 (固定在侧边栏底部) -->
-      <button
-        type="button"
-        @click="ui.setView('settings')"
-        :title="effectiveCollapsed ? '设置' : undefined"
-        :class="cn('state-layer mt-3 flex w-full items-center rounded-2xl text-sm font-medium transition-colors', effectiveCollapsed ? 'justify-center px-2 py-2.5' : 'gap-3 px-3.5 py-2.5', ui.view === 'settings' ? 'bg-primary text-primary-foreground shadow-lg shadow-primary/25' : 'glass glass-sheen text-muted-foreground hover:bg-foreground/5 hover:text-foreground')"
-      >
-        <SettingsIcon class="h-5 w-5 shrink-0" />
-        <span v-if="!effectiveCollapsed" class="flex-1 text-left">设置</span>
-      </button>
+      <NTooltip placement="right" :disabled="!effectiveCollapsed">
+        <template #trigger>
+          <NButton
+            quaternary
+            :focusable="false"
+            :type="ui.view === 'settings' ? 'primary' : 'default'"
+            :class="cn(
+              'state-layer mt-3 flex w-full items-center rounded-2xl text-sm font-medium transition-colors',
+              effectiveCollapsed ? 'justify-center !px-2 !py-2.5' : 'gap-3 !px-3.5 !py-2.5',
+              ui.view === 'settings'
+                ? '!bg-primary !text-primary-foreground shadow-lg shadow-primary/25'
+                : 'glass glass-sheen text-muted-foreground hover:!bg-foreground/5 hover:text-foreground'
+            )"
+            @click="ui.setView('settings')"
+          >
+            <template #icon>
+              <NIcon size="20"><SettingsIcon /></NIcon>
+            </template>
+            <span v-if="!effectiveCollapsed" class="flex-1 text-left">设置</span>
+          </NButton>
+        </template>
+        <span>设置</span>
+      </NTooltip>
     </aside>
 
     <!-- main column (scrollable) -->
@@ -199,24 +261,38 @@ const switchView = (key: ViewKey) => {
       <header class="sticky top-0 z-40 px-3 pt-3 sm:px-4 md:px-6">
         <div class="glass glass-sheen flex items-center gap-2 rounded-full p-2 pl-3 sm:gap-3 sm:pl-4">
           <!-- sidebar toggle (desktop only) -->
-          <button
-            type="button"
-            @click="toggleSidebar"
-            class="hidden h-8 w-8 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-foreground/10 hover:text-foreground md:flex"
+          <NButton
+            circle
+            quaternary
+            :focusable="false"
+            class="hidden !h-8 !w-8 md:flex"
             :aria-label="effectiveCollapsed ? '展开侧栏' : '收起侧栏'"
+            @click="toggleSidebar"
           >
-            <PanelLeftOpen v-if="effectiveCollapsed" class="h-4 w-4" />
-            <PanelLeftClose v-else class="h-4 w-4" />
-          </button>
+            <template #icon>
+              <NIcon size="16">
+                <PanelLeftOpen v-if="effectiveCollapsed" />
+                <PanelLeftClose v-else />
+              </NIcon>
+            </template>
+          </NButton>
           <div class="md:hidden">
             <img src="/aikf-logo-128.png" alt="AiKF" class="h-8 w-8 rounded-xl ring-1 ring-white/10" draggable="false" />
           </div>
           <div class="hidden flex-1 md:block"><SearchBar /></div>
           <div class="ml-auto flex items-center gap-2">
-            <button type="button" @click="ui.setView('search')" class="glass state-layer flex h-9 items-center gap-2 rounded-full px-3 text-xs font-medium text-foreground md:hidden">
-              <SearchIcon class="h-4 w-4" />
+            <NButton
+              quaternary
+              circle
+              :focusable="false"
+              class="glass state-layer !h-9 !px-3 !text-xs font-medium md:hidden"
+              @click="ui.setView('search')"
+            >
+              <template #icon>
+                <NIcon size="16"><SearchIcon /></NIcon>
+              </template>
               <span class="hidden sm:inline">搜索</span>
-            </button>
+            </NButton>
             <ThemeToggle />
           </div>
         </div>
@@ -246,3 +322,16 @@ const switchView = (key: ViewKey) => {
     </nav>
   </div>
 </template>
+
+<style scoped>
+/* Override Naive UI's default button padding/height so it visually matches
+   the original glass nav design (which used Tailwind py-2.5 / px-3.5). */
+.nav-btn :deep(.n-button__content) {
+  width: 100%;
+  justify-content: flex-start;
+}
+/* Make NButton's icon slot vertical-centered and shrink-0 */
+.nav-btn :deep(.n-button__icon) {
+  margin-right: 0;
+}
+</style>

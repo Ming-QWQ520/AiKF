@@ -9,6 +9,15 @@ import { useSettingsStore } from "@/stores/settings";
 import { useAsync } from "@/composables/useAsync";
 import { cn } from "@/lib/utils";
 import TitleBar from "@/components/TitleBar.vue";
+import {
+  NButton,
+  NIcon,
+  NTag,
+  NScrollbar,
+  NSlider,
+  NTooltip,
+  NEmpty,
+} from "naive-ui";
 
 // ─── Logging ──────────────────────────────────────────────────────────────
 const LOG_PREFIX = "%c[AiKF Player]";
@@ -301,14 +310,14 @@ const toggleMute = () => {
 // Volume control
 const volume = ref(1);
 const showVolumeSlider = ref(false);
-const setVolume = (e: Event) => {
+// NSlider emits a plain number (not an Event), so use an overload that accepts both.
+const setVolume = (val: number | Event) => {
   const v = videoRef.value;
   if (!v) return;
-  const target = e.target as HTMLInputElement;
-  const val = parseFloat(target.value);
-  v.volume = val;
-  volume.value = val;
-  if (val === 0) { v.muted = true; isMuted.value = true; }
+  const n = typeof val === "number" ? val : parseFloat((val.target as HTMLInputElement).value);
+  v.volume = n;
+  volume.value = n;
+  if (n === 0) { v.muted = true; isMuted.value = true; }
   else { v.muted = false; isMuted.value = false; }
 };
 // Mouse wheel volume control on hover
@@ -687,21 +696,43 @@ const retestLatency = async () => {
       <!-- player header -->
       <div class="flex items-center justify-between gap-3 px-4 py-3">
         <div class="flex min-w-0 items-center gap-3">
-          <button @click="closeOrPip" class="state-layer glass flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-white hover:bg-white/20" aria-label="最小化">
-            <X class="h-4 w-4" />
-          </button>
+          <NButton
+            circle
+            :focusable="false"
+            class="glass state-layer !h-9 !w-9 !text-white hover:!bg-white/20"
+            aria-label="最小化"
+            @click="closeOrPip"
+          >
+            <template #icon>
+              <NIcon size="16"><X /></NIcon>
+            </template>
+          </NButton>
           <div class="min-w-0">
             <p class="line-clamp-1 text-sm font-bold text-white">{{ ui.player.title }}</p>
             <p class="text-xs text-white/50">第 {{ episode }} 话</p>
           </div>
         </div>
         <div class="flex items-center gap-2">
-          <button @click="toggleLog" :class="cn('rounded-full px-3 py-1.5 text-xs font-medium transition-colors', showLog ? 'bg-tertiary text-tertiary-foreground' : 'glass text-white/80 hover:bg-white/20')">
+          <NButton
+            size="small"
+            :type="showLog ? 'warning' : 'default'"
+            :ghost="!showLog"
+            :focusable="false"
+            class="!rounded-full !px-3 !py-1.5 !text-xs !font-medium"
+            :class="showLog ? '' : 'glass !text-white/80 hover:!bg-white/20'"
+            @click="toggleLog"
+          >
             日志
-          </button>
-          <button @click="enterPip" class="state-layer glass hidden rounded-full px-3 py-1.5 text-xs font-medium text-white/80 hover:bg-white/20 sm:block">
+          </NButton>
+          <NButton
+            size="small"
+            quaternary
+            :focusable="false"
+            class="glass state-layer !hidden !rounded-full !px-3 !py-1.5 !text-xs !font-medium !text-white/80 hover:!bg-white/20 sm:!block"
+            @click="enterPip"
+          >
             查看详情
-          </button>
+          </NButton>
         </div>
       </div>
 
@@ -714,14 +745,26 @@ const retestLatency = async () => {
               <p class="text-sm">正在加载播放源…</p>
             </div>
             <div v-else-if="vodIsError" class="absolute inset-0 z-20 flex flex-col items-center justify-center gap-3 px-6 text-center text-white/70">
-              <AlertCircle class="h-10 w-10 text-destructive" />
+              <NIcon :size="40" color="var(--destructive)"><AlertCircle /></NIcon>
               <p class="text-sm">播放源加载失败</p>
-              <button @click="vodRefetch()" class="rounded-full bg-white/10 px-4 py-1.5 text-xs text-white hover:bg-white/20">重试</button>
+              <NButton
+                size="small"
+                :focusable="false"
+                class="!rounded-full !bg-white/10 !px-4 !py-1.5 !text-xs !text-white hover:!bg-white/20"
+                @click="vodRefetch()"
+              >
+                重试
+              </NButton>
             </div>
-            <div v-else-if="sources.length === 0" class="absolute inset-0 z-20 flex flex-col items-center justify-center gap-2 text-white/60">
-              <AlertCircle class="h-10 w-10" />
-              <p class="text-sm">暂无可用的播放源</p>
-            </div>
+            <NEmpty
+              v-else-if="sources.length === 0"
+              class="absolute inset-0 z-20 !flex flex-col items-center justify-center gap-2 !text-white/60"
+              description="暂无可用的播放源"
+            >
+              <template #icon>
+                <NIcon :size="40"><AlertCircle /></NIcon>
+              </template>
+            </NEmpty>
             <template v-else>
               <div
                 ref="videoContainerRef"
@@ -748,10 +791,26 @@ const retestLatency = async () => {
                     <!-- control buttons row -->
                     <div class="flex items-center gap-0.5 px-3 py-2">
                       <!-- play/pause -->
-                      <button @click="togglePlay" class="state-layer flex h-8 w-8 items-center justify-center rounded-full text-white hover:bg-white/15" :aria-label="isPlaying ? '暂停' : '播放'">
-                        <Pause v-if="isPlaying" class="h-4 w-4" />
-                        <Play v-else class="h-4 w-4 fill-current" />
-                      </button>
+                      <NTooltip placement="top">
+                        <template #trigger>
+                          <NButton
+                            circle
+                            quaternary
+                            :focusable="false"
+                            class="!h-8 !w-8 !text-white hover:!bg-white/15"
+                            :aria-label="isPlaying ? '暂停' : '播放'"
+                            @click="togglePlay"
+                          >
+                            <template #icon>
+                              <NIcon size="16">
+                                <Pause v-if="isPlaying" />
+                                <Play v-else class="fill-current" />
+                              </NIcon>
+                            </template>
+                          </NButton>
+                        </template>
+                        <span>{{ isPlaying ? '暂停' : '播放' }}</span>
+                      </NTooltip>
                       <!-- divider -->
                       <div class="mx-1 h-5 w-px bg-white/15" />
                       <!-- volume control with hover slider -->
@@ -761,45 +820,121 @@ const retestLatency = async () => {
                         @mouseleave="showVolumeSlider = false"
                         @wheel.prevent="onVolumeWheel"
                       >
-                        <button @click="toggleMute" class="state-layer flex h-8 w-8 items-center justify-center rounded-full text-white hover:bg-white/15" :aria-label="isMuted ? '取消静音' : '静音'">
-                          <VolumeX v-if="isMuted || volume === 0" class="h-4 w-4" />
-                          <Volume2 v-else class="h-4 w-4" />
-                        </button>
-                        <!-- vertical volume slider -->
+                        <NTooltip placement="top">
+                          <template #trigger>
+                            <NButton
+                              circle
+                              quaternary
+                              :focusable="false"
+                              class="!h-8 !w-8 !text-white hover:!bg-white/15"
+                              :aria-label="isMuted ? '取消静音' : '静音'"
+                              @click="toggleMute"
+                            >
+                              <template #icon>
+                                <NIcon size="16">
+                                  <VolumeX v-if="isMuted || volume === 0" />
+                                  <Volume2 v-else />
+                                </NIcon>
+                              </template>
+                            </NButton>
+                          </template>
+                          <span>{{ isMuted ? '取消静音' : '静音' }}</span>
+                        </NTooltip>
+                        <!-- vertical volume slider (Naive UI NSlider) -->
                         <Transition name="vol-slider">
-                          <div v-if="showVolumeSlider" class="absolute bottom-10 left-1/2 -translate-x-1/2 flex flex-col items-center rounded-lg bg-black/80 p-2 backdrop-blur-md">
-                            <input
-                              type="range" min="0" max="1" step="0.05"
+                          <div v-if="showVolumeSlider" class="absolute bottom-10 left-1/2 -translate-x-1/2 flex flex-col items-center gap-2 rounded-lg bg-black/80 p-2 backdrop-blur-md">
+                            <NSlider
                               :value="isMuted ? 0 : volume"
-                              @input="setVolume"
-                              class="vol-slider-vertical"
-                              orient="vertical"
-                              style="writing-mode: bt-lr; -webkit-appearance: slider-vertical; width: 4px; height: 80px;"
+                              :min="0"
+                              :max="1"
+                              :step="0.05"
+                              vertical
+                              :tooltip="false"
+                              style="height: 80px;"
+                              @update:value="setVolume"
                             />
+                            <span class="text-[9px] font-mono tabular-nums text-white/70">{{ Math.round((isMuted ? 0 : volume) * 100) }}%</span>
                           </div>
                         </Transition>
                       </div>
                       <!-- seek back/forward -->
-                      <button @click="seekBy(-10)" class="state-layer hidden h-8 w-8 items-center justify-center rounded-full text-white hover:bg-white/15 sm:flex" aria-label="后退10秒">
-                        <RotateCcw class="h-4 w-4" />
-                      </button>
-                      <button @click="seekBy(10)" class="state-layer hidden h-8 w-8 items-center justify-center rounded-full text-white hover:bg-white/15 sm:flex" aria-label="前进10秒">
-                        <RotateCw class="h-4 w-4" />
-                      </button>
+                      <NTooltip placement="top">
+                        <template #trigger>
+                          <NButton
+                            circle
+                            quaternary
+                            :focusable="false"
+                            class="!hidden !h-8 !w-8 !text-white hover:!bg-white/15 sm:!flex"
+                            aria-label="后退10秒"
+                            @click="seekBy(-10)"
+                          >
+                            <template #icon>
+                              <NIcon size="16"><RotateCcw /></NIcon>
+                            </template>
+                          </NButton>
+                        </template>
+                        <span>后退10秒</span>
+                      </NTooltip>
+                      <NTooltip placement="top">
+                        <template #trigger>
+                          <NButton
+                            circle
+                            quaternary
+                            :focusable="false"
+                            class="!hidden !h-8 !w-8 !text-white hover:!bg-white/15 sm:!flex"
+                            aria-label="前进10秒"
+                            @click="seekBy(10)"
+                          >
+                            <template #icon>
+                              <NIcon size="16"><RotateCw /></NIcon>
+                            </template>
+                          </NButton>
+                        </template>
+                        <span>前进10秒</span>
+                      </NTooltip>
                       <!-- time display -->
                       <span class="ml-1.5 font-mono text-[11px] tabular-nums text-white/70">{{ fmtTime(currentTime) }} <span class="text-white/30">/</span> {{ fmtTime(duration) }}</span>
                       <!-- spacer -->
                       <div class="flex-1" />
                       <!-- latency test -->
-                      <button @click="retestLatency" :disabled="latencyTesting" class="state-layer flex h-8 items-center gap-1 rounded-full px-2 text-[11px] font-medium text-white/60 hover:bg-white/15 hover:text-white disabled:opacity-50" aria-label="测速">
-                        <Loader2 v-if="latencyTesting" class="h-3 w-3 animate-spin" />
-                        <Zap v-else class="h-3 w-3" /> 测速
-                      </button>
+                      <NButton
+                        size="tiny"
+                        quaternary
+                        :focusable="false"
+                        :disabled="latencyTesting"
+                        class="!h-8 !px-2 !text-[11px] !font-medium !text-white/60 hover:!bg-white/15 hover:!text-white disabled:!opacity-50"
+                        aria-label="测速"
+                        @click="retestLatency"
+                      >
+                        <template #icon>
+                          <NIcon size="12">
+                            <Loader2 v-if="latencyTesting" class="animate-spin" />
+                            <Zap v-else />
+                          </NIcon>
+                        </template>
+                        测速
+                      </NButton>
                       <!-- fullscreen -->
-                      <button @click="toggleFullscreen" class="state-layer flex h-8 w-8 items-center justify-center rounded-full text-white hover:bg-white/15" :aria-label="isFullscreen ? '退出全屏' : '全屏'">
-                        <Minimize v-if="isFullscreen" class="h-4 w-4" />
-                        <Maximize v-else class="h-4 w-4" />
-                      </button>
+                      <NTooltip placement="top">
+                        <template #trigger>
+                          <NButton
+                            circle
+                            quaternary
+                            :focusable="false"
+                            class="!h-8 !w-8 !text-white hover:!bg-white/15"
+                            :aria-label="isFullscreen ? '退出全屏' : '全屏'"
+                            @click="toggleFullscreen"
+                          >
+                            <template #icon>
+                              <NIcon size="16">
+                                <Minimize v-if="isFullscreen" />
+                                <Maximize v-else />
+                              </NIcon>
+                            </template>
+                          </NButton>
+                        </template>
+                        <span>{{ isFullscreen ? '退出全屏' : '全屏' }}</span>
+                      </NTooltip>
                     </div>
                   </div>
                 </Transition>
@@ -819,78 +954,130 @@ const retestLatency = async () => {
         <!-- side panel (collapsible) -->
         <div class="relative flex shrink-0 items-stretch">
           <!-- vertical collapse/expand toggle button (rectangle) -->
-          <button
-            @click="sidebarCollapsed = !sidebarCollapsed"
-            class="state-layer hidden w-6 shrink-0 items-center justify-center border-l border-white/10 bg-black/40 text-white/70 hover:bg-white/10 hover:text-white md:flex"
+          <NButton
+            quaternary
+            :focusable="false"
+            class="state-layer !hidden !w-6 !shrink-0 !items-center !justify-center !rounded-none !border-l !border-white/10 !bg-black/40 !text-white/70 hover:!bg-white/10 hover:!text-white md:!flex"
             :aria-label="sidebarCollapsed ? '展开侧栏' : '收起侧栏'"
+            @click="sidebarCollapsed = !sidebarCollapsed"
           >
-            <ChevronRight v-if="sidebarCollapsed" class="h-4 w-4" />
-            <ChevronLeft v-else class="h-4 w-4" />
-          </button>
+            <template #icon>
+              <NIcon size="16">
+                <ChevronRight v-if="sidebarCollapsed" />
+                <ChevronLeft v-else />
+              </NIcon>
+            </template>
+          </NButton>
           <Transition name="sidebar">
             <div v-show="!sidebarCollapsed" class="flex min-h-0 w-full flex-col border-l border-white/10 bg-black/60 backdrop-blur-xl md:w-80 lg:w-96">
           <div class="flex gap-1 p-2.5">
-            <button class="state-layer flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-primary py-2.5 text-xs font-semibold text-primary-foreground">
-              <ListVideo class="h-3.5 w-3.5" /> 剧集列表
-            </button>
+            <NButton
+              type="primary"
+              :focusable="false"
+              class="!flex !flex-1 !items-center !justify-center !gap-1.5 !rounded-xl !py-2.5 !text-xs !font-semibold"
+            >
+              <template #icon>
+                <NIcon size="14"><ListVideo /></NIcon>
+              </template>
+              剧集列表
+            </NButton>
           </div>
 
           <!-- 播放源 (vertical expandable list) -->
           <div v-if="sources.length > 0" class="px-3 pb-3">
             <!-- title row -->
             <div class="flex items-center justify-between">
-              <span class="flex items-center gap-1.5 text-[11px] font-bold text-white/70"><LinkIcon class="h-3.5 w-3.5" /> 播放源</span>
+              <span class="flex items-center gap-1.5 text-[11px] font-bold text-white/70">
+                <NIcon size="14"><LinkIcon /></NIcon> 播放源
+              </span>
               <div class="flex items-center gap-2">
-                <button
-                  @click="retestLatency"
+                <NButton
+                  size="tiny"
+                  quaternary
+                  :focusable="false"
                   :disabled="latencyTesting"
-                  class="state-layer flex items-center gap-1 rounded-full bg-white/10 px-2.5 py-1 text-[10px] font-medium text-white/70 hover:text-white disabled:opacity-50"
+                  class="!rounded-full !bg-white/10 !px-2.5 !py-1 !text-[10px] !font-medium !text-white/70 hover:!text-white disabled:!opacity-50"
+                  @click="retestLatency"
                 >
-                  <Loader2 v-if="latencyTesting" class="h-3 w-3 animate-spin" />
-                  <Zap v-else class="h-3 w-3" />
+                  <template #icon>
+                    <NIcon size="12">
+                      <Loader2 v-if="latencyTesting" class="animate-spin" />
+                      <Zap v-else />
+                    </NIcon>
+                  </template>
                   测速
-                </button>
-                <button
+                </NButton>
+                <NButton
+                  size="tiny"
+                  quaternary
+                  :focusable="false"
+                  class="!rounded-full !bg-white/10 !px-2.5 !py-1 !text-[10px] !font-medium !text-white/70 hover:!text-white"
                   @click="sourcesExpanded = !sourcesExpanded"
-                  class="state-layer flex items-center gap-1 rounded-full bg-white/10 px-2.5 py-1 text-[10px] font-medium text-white/70 hover:text-white"
                 >
                   {{ sourcesExpanded ? "收起" : `展开(${sources.length})` }}
-                  <ChevronDown v-if="sourcesExpanded" class="h-3 w-3" />
-                  <ChevronRight v-else class="h-3 w-3" />
-                </button>
+                  <template #icon>
+                    <NIcon size="12">
+                      <ChevronDown v-if="sourcesExpanded" />
+                      <ChevronRight v-else />
+                    </NIcon>
+                  </template>
+                </NButton>
               </div>
             </div>
             <!-- current source (always visible) -->
-            <button
+            <NButton
               v-if="currentSource"
+              quaternary
+              :focusable="false"
+              class="state-layer !mt-2 !flex !w-full !items-center !justify-between !rounded-xl !bg-primary/20 !px-3 !py-2 !text-left !ring-1 !ring-primary/40"
               @click="sourceIdx = effectiveIdx; triedSources.clear(); triedSources.add(effectiveIdx)"
-              class="state-layer mt-2 flex w-full items-center justify-between rounded-xl bg-primary/20 px-3 py-2 text-left ring-1 ring-primary/40"
             >
               <div class="min-w-0 flex-1">
                 <p class="text-xs font-semibold text-white">{{ sourceLabel(currentSource) }}</p>
                 <p class="text-[10px] text-white/50">当前播放源</p>
               </div>
-              <span v-if="sourceLatencies[effectiveIdx] !== undefined" class="ml-2 shrink-0 text-[10px] font-medium" :class="sourceLatencies[effectiveIdx] !== null ? 'text-secondary' : 'text-destructive'">
+              <NTag
+                v-if="sourceLatencies[effectiveIdx] !== undefined"
+                :type="sourceLatencies[effectiveIdx] !== null ? 'success' : 'error'"
+                size="tiny"
+                round
+                :bordered="false"
+                class="!ml-2 !shrink-0"
+              >
                 {{ sourceLatencies[effectiveIdx] !== null ? sourceLatencies[effectiveIdx] + 'ms' : '✕' }}
-              </span>
-            </button>
+              </NTag>
+            </NButton>
             <!-- expanded list (all sources) -->
             <Transition name="source-list">
-              <div v-if="sourcesExpanded" class="mt-2 max-h-64 space-y-1 overflow-y-auto pr-1">
-                <button
-                  v-for="(s, i) in sources"
-                  :key="i"
-                  @click="sourceIdx = i; triedSources.clear(); triedSources.add(i); sourcesExpanded = false"
-                  :class="cn('state-layer flex w-full items-center justify-between rounded-lg px-3 py-2 text-left transition-colors', i === effectiveIdx ? 'bg-primary/15 ring-1 ring-primary/30' : 'bg-white/5 hover:bg-white/10')"
-                >
-                  <div class="min-w-0 flex-1">
-                    <p class="text-[11px] font-medium text-white/90">{{ sourceLabel(s) }}</p>
-                  </div>
-                  <span v-if="sourceLatencies[i] !== undefined" class="ml-2 shrink-0 text-[10px]" :class="sourceLatencies[i] !== null ? 'text-secondary' : 'text-destructive'">
-                    {{ sourceLatencies[i] !== null ? sourceLatencies[i] + 'ms' : '✕' }}
-                  </span>
-                </button>
-              </div>
+              <NScrollbar v-if="sourcesExpanded" class="mt-2 max-h-64">
+                <div class="space-y-1 pr-1">
+                  <NButton
+                    v-for="(s, i) in sources"
+                    :key="i"
+                    quaternary
+                    :focusable="false"
+                    :class="cn(
+                      'state-layer !flex !w-full !items-center !justify-between !rounded-lg !px-3 !py-2 !text-left !transition-colors',
+                      i === effectiveIdx ? '!bg-primary/15 !ring-1 !ring-primary/30' : '!bg-white/5 hover:!bg-white/10'
+                    )"
+                    @click="sourceIdx = i; triedSources.clear(); triedSources.add(i); sourcesExpanded = false"
+                  >
+                    <div class="min-w-0 flex-1">
+                      <p class="text-[11px] font-medium text-white/90">{{ sourceLabel(s) }}</p>
+                    </div>
+                    <NTag
+                      v-if="sourceLatencies[i] !== undefined"
+                      :type="sourceLatencies[i] !== null ? 'success' : 'error'"
+                      size="tiny"
+                      round
+                      :bordered="false"
+                      class="!ml-2 !shrink-0"
+                    >
+                      {{ sourceLatencies[i] !== null ? sourceLatencies[i] + 'ms' : '✕' }}
+                    </NTag>
+                  </NButton>
+                </div>
+              </NScrollbar>
             </Transition>
             <!-- latency test result summary -->
             <div v-if="latencyDone && !latencyTesting && Object.keys(sourceLatencies).length > 0" class="mt-2 rounded-lg bg-white/5 px-3 py-1.5 text-[10px] text-white/50">
@@ -904,12 +1091,32 @@ const retestLatency = async () => {
           </div>
 
           <div v-if="episodesList.length > 0" class="flex items-center justify-between px-3 pb-3 text-xs text-white/60">
-            <button :disabled="episode <= 1" @click="(() => { const prev = episodesList.find((e) => e.sort === episode - 1); if (prev) switchEpisode(prev.sort, prev.title); })()" class="state-layer flex items-center gap-1 disabled:opacity-30">
-              <ChevronLeft class="h-3.5 w-3.5" /> 上一话
-            </button>
-            <button :disabled="episode >= episodesList.length" @click="(() => { const next = episodesList.find((e) => e.sort === episode + 1); if (next) switchEpisode(next.sort, next.title); })()" class="state-layer flex items-center gap-1 disabled:opacity-30">
-              下一话 <ChevronRight class="h-3.5 w-3.5" />
-            </button>
+            <NButton
+              size="tiny"
+              quaternary
+              :focusable="false"
+              :disabled="episode <= 1"
+              class="!text-white/60 disabled:!opacity-30"
+              @click="(() => { const prev = episodesList.find((e) => e.sort === episode - 1); if (prev) switchEpisode(prev.sort, prev.title); })()"
+            >
+              <template #icon>
+                <NIcon size="14"><ChevronLeft /></NIcon>
+              </template>
+              上一话
+            </NButton>
+            <NButton
+              size="tiny"
+              quaternary
+              :focusable="false"
+              :disabled="episode >= episodesList.length"
+              class="!text-white/60 disabled:!opacity-30"
+              @click="(() => { const next = episodesList.find((e) => e.sort === episode + 1); if (next) switchEpisode(next.sort, next.title); })()"
+            >
+              下一话
+              <template #icon>
+                <NIcon size="14"><ChevronRight /></NIcon>
+              </template>
+            </NButton>
           </div>
 
           <div class="min-h-0 flex-1 overflow-y-auto px-2 pb-3">
@@ -917,15 +1124,30 @@ const retestLatency = async () => {
             <div v-if="showLog" class="mb-2 rounded-xl bg-black/60 p-2 font-mono text-[10px] leading-relaxed text-green-300 max-h-64 overflow-y-auto">
               <div v-for="(line, i) in logLines" :key="i" class="whitespace-pre-wrap break-all">{{ line }}</div>
             </div>
-            <div v-if="!episodes || episodes.length === 0" class="py-8 text-center text-xs text-white/50">暂无剧集</div>
+            <NEmpty
+              v-if="!episodes || episodes.length === 0"
+              class="!py-8"
+              description="暂无剧集"
+              :show-icon="true"
+            />
             <div v-else class="space-y-1 p-1">
-              <button v-for="ep in episodesList" :key="ep.sort" @click="switchEpisode(ep.sort, ep.title)" :class="cn('state-layer flex w-full items-center gap-2.5 rounded-xl p-2 text-left transition-colors', ep.sort === episode ? 'bg-primary/20 ring-1 ring-primary/40' : 'hover:bg-white/10')">
+              <NButton
+                v-for="ep in episodesList"
+                :key="ep.sort"
+                quaternary
+                :focusable="false"
+                :class="cn(
+                  'state-layer !flex !w-full !items-center !gap-2.5 !rounded-xl !p-2 !text-left !transition-colors',
+                  ep.sort === episode ? '!bg-primary/20 !ring-1 !ring-primary/40' : 'hover:!bg-white/10'
+                )"
+                @click="switchEpisode(ep.sort, ep.title)"
+              >
                 <span :class="cn('flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-xs font-bold', ep.sort === episode ? 'bg-primary text-primary-foreground' : 'bg-white/10 text-white/70')">{{ ep.sort }}</span>
                 <div class="min-w-0 flex-1">
                   <p :class="cn('line-clamp-1 text-xs font-medium', ep.sort === episode ? 'text-white' : 'text-white/80')">{{ ep.title || `第 ${ep.sort} 话` }}</p>
                 </div>
-                <Play v-if="ep.sort === episode" class="h-3 w-3 shrink-0 fill-current text-primary" />
-              </button>
+                <NIcon v-if="ep.sort === episode" size="12" class="fill-current !text-primary shrink-0"><Play /></NIcon>
+              </NButton>
             </div>
           </div>
             </div>
@@ -954,12 +1176,30 @@ const retestLatency = async () => {
           >
             <span class="line-clamp-1 text-[10px] font-semibold text-white">{{ ui.player.title }} · 第{{ episode }}话</span>
             <div class="flex items-center gap-1">
-              <button @click="exitPip" class="flex h-5 w-5 items-center justify-center rounded-full bg-white/20 text-white hover:bg-white/40" aria-label="展开">
-                <Maximize class="h-2.5 w-2.5" />
-              </button>
-              <button @click="closeFromPip" class="flex h-5 w-5 items-center justify-center rounded-full bg-white/20 text-white hover:bg-destructive" aria-label="关闭">
-                <X class="h-2.5 w-2.5" />
-              </button>
+              <NButton
+                circle
+                quaternary
+                :focusable="false"
+                class="!h-5 !w-5 !bg-white/20 !text-white hover:!bg-white/40"
+                aria-label="展开"
+                @click="exitPip"
+              >
+                <template #icon>
+                  <NIcon size="10"><Maximize /></NIcon>
+                </template>
+              </NButton>
+              <NButton
+                circle
+                quaternary
+                :focusable="false"
+                class="!h-5 !w-5 !bg-white/20 !text-white hover:!bg-destructive"
+                aria-label="关闭"
+                @click="closeFromPip"
+              >
+                <template #icon>
+                  <NIcon size="10"><X /></NIcon>
+                </template>
+              </NButton>
             </div>
           </div>
         </Transition>

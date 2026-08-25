@@ -1,6 +1,7 @@
 import { createApp } from "vue";
 import { createPinia } from "pinia";
 import { gsap } from "gsap";
+import naive from "naive-ui";
 import App from "./App.vue";
 import "./assets/globals.css";
 import { useLibraryStore } from "@/stores/library";
@@ -15,6 +16,10 @@ gsap.ticker.lagSmoothing(500); // smooth out frame drops
 const app = createApp(App);
 const pinia = createPinia();
 app.use(pinia);
+
+// Naive UI — registered globally so NButton, NIcon, NSlider etc. are
+// available inside the player & sidebar templates.
+app.use(naive);
 
 // Hydrate persisted library data before mounting.
 useLibraryStore().hydrate();
