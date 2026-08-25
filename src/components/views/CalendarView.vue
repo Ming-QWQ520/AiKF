@@ -4,6 +4,7 @@ import { CalendarDays } from "lucide-vue-next";
 import { anich } from "@/lib/anich/api-client";
 import { useUIStore } from "@/stores/ui";
 import { useAsync } from "@/composables/useAsync";
+import { useResponsiveGrid } from "@/composables/useResponsiveGrid";
 import SectionCard from "@/components/SectionCard.vue";
 import CoverImage from "@/components/CoverImage.vue";
 import { weekdayLabel, formatRelative } from "@/lib/anich/format";
@@ -16,6 +17,10 @@ const today = new Date().getDay();
 const activeDay = ref(today);
 const days = computed(() => data.value?.data ?? []);
 const active = computed(() => days.value.find((d) => d.sort % 7 === activeDay.value) ?? days.value[0]);
+
+// Responsive grid for horizontal cards (cover + text). Each card needs ~280px
+// minimum width to display the cover + 2-line title + genre tags comfortably.
+const { containerRef: calGridRef, style: calGridStyle } = useResponsiveGrid({ minWidth: 280, gap: 12 });
 </script>
 
 <template>
@@ -47,15 +52,15 @@ const active = computed(() => days.value.find((d) => d.sort % 7 === activeDay.va
     </SectionCard>
 
     <section class="flex flex-col gap-3">
-      <div v-if="isLoading" class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+      <div v-if="isLoading" ref="calGridRef" class="min-w-0 w-full overflow-hidden" :style="calGridStyle">
         <div v-for="i in 6" :key="i" class="h-24 rounded-2xl shimmer" />
       </div>
-      <div v-else-if="active && active.list.length > 0" class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+      <div v-else-if="active && active.list.length > 0" ref="calGridRef" class="min-w-0 w-full overflow-hidden" :style="calGridStyle">
         <button
           v-for="(item, i) in active.list" :key="item.id"
           @click="ui.openDetail(item.id, item.image)"
           :style="{ animationDelay: `${Math.min(i * 0.025, 0.3)}s` }"
-          class="state-layer glass glass-sheen group flex items-center gap-3 rounded-2xl p-3 text-left fade-up"
+          class="state-layer glass glass-sheen group flex min-w-0 items-center gap-3 rounded-2xl p-3 text-left fade-up"
         >
           <CoverImage :src="item.image" :alt="item.title" ratio="portrait" class="h-20 w-14 shrink-0" rounded="rounded-xl" />
           <div class="min-w-0 flex-1">

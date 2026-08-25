@@ -4,12 +4,19 @@ import { Flame, Clock, TrendingUp } from "lucide-vue-next";
 import { anich } from "@/lib/anich/api-client";
 import { useUIStore } from "@/stores/ui";
 import { useAsync } from "@/composables/useAsync";
+import { useResponsiveGrid } from "@/composables/useResponsiveGrid";
 import CoverImage from "@/components/CoverImage.vue";
 import HeroCarousel from "@/components/HeroCarousel.vue";
 import { weekdayLabel, formatRelative } from "@/lib/anich/format";
 import { cn } from "@/lib/utils";
 
 const ui = useUIStore();
+
+// Two independent responsive grids — schedule grid and fresh grid. Each has
+// its own ResizeObserver-tracked container so they compute column counts
+// independently (e.g. when one is above the fold and one is below).
+const { containerRef: scheduleGridRef, style: scheduleGridStyle } = useResponsiveGrid({ minWidth: 150, gap: 12 });
+const { containerRef: freshGridRef, style: freshGridStyle } = useResponsiveGrid({ minWidth: 150, gap: 12 });
 
 const { data: latestData, isLoading: latestLoading } = useAsync(() => anich.latest(), { source: () => "latest" });
 const { data: calData, isLoading: calLoading } = useAsync(() => anich.calendar(), { source: () => "cal" });
@@ -132,16 +139,16 @@ const fresh = computed(() => (listData.value?.items ?? []).slice(0, 12));
           {{ weekdayLabel(d) }}
         </button>
       </div>
-      <!-- Schedule grid -->
-      <div v-if="calLoading" class="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
+      <!-- Schedule grid (responsive via ResizeObserver) -->
+      <div v-if="calLoading" ref="scheduleGridRef" class="min-w-0 w-full overflow-hidden" :style="scheduleGridStyle">
         <div v-for="i in 6" :key="i" class="aspect-[3/4] rounded-lg shimmer" />
       </div>
       <div v-else-if="activeDayList.length === 0" class="py-8 text-center text-sm text-muted-foreground">本日暂无放送</div>
-      <div v-else class="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
+      <div v-else ref="scheduleGridRef" class="min-w-0 w-full overflow-hidden" :style="scheduleGridStyle">
         <button
           v-for="item in activeDayList.slice(0, 12)" :key="item.id"
           @click="ui.openDetail(item.id, item.image)"
-          class="group flex flex-col text-left"
+          class="group flex min-w-0 flex-col text-left"
         >
           <CoverImage :src="item.image" :alt="item.title" ratio="portrait" rounded="rounded-lg" class="transition-transform group-hover:scale-[1.03]" />
           <p class="mt-1.5 line-clamp-1 text-xs font-medium text-foreground">{{ item.title }}</p>
@@ -159,14 +166,14 @@ const fresh = computed(() => (listData.value?.items ?? []).slice(0, 12));
         </div>
         <button @click="ui.setView('browse')" class="text-xs font-medium text-primary hover:underline">查看更多 →</button>
       </div>
-      <div v-if="listLoading" class="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
+      <div v-if="listLoading" ref="freshGridRef" class="min-w-0 w-full overflow-hidden" :style="freshGridStyle">
         <div v-for="i in 6" :key="i" class="aspect-[3/4] rounded-lg shimmer" />
       </div>
-      <div v-else class="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
+      <div v-else ref="freshGridRef" class="min-w-0 w-full overflow-hidden" :style="freshGridStyle">
         <button
           v-for="item in fresh" :key="item.id"
           @click="ui.openDetail(item.id, item.image)"
-          class="group flex flex-col text-left"
+          class="group flex min-w-0 flex-col text-left"
         >
           <CoverImage :src="item.image" :alt="item.title" ratio="portrait" rounded="rounded-lg" class="transition-transform group-hover:scale-[1.03]" />
           <p class="mt-1.5 line-clamp-1 text-xs font-medium text-foreground">{{ item.title }}</p>

@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, onBeforeUnmount, nextTick } from "vue";
 import { cn } from "@/lib/utils";
 import AnimeCard from "./AnimeCard.vue";
+import { useResponsiveGrid } from "@/composables/useResponsiveGrid";
 
 defineProps<{
   items: Array<{
@@ -18,41 +18,9 @@ defineProps<{
 
 const emit = defineEmits<{ (e: "select", id: number, cover?: string): void }>();
 
-// ── Dynamic grid column count via ResizeObserver ──
-// CSS auto-fill + minmax is unreliable with scrollbars / subpixel rounding,
-// so we measure the actual container width and compute column count in JS.
-const MIN_CARD_WIDTH = 160;
-const GRID_GAP = 12;
-const gridContainerRef = ref<HTMLElement | null>(null);
-const gridColCount = ref(2);
-
-const onGridResize = () => {
-  const el = gridContainerRef.value;
-  if (!el) return;
-  const available = el.clientWidth;
-  const cols = Math.max(1, Math.floor((available + GRID_GAP) / (MIN_CARD_WIDTH + GRID_GAP)));
-  gridColCount.value = cols;
-};
-let resizeObserver: ResizeObserver | null = null;
-onMounted(() => {
-  nextTick(() => {
-    onGridResize();
-    if (gridContainerRef.value) {
-      resizeObserver = new ResizeObserver(() => onGridResize());
-      resizeObserver.observe(gridContainerRef.value);
-    }
-  });
-});
-onBeforeUnmount(() => {
-  resizeObserver?.disconnect();
-  resizeObserver = null;
-});
-
-const gridStyle = computed(() => ({
-  display: 'grid',
-  gridTemplateColumns: `repeat(${gridColCount.value}, minmax(0, 1fr))`,
-  gap: `${GRID_GAP}px ${GRID_GAP}px`,
-}));
+// Bulletproof responsive grid — measures container width via ResizeObserver
+// and computes column count in JS. Never overflows (see composable docs).
+const { containerRef, style } = useResponsiveGrid({ minWidth: 160, gap: 12 });
 </script>
 
 <template>
@@ -65,9 +33,9 @@ const gridStyle = computed(() => ({
   <!-- Dynamic responsive grid — column count computed via ResizeObserver. -->
   <div
     v-else
-    ref="gridContainerRef"
+    ref="containerRef"
     :class="cn('min-w-0 w-full overflow-hidden')"
-    :style="gridStyle"
+    :style="style"
   >
     <AnimeCard
       v-for="(item, i) in items"

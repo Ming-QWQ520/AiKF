@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import { computed, ref, watch, onMounted, onBeforeUnmount, nextTick } from "vue";
+import { computed, ref, watch } from "vue";
 import { LayoutGrid, ChevronLeft, ChevronRight, X } from "lucide-vue-next";
 import { anich } from "@/lib/anich/api-client";
 import { useUIStore } from "@/stores/ui";
 import { useAsync } from "@/composables/useAsync";
+import { useResponsiveGrid } from "@/composables/useResponsiveGrid";
 import type { BangumiLang, BangumiType } from "@/lib/anich/types";
 import CoverImage from "@/components/CoverImage.vue";
 import AnimeGridSkeleton from "@/components/AnimeGridSkeleton.vue";
@@ -13,49 +14,9 @@ import { cn } from "@/lib/utils";
 const ui = useUIStore();
 const PAGE_SIZE = 24;
 
-// ── Dynamic grid column count ──
-// CSS auto-fill + minmax doesn't reliably prevent overflow in all browser
-// environments (especially with scrollbars, subpixel rounding, etc.).
-// So we measure the actual container width with ResizeObserver and compute
-// the column count in JS — this is bulletproof.
-const MIN_CARD_WIDTH = 160;  // px — minimum card width
-const GRID_GAP = 12;          // px — gap-x-3
-const gridContainerRef = ref<HTMLElement | null>(null);
-const gridColCount = ref(2);
-
-const onGridResize = () => {
-  const el = gridContainerRef.value;
-  if (!el) return;
-  // Use clientWidth (excludes scrollbar) for accurate available width.
-  const available = el.clientWidth;
-  // floor((available + gap) / (min_card + gap)) = max cols that fit
-  const cols = Math.max(1, Math.floor((available + GRID_GAP) / (MIN_CARD_WIDTH + GRID_GAP)));
-  gridColCount.value = cols;
-};
-let resizeObserver: ResizeObserver | null = null;
-onMounted(() => {
-  // Wait for layout to settle, then start observing.
-  nextTick(() => {
-    onGridResize();
-    if (gridContainerRef.value) {
-      resizeObserver = new ResizeObserver(() => onGridResize());
-      resizeObserver.observe(gridContainerRef.value);
-    }
-  });
-});
-onBeforeUnmount(() => {
-  resizeObserver?.disconnect();
-  resizeObserver = null;
-});
-
-// gridStyle — set grid-template-columns to exactly N columns of 1fr each.
-// This is the only way to guarantee the column count without auto-fill
-// surprises.
-const gridStyle = computed(() => ({
-  display: 'grid',
-  gridTemplateColumns: `repeat(${gridColCount.value}, minmax(0, 1fr))`,
-  gap: `${GRID_GAP}px ${GRID_GAP}px`,
-}));
+// Bulletproof responsive grid — measures container width via ResizeObserver
+// and computes column count in JS. Never overflows (see composable docs).
+const { containerRef: gridContainerRef, style: gridStyle } = useResponsiveGrid({ minWidth: 160, gap: 12 });
 
 const TYPE_OPTIONS: { value?: BangumiType; label: string }[] = [
   { value: undefined, label: "全部" },
