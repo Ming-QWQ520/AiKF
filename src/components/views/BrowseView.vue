@@ -79,7 +79,7 @@ watch(() => filters.value.skip, () => window.scrollTo({ top: 0, behavior: "smoot
 </script>
 
 <template>
-  <div class="mx-auto flex w-full min-w-0 max-w-[1400px] flex-col gap-5 overflow-x-hidden">
+  <div class="mx-auto flex w-full min-w-0 max-w-[1400px] flex-col gap-5 overflow-x-hidden px-1">
     <!-- Filters -->
     <SectionCard>
       <div class="flex items-center justify-between gap-3">
@@ -163,15 +163,16 @@ watch(() => filters.value.skip, () => window.scrollTo({ top: 0, behavior: "smoot
       <div v-else-if="items.length === 0" class="glass glass-sheen flex min-h-[200px] items-center justify-center rounded-3xl p-10 text-center text-muted-foreground">
         没有符合条件的番剧，试试调整筛选
       </div>
-      <!-- True responsive grid via inline style. Tailwind 4's arbitrary value
-           syntax [grid-template-columns:...] doesn't reliably parse commas,
-           so we use inline style for guaranteed correctness. auto-fill +
-           minmax(150px, 1fr) lets the browser choose column count based on
-           the actual container width. -->
+      <!-- True responsive grid via inline style. minmax(170px, 1fr) is
+           chosen so that on a 1280px window (256 sidebar + ~960 main),
+           the browser picks 5 columns (5×170 + 4×12 = 898 ≤ 960) instead
+           of 6 (6×150 + 5×12 = 960 — exactly fits but cuts off due to
+           subpixel rounding or hidden scrollbar width). 170px also gives
+           each card a more readable width. -->
       <div
         v-else
-        class="grid min-w-0 gap-x-3 gap-y-4"
-        style="grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));"
+        class="grid min-w-0 w-full gap-x-3 gap-y-4 overflow-hidden"
+        style="grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));"
       >
         <button
           v-for="item in items" :key="item.id"

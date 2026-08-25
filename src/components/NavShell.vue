@@ -201,11 +201,14 @@ const progressLabel = (entry: { currentEpisode: number; watchedEpisodes: number[
                 <p class="mt-0.5 text-[10px] tabular-nums text-muted-foreground">
                   {{ progressLabel(entry) }}
                 </p>
-                <!-- Progress bar (inline, no library overhead) -->
+                <!-- Progress bar (inline, no library overhead).
+                     Inner bar uses min-w-0 to allow shrinking below content
+                     width (default flex min-width is 'auto', which would
+                     make a 0% bar still render at content size). -->
                 <div class="mt-1 flex items-center gap-1.5">
-                  <div class="h-[3px] flex-1 overflow-hidden rounded-full bg-foreground/10">
+                  <div class="h-[3px] min-w-0 flex-1 overflow-hidden rounded-full bg-foreground/10">
                     <div
-                      class="h-full rounded-full transition-[width] duration-300 ease-out"
+                      class="h-full min-w-0 rounded-full transition-[width] duration-300 ease-out"
                       :class="watchedPct(entry) >= 100 ? 'bg-tertiary' : 'bg-primary'"
                       :style="{ width: watchedPct(entry) + '%' }"
                     />
@@ -250,15 +253,20 @@ const progressLabel = (entry: { currentEpisode: number; watchedEpisodes: number[
     <div class="flex min-w-0 flex-1 flex-col overflow-hidden">
       <header class="sticky top-0 z-40 px-3 pt-3 sm:px-4 md:px-6">
         <div class="glass glass-sheen flex items-center gap-2 rounded-full p-2 pl-3 sm:gap-3 sm:pl-4">
-          <button
-            type="button"
-            @click="toggleSidebar"
-            class="hidden h-8 w-8 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-foreground/10 hover:text-foreground md:flex"
-            :aria-label="effectiveCollapsed ? '展开侧栏' : '收起侧栏'"
-          >
-            <PanelLeftOpen v-if="effectiveCollapsed" class="h-4 w-4" />
-            <PanelLeftClose v-else class="h-4 w-4" />
-          </button>
+          <NTooltip placement="bottom">
+            <template #trigger>
+              <button
+                type="button"
+                @click="toggleSidebar"
+                class="hidden h-8 w-8 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-foreground/10 hover:text-foreground md:flex"
+                :aria-label="effectiveCollapsed ? '展开侧栏' : '收起侧栏'"
+              >
+                <PanelLeftOpen v-if="effectiveCollapsed" class="h-4 w-4" />
+                <PanelLeftClose v-else class="h-4 w-4" />
+              </button>
+            </template>
+            <span>{{ effectiveCollapsed ? '展开侧栏' : '收起侧栏' }}</span>
+          </NTooltip>
           <div class="md:hidden">
             <img src="/aikf-logo-128.png" alt="AiKF" class="h-8 w-8 rounded-lg" draggable="false" />
           </div>
@@ -272,7 +280,12 @@ const progressLabel = (entry: { currentEpisode: number; watchedEpisodes: number[
               <SearchIcon class="h-4 w-4" />
               <span class="hidden sm:inline">搜索</span>
             </button>
-            <ThemeToggle />
+            <NTooltip placement="bottom">
+              <template #trigger>
+                <ThemeToggle />
+              </template>
+              <span>切换深色 / 浅色模式</span>
+            </NTooltip>
           </div>
         </div>
         <div class="mt-2 md:hidden"><SearchBar /></div>
