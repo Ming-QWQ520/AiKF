@@ -79,7 +79,7 @@ watch(() => filters.value.skip, () => window.scrollTo({ top: 0, behavior: "smoot
 </script>
 
 <template>
-  <div class="mx-auto flex max-w-[1400px] flex-col gap-5">
+  <div class="mx-auto flex w-full min-w-0 max-w-[1400px] flex-col gap-5 overflow-x-hidden">
     <!-- Filters -->
     <SectionCard>
       <div class="flex items-center justify-between gap-3">
@@ -163,15 +163,15 @@ watch(() => filters.value.skip, () => window.scrollTo({ top: 0, behavior: "smoot
       <div v-else-if="items.length === 0" class="glass glass-sheen flex min-h-[200px] items-center justify-center rounded-3xl p-10 text-center text-muted-foreground">
         没有符合条件的番剧，试试调整筛选
       </div>
-      <div v-else class="grid grid-cols-2 gap-x-4 gap-y-5 sm:grid-cols-3 sm:gap-x-5 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
+      <div v-else class="grid grid-cols-2 gap-x-3 gap-y-4 sm:grid-cols-3 sm:gap-x-4 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
         <button
           v-for="item in items" :key="item.id"
           @click="ui.openDetail(item.id, item.image)"
-          class="group flex flex-col text-left"
+          class="group flex min-w-0 flex-col text-left"
         >
           <CoverImage :src="item.image" :alt="item.title" ratio="portrait" rounded="rounded-lg" class="transition-transform group-hover:scale-[1.03]" />
           <p class="mt-1.5 line-clamp-1 text-xs font-medium text-foreground">{{ item.title }}</p>
-          <p v-if="item.tagline" class="text-[10px] text-muted-foreground">{{ item.tagline }}</p>
+          <p v-if="item.tagline" class="line-clamp-1 text-[10px] text-muted-foreground">{{ item.tagline }}</p>
           <div class="mt-0.5 flex items-center gap-2 text-[10px] text-muted-foreground">
             <span v-if="item.episode" class="text-secondary">更新至{{ item.episode }}话</span>
             <span v-if="item.episodesTotal">共{{ item.episodesTotal }}话</span>

@@ -25,7 +25,7 @@ const emit = defineEmits<{ (e: "select", id: number, cover?: string): void }>();
     </svg>
     <p class="text-sm text-muted-foreground">{{ emptyHint ?? "暂无内容" }}</p>
   </div>
-  <div v-else :class="cn('grid grid-cols-2 gap-x-3 gap-y-4 sm:grid-cols-3 sm:gap-x-4 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6')">
+  <div v-else :class="cn('grid grid-cols-2 gap-x-3 gap-y-4 sm:grid-cols-3 sm:gap-x-4 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 min-w-0')">
     <AnimeCard
       v-for="(item, i) in items"
       :key="`${item.id}-${i}`"

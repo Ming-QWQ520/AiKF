@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from "vue";
+import { computed, ref, watch } from "vue";
 import { ArrowLeft, Play, BookmarkCheck, Star, Calendar, Globe, Film, Heart, ChevronDown } from "lucide-vue-next";
 import { anich } from "@/lib/anich/api-client";
 import { useUIStore } from "@/stores/ui";
@@ -17,6 +17,21 @@ const { data: detail, isLoading: detailLoading } = useAsync(() => anich.detail(i
 const { data: episodes } = useAsync(() => anich.episodes(idRef.value!), { enabled: idRef, source: idRef });
 const { data: related } = useAsync(() => anich.related(idRef.value!), { enabled: idRef, source: idRef });
 const { data: characters } = useAsync(() => anich.characters(idRef.value!), { enabled: idRef, source: idRef });
+
+// When detail data loads, sync metadata into the library entry (if it exists).
+// This repairs legacy entries whose totalEpisodes was 0 (created before the
+// API returned episodesTotal, or before the addOrUpdate fix landed).
+watch(() => detail.value, (d) => {
+  if (!d || ui.detailId == null) return;
+  // Only sync if entry already exists in library; otherwise nothing to repair.
+  if (!library.has(ui.detailId)) return;
+  library.syncMeta(ui.detailId, {
+    title: d.title,
+    image: d.image,
+    tagline: d.genres?.join("/"),
+    totalEpisodes: d.episodesTotal,
+  });
+}, { immediate: true });
 
 // Comments — fetch for episode 1 + comment count
 const { data: commentsData, isLoading: commentsLoading } = useAsync(

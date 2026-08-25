@@ -47,7 +47,7 @@ onMounted(() => {
     type="button"
     @click="onClick"
     style="content-visibility: auto; contain-intrinsic-size: 220px"
-    class="group relative flex flex-col text-left state-layer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60 focus-visible:ring-offset-2 focus-visible:ring-offset-background rounded-2xl transition-transform duration-200 hover:-translate-y-1 active:scale-[0.98]"
+    class="group relative flex min-w-0 flex-col text-left state-layer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60 focus-visible:ring-offset-2 focus-visible:ring-offset-background rounded-2xl transition-transform duration-200 hover:-translate-y-1 active:scale-[0.98]"
   >
     <div class="relative">
       <CoverImage

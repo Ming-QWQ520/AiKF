@@ -130,6 +130,45 @@ export const useLibraryStore = defineStore("library", {
       this.entries = { ...this.entries, [info.id]: entry };
       this._persist();
     },
+    /**
+     * Sync metadata (title/image/tagline/totalEpisodes) for an existing
+     * library entry from the latest API response. Used to repair legacy
+     * entries that were created before the API returned episodesTotal.
+     *
+     * Unlike addOrUpdate, this does NOT change the entry's status — it only
+     * fills in missing/stale metadata. Safe to call repeatedly.
+     */
+    syncMeta(
+      id: number,
+      meta: {
+        title?: string;
+        image?: string;
+        tagline?: string;
+        totalEpisodes?: number;
+      }
+    ) {
+      const e = this.entries[id];
+      if (!e) return;
+      const updated: LibraryEntry = {
+        ...e,
+        title: meta.title ?? e.title,
+        image: meta.image ?? e.image,
+        tagline: meta.tagline ?? e.tagline,
+        totalEpisodes: meta.totalEpisodes ?? e.totalEpisodes,
+        updatedAt: Date.now(),
+      };
+      // Only persist + reassign if something actually changed (avoid needless writes)
+      if (
+        updated.title === e.title &&
+        updated.image === e.image &&
+        updated.tagline === e.tagline &&
+        updated.totalEpisodes === e.totalEpisodes
+      ) {
+        return;
+      }
+      this.entries = { ...this.entries, [id]: updated };
+      this._persist();
+    },
     remove(id: number) {
       const next = { ...this.entries };
       delete next[id];

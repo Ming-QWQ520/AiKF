@@ -36,7 +36,7 @@ const ratioClass = computed(
 
 <template>
   <div
-    :class="cn('relative overflow-hidden bg-gradient-to-br from-primary/15 via-secondary/10 to-tertiary/15', ratioClass, rounded, props.class)"
+    :class="cn('relative w-full overflow-hidden bg-gradient-to-br from-primary/15 via-secondary/10 to-tertiary/15', ratioClass, rounded, props.class)"
   >
     <!-- shimmer placeholder (CSS-only, GPU-accelerated) -->
     <div v-if="!loaded && !errored" class="absolute inset-0 shimmer" />

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, onBeforeUnmount } from "vue";
+import { ref, computed, onMounted, onBeforeUnmount, nextTick } from "vue";
 import { Compass, CalendarDays, LayoutGrid, Bookmark, Search as SearchIcon, ChevronDown, Settings as SettingsIcon, PanelLeftClose, PanelLeftOpen } from "lucide-vue-next";
 import { useUIStore, type ViewKey } from "@/stores/ui";
 import { useLibraryStore } from "@/stores/library";
@@ -37,7 +37,16 @@ const toggleSidebar = () => { manualCollapsed.value = !effectiveCollapsed.value;
 const switchView = (key: ViewKey) => {
   if (key === ui.view) return;
   ui.setView(key);
+  // Reset scroll position to top on view switch so the user doesn't land
+  // mid-page (which would otherwise happen because the previous view's
+  // scrollTop is preserved on the shared <main> scroll container).
+  nextTick(() => {
+    mainRef.value?.scrollTo({ top: 0, left: 0, behavior: "auto" });
+  });
 };
+
+// Ref to the main scroll container — used to reset scrollTop on view change.
+const mainRef = ref<HTMLElement | null>(null);
 
 // ── Library entry progress helpers ──
 // Use currentEpisode first (highest marked-watched episode, set by markEpisode),
@@ -269,7 +278,7 @@ const progressLabel = (entry: { currentEpisode: number; watchedEpisodes: number[
         <div class="mt-2 md:hidden"><SearchBar /></div>
       </header>
 
-      <main class="flex-1 overflow-y-auto px-3 pb-28 pt-4 sm:px-4 md:px-6 md:pb-12"><slot /></main>
+      <main ref="mainRef" class="flex-1 overflow-y-auto px-3 pb-28 pt-4 sm:px-4 md:px-6 md:pb-12"><slot /></main>
     </div>
 
     <!-- ── mobile bottom nav ── -->
