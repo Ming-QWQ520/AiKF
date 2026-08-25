@@ -12,8 +12,6 @@ import TitleBar from "@/components/TitleBar.vue";
 import {
   NButton,
   NIcon,
-  NTag,
-  NScrollbar,
   NSlider,
   NTooltip,
   NEmpty,
@@ -538,8 +536,15 @@ watch(
       videoError.value = "当前浏览器不支持 HLS 播放";
     }
 
-    pushLog("calling video.play()…");
-    video.play().then(() => pushLog("play() succeeded")).catch((e) => pushLog(`play() rejected: ${e?.name || e?.message || e}`));
+    // Auto-play — BUT skip if we have savedVideoState (PiP↔fullscreen switch).
+    // In that case restoreVideoState() (called from @loadedmetadata) will handle
+    // both the seek AND the play() call, avoiding a "play from start then snap back" jank.
+    if (savedVideoState.value) {
+      pushLog("savedVideoState present → deferring play() to restoreVideoState()");
+    } else {
+      pushLog("calling video.play()…");
+      video.play().then(() => pushLog("play() succeeded")).catch((e) => pushLog(`play() rejected: ${e?.name || e?.message || e}`));
+    }
   },
   { flush: "post", immediate: true }
 );
@@ -579,35 +584,74 @@ const sourcesExpanded = ref(false);
 // Picture-in-picture mode: player shrinks to bottom-right corner
 const pipMode = ref(false);
 // Saved video state for PiP <-> fullscreen sync
-const savedVideoState = ref<{ time: number; paused: boolean; muted: boolean } | null>(null);
+const savedVideoState = ref<{ time: number; paused: boolean; muted: boolean; volume?: number } | null>(null);
 
 const saveVideoState = () => {
   const v = videoRef.value;
   if (v) {
-    savedVideoState.value = { time: v.currentTime, paused: v.paused, muted: v.muted };
+    savedVideoState.value = {
+      time: v.currentTime,
+      paused: v.paused,
+      muted: v.muted,
+      volume: v.volume,
+    };
     // Also sync isPlaying immediately
     isPlaying.value = !v.paused;
+    pushLog(`saveVideoState: time=${Math.round(v.currentTime)}s, paused=${v.paused}, muted=${v.muted}, vol=${v.volume}`);
   }
 };
 const restoreVideoState = () => {
   const v = videoRef.value;
   if (!v) return;
-  // First try saved state (from PiP switch)
+  // First try saved state (from PiP ↔ fullscreen switch)
   if (savedVideoState.value) {
-    v.currentTime = savedVideoState.value.time;
-    v.muted = savedVideoState.value.muted;
-    // Sync isPlaying state BEFORE calling play/pause
-    isPlaying.value = !savedVideoState.value.paused;
-    if (!savedVideoState.value.paused) {
-      v.play().then(() => { isPlaying.value = true; }).catch(() => { isPlaying.value = false; });
-    } else {
-      v.pause();
-      isPlaying.value = false;
+    const s = savedVideoState.value;
+    pushLog(`restoreVideoState: restoring saved state time=${Math.round(s.time)}s, paused=${s.paused}`);
+    // Restore volume + mute first (no seeking needed)
+    if (typeof s.volume === "number") {
+      v.volume = s.volume;
+      volume.value = s.volume;
     }
+    v.muted = s.muted;
+    isMuted.value = s.muted;
+
+    // Seek to saved time BEFORE play/pause — this avoids the "play-from-start
+    // then snap back" jank that happens when calling play() before seek.
+    // We use a microtask-deferred seek to ensure the HLS manifest is parsed
+    // first (setting currentTime before manifestParsed is a no-op for HLS).
+    const doSeekAndPlay = () => {
+      try {
+        if (s.time > 1) {
+          v.currentTime = s.time;
+        }
+      } catch (err) {
+        pushLog(`restoreVideoState: seek failed: ${err}`);
+      }
+      isPlaying.value = !s.paused;
+      if (!s.paused) {
+        v.play().then(() => { isPlaying.value = true; }).catch((e) => {
+          isPlaying.value = false;
+          pushLog(`restoreVideoState: play() rejected: ${e?.name || e?.message || e}`);
+        });
+      } else {
+        v.pause();
+        isPlaying.value = false;
+      }
+    };
+
+    // For HLS sources, wait for MANIFEST_PARSED before seeking.
+    // For direct media, we can seek immediately after metadata loads.
+    if (hls) {
+      // Defer to next tick — by then hls.js should have attached + parsed manifest
+      setTimeout(doSeekAndPlay, 50);
+    } else {
+      doSeekAndPlay();
+    }
+
     savedVideoState.value = null;
     return;
   }
-  // Otherwise restore from library playback progress
+  // Otherwise restore from library playback progress (fresh open)
   if (bangumiID.value) {
     const progress = library.getPlaybackProgress(bangumiID.value, episode.value);
     if (progress && progress.time > 5 && progress.time < progress.duration - 10) {
@@ -690,56 +734,63 @@ const retestLatency = async () => {
 
 <template>
   <Transition name="player">
-    <div v-if="open && bangumiID != null && !pipMode" class="fixed inset-0 z-[100] flex flex-col bg-black/90 backdrop-blur-2xl">
-      <!-- titlebar (same as main app) -->
+    <div v-if="open && bangumiID != null && !pipMode" class="fixed inset-0 z-[100] flex flex-col bg-black">
+      <!-- titlebar (same as main app) — transparent overlay, no border -->
       <TitleBar />
-      <!-- player header -->
-      <div class="flex items-center justify-between gap-3 px-4 py-3">
-        <div class="flex min-w-0 items-center gap-3">
-          <NButton
-            circle
-            :focusable="false"
-            class="glass state-layer !h-9 !w-9 !text-white hover:!bg-white/20"
-            aria-label="最小化"
-            @click="closeOrPip"
-          >
-            <template #icon>
-              <NIcon size="16"><X /></NIcon>
-            </template>
-          </NButton>
-          <div class="min-w-0">
-            <p class="line-clamp-1 text-sm font-bold text-white">{{ ui.player.title }}</p>
-            <p class="text-xs text-white/50">第 {{ episode }} 话</p>
-          </div>
-        </div>
-        <div class="flex items-center gap-2">
-          <NButton
-            size="small"
-            :type="showLog ? 'warning' : 'default'"
-            :ghost="!showLog"
-            :focusable="false"
-            class="!rounded-full !px-3 !py-1.5 !text-xs !font-medium"
-            :class="showLog ? '' : 'glass !text-white/80 hover:!bg-white/20'"
-            @click="toggleLog"
-          >
-            日志
-          </NButton>
-          <NButton
-            size="small"
-            quaternary
-            :focusable="false"
-            class="glass state-layer !hidden !rounded-full !px-3 !py-1.5 !text-xs !font-medium !text-white/80 hover:!bg-white/20 sm:!block"
-            @click="enterPip"
-          >
-            查看详情
-          </NButton>
-        </div>
-      </div>
 
-      <!-- body -->
+      <!-- body — video area extends edge-to-edge, header overlays on top -->
       <div class="flex min-h-0 flex-1 gap-0 md:flex-row">
         <!-- video (fills the entire left area, edge-to-edge) -->
         <div class="relative min-h-0 min-w-0 flex-1 bg-black">
+            <!-- top overlay header — transparent, fused with video, fades out on hover-out -->
+            <Transition name="controls">
+              <div
+                v-if="controlsVisible || vodLoading || vodIsError || sources.length === 0"
+                class="pointer-events-none absolute inset-x-0 top-0 z-30 flex items-start justify-between gap-3 bg-gradient-to-b from-black/80 via-black/40 to-transparent px-4 pb-10 pt-3"
+              >
+                <div class="pointer-events-auto flex min-w-0 items-center gap-3">
+                  <NButton
+                    circle
+                    quaternary
+                    :focusable="false"
+                    class="!h-9 !w-9 !text-white hover:!bg-white/20"
+                    aria-label="最小化"
+                    @click="closeOrPip"
+                  >
+                    <template #icon>
+                      <NIcon size="16"><X /></NIcon>
+                    </template>
+                  </NButton>
+                  <div class="min-w-0">
+                    <p class="line-clamp-1 text-sm font-bold text-white drop-shadow">{{ ui.player.title }}</p>
+                    <p class="text-xs text-white/60">第 {{ episode }} 话</p>
+                  </div>
+                </div>
+                <div class="pointer-events-auto flex items-center gap-2">
+                  <NButton
+                    size="small"
+                    quaternary
+                    :focusable="false"
+                    class="!rounded-full !px-3 !py-1.5 !text-xs !font-medium !text-white/70 hover:!bg-white/15 hover:!text-white"
+                    :class="showLog ? '!bg-tertiary/30 !text-tertiary-foreground' : ''"
+                    @click="toggleLog"
+                  >
+                    日志
+                  </NButton>
+                  <NButton
+                    size="small"
+                    quaternary
+                    :focusable="false"
+                    class="!hidden !rounded-full !px-3 !py-1.5 !text-xs !font-medium !text-white/70 hover:!bg-white/15 hover:!text-white sm:!block"
+                    @click="enterPip"
+                  >
+                    查看详情
+                  </NButton>
+                </div>
+              </div>
+            </Transition>
+
+            <!-- Loading / error / empty states -->
             <div v-if="vodLoading" class="absolute inset-0 z-20 flex flex-col items-center justify-center gap-3 text-white/70">
               <Loader2 class="h-10 w-10 animate-spin text-primary" />
               <p class="text-sm">正在加载播放源…</p>
@@ -951,138 +1002,120 @@ const retestLatency = async () => {
             </template>
         </div>
 
-        <!-- side panel (collapsible) -->
+        <!-- side panel (collapsible) — pure native elements for max perf -->
         <div class="relative flex shrink-0 items-stretch">
-          <!-- vertical collapse/expand toggle button (rectangle) -->
-          <NButton
-            quaternary
-            :focusable="false"
-            class="state-layer !hidden !w-6 !shrink-0 !items-center !justify-center !rounded-none !border-l !border-white/10 !bg-black/40 !text-white/70 hover:!bg-white/10 hover:!text-white md:!flex"
-            :aria-label="sidebarCollapsed ? '展开侧栏' : '收起侧栏'"
+          <!-- vertical collapse/expand toggle button -->
+          <button
+            type="button"
             @click="sidebarCollapsed = !sidebarCollapsed"
+            :aria-label="sidebarCollapsed ? '展开侧栏' : '收起侧栏'"
+            class="state-layer hidden w-6 shrink-0 items-center justify-center border-l border-white/5 bg-black/40 text-white/50 transition-colors hover:bg-white/5 hover:text-white md:flex"
           >
-            <template #icon>
-              <NIcon size="16">
-                <ChevronRight v-if="sidebarCollapsed" />
-                <ChevronLeft v-else />
-              </NIcon>
-            </template>
-          </NButton>
+            <ChevronRight v-if="sidebarCollapsed" class="h-4 w-4" />
+            <ChevronLeft v-else class="h-4 w-4" />
+          </button>
           <Transition name="sidebar">
-            <div v-show="!sidebarCollapsed" class="flex min-h-0 w-full flex-col border-l border-white/10 bg-black/60 backdrop-blur-xl md:w-80 lg:w-96">
-          <div class="flex gap-1 p-2.5">
-            <NButton
-              type="primary"
-              :focusable="false"
-              class="!flex !flex-1 !items-center !justify-center !gap-1.5 !rounded-xl !py-2.5 !text-xs !font-semibold"
-            >
-              <template #icon>
-                <NIcon size="14"><ListVideo /></NIcon>
-              </template>
-              剧集列表
-            </NButton>
+            <div v-show="!sidebarCollapsed" class="flex min-h-0 w-full flex-col bg-black/70 backdrop-blur-xl md:w-80 lg:w-96">
+          <!-- header row: 剧集列表 + prev/next in one bar -->
+          <div class="flex items-center justify-between gap-2 px-3 py-3">
+            <span class="flex items-center gap-1.5 text-xs font-bold tracking-wide text-white/80">
+              <ListVideo class="h-3.5 w-3.5" /> 剧集列表
+            </span>
+            <div v-if="episodesList.length > 0" class="flex items-center gap-1">
+              <button
+                type="button"
+                :disabled="episode <= 1"
+                @click="(() => { const prev = episodesList.find((e) => e.sort === episode - 1); if (prev) switchEpisode(prev.sort, prev.title); })()"
+                class="state-layer flex h-6 items-center gap-0.5 rounded-md px-1.5 text-[10px] text-white/50 transition-colors hover:bg-white/10 hover:text-white disabled:opacity-30 disabled:hover:bg-transparent"
+              >
+                <ChevronLeft class="h-3 w-3" /> 上一话
+              </button>
+              <button
+                type="button"
+                :disabled="episode >= episodesList.length"
+                @click="(() => { const next = episodesList.find((e) => e.sort === episode + 1); if (next) switchEpisode(next.sort, next.title); })()"
+                class="state-layer flex h-6 items-center gap-0.5 rounded-md px-1.5 text-[10px] text-white/50 transition-colors hover:bg-white/10 hover:text-white disabled:opacity-30 disabled:hover:bg-transparent"
+              >
+                下一话 <ChevronRight class="h-3 w-3" />
+              </button>
+            </div>
           </div>
 
-          <!-- 播放源 (vertical expandable list) -->
+          <!-- 播放源 (compact) -->
           <div v-if="sources.length > 0" class="px-3 pb-3">
-            <!-- title row -->
             <div class="flex items-center justify-between">
-              <span class="flex items-center gap-1.5 text-[11px] font-bold text-white/70">
-                <NIcon size="14"><LinkIcon /></NIcon> 播放源
+              <span class="flex items-center gap-1.5 text-[11px] font-medium text-white/60">
+                <LinkIcon class="h-3 w-3" /> 播放源
               </span>
-              <div class="flex items-center gap-2">
-                <NButton
-                  size="tiny"
-                  quaternary
-                  :focusable="false"
+              <div class="flex items-center gap-1.5">
+                <button
+                  type="button"
                   :disabled="latencyTesting"
-                  class="!rounded-full !bg-white/10 !px-2.5 !py-1 !text-[10px] !font-medium !text-white/70 hover:!text-white disabled:!opacity-50"
                   @click="retestLatency"
+                  class="state-layer flex h-5 items-center gap-1 rounded-md bg-white/5 px-2 text-[10px] font-medium text-white/60 transition-colors hover:bg-white/10 hover:text-white disabled:opacity-50"
                 >
-                  <template #icon>
-                    <NIcon size="12">
-                      <Loader2 v-if="latencyTesting" class="animate-spin" />
-                      <Zap v-else />
-                    </NIcon>
-                  </template>
+                  <Loader2 v-if="latencyTesting" class="h-2.5 w-2.5 animate-spin" />
+                  <Zap v-else class="h-2.5 w-2.5" />
                   测速
-                </NButton>
-                <NButton
-                  size="tiny"
-                  quaternary
-                  :focusable="false"
-                  class="!rounded-full !bg-white/10 !px-2.5 !py-1 !text-[10px] !font-medium !text-white/70 hover:!text-white"
+                </button>
+                <button
+                  type="button"
                   @click="sourcesExpanded = !sourcesExpanded"
+                  class="state-layer flex h-5 items-center gap-1 rounded-md bg-white/5 px-2 text-[10px] font-medium text-white/60 transition-colors hover:bg-white/10 hover:text-white"
                 >
-                  {{ sourcesExpanded ? "收起" : `展开(${sources.length})` }}
-                  <template #icon>
-                    <NIcon size="12">
-                      <ChevronDown v-if="sourcesExpanded" />
-                      <ChevronRight v-else />
-                    </NIcon>
-                  </template>
-                </NButton>
+                  {{ sourcesExpanded ? "收起" : `${sources.length}源` }}
+                  <ChevronDown v-if="sourcesExpanded" class="h-2.5 w-2.5" />
+                  <ChevronRight v-else class="h-2.5 w-2.5" />
+                </button>
               </div>
             </div>
-            <!-- current source (always visible) -->
-            <NButton
+            <!-- current source chip -->
+            <button
               v-if="currentSource"
-              quaternary
-              :focusable="false"
-              class="state-layer !mt-2 !flex !w-full !items-center !justify-between !rounded-xl !bg-primary/20 !px-3 !py-2 !text-left !ring-1 !ring-primary/40"
+              type="button"
               @click="sourceIdx = effectiveIdx; triedSources.clear(); triedSources.add(effectiveIdx)"
+              class="state-layer mt-2 flex w-full items-center justify-between gap-2 rounded-lg bg-primary/15 px-2.5 py-1.5 text-left ring-1 ring-primary/30 transition-colors hover:bg-primary/20"
             >
               <div class="min-w-0 flex-1">
-                <p class="text-xs font-semibold text-white">{{ sourceLabel(currentSource) }}</p>
-                <p class="text-[10px] text-white/50">当前播放源</p>
+                <p class="truncate text-[11px] font-medium text-white">{{ sourceLabel(currentSource) }}</p>
+                <p class="text-[9px] text-white/40">当前播放源</p>
               </div>
-              <NTag
+              <span
                 v-if="sourceLatencies[effectiveIdx] !== undefined"
-                :type="sourceLatencies[effectiveIdx] !== null ? 'success' : 'error'"
-                size="tiny"
-                round
-                :bordered="false"
-                class="!ml-2 !shrink-0"
+                class="shrink-0 rounded px-1 py-0.5 text-[9px] font-mono tabular-nums"
+                :class="sourceLatencies[effectiveIdx] !== null ? 'bg-secondary/20 text-secondary' : 'bg-destructive/20 text-destructive'"
               >
                 {{ sourceLatencies[effectiveIdx] !== null ? sourceLatencies[effectiveIdx] + 'ms' : '✕' }}
-              </NTag>
-            </NButton>
-            <!-- expanded list (all sources) -->
+              </span>
+            </button>
+            <!-- expanded sources list -->
             <Transition name="source-list">
-              <NScrollbar v-if="sourcesExpanded" class="mt-2 max-h-64">
-                <div class="space-y-1 pr-1">
-                  <NButton
-                    v-for="(s, i) in sources"
-                    :key="i"
-                    quaternary
-                    :focusable="false"
-                    :class="cn(
-                      'state-layer !flex !w-full !items-center !justify-between !rounded-lg !px-3 !py-2 !text-left !transition-colors',
-                      i === effectiveIdx ? '!bg-primary/15 !ring-1 !ring-primary/30' : '!bg-white/5 hover:!bg-white/10'
-                    )"
-                    @click="sourceIdx = i; triedSources.clear(); triedSources.add(i); sourcesExpanded = false"
+              <div v-if="sourcesExpanded" class="mt-1.5 max-h-56 space-y-0.5 overflow-y-auto pr-1">
+                <button
+                  v-for="(s, i) in sources"
+                  :key="i"
+                  type="button"
+                  @click="sourceIdx = i; triedSources.clear(); triedSources.add(i); sourcesExpanded = false"
+                  :class="cn(
+                    'state-layer flex w-full items-center justify-between gap-2 rounded-md px-2.5 py-1.5 text-left transition-colors',
+                    i === effectiveIdx ? 'bg-primary/10 ring-1 ring-primary/20' : 'hover:bg-white/5'
+                  )"
+                >
+                  <p class="truncate text-[10px] font-medium text-white/80">{{ sourceLabel(s) }}</p>
+                  <span
+                    v-if="sourceLatencies[i] !== undefined"
+                    class="shrink-0 rounded px-1 py-0.5 text-[9px] font-mono tabular-nums"
+                    :class="sourceLatencies[i] !== null ? 'text-secondary' : 'text-destructive'"
                   >
-                    <div class="min-w-0 flex-1">
-                      <p class="text-[11px] font-medium text-white/90">{{ sourceLabel(s) }}</p>
-                    </div>
-                    <NTag
-                      v-if="sourceLatencies[i] !== undefined"
-                      :type="sourceLatencies[i] !== null ? 'success' : 'error'"
-                      size="tiny"
-                      round
-                      :bordered="false"
-                      class="!ml-2 !shrink-0"
-                    >
-                      {{ sourceLatencies[i] !== null ? sourceLatencies[i] + 'ms' : '✕' }}
-                    </NTag>
-                  </NButton>
-                </div>
-              </NScrollbar>
+                    {{ sourceLatencies[i] !== null ? sourceLatencies[i] + 'ms' : '✕' }}
+                  </span>
+                </button>
+              </div>
             </Transition>
-            <!-- latency test result summary -->
-            <div v-if="latencyDone && !latencyTesting && Object.keys(sourceLatencies).length > 0" class="mt-2 rounded-lg bg-white/5 px-3 py-1.5 text-[10px] text-white/50">
+            <!-- latency summary -->
+            <div v-if="latencyDone && !latencyTesting && Object.keys(sourceLatencies).length > 0" class="mt-1.5 rounded-md bg-white/5 px-2 py-1 text-[9px] text-white/40">
               <template v-if="Object.values(sourceLatencies).some(v => v !== null)">
-                测速完成 · 最低延迟: {{ Math.min(...Object.values(sourceLatencies).filter(v => v !== null) as number[]) }}ms
+                测速完成 · 最低: {{ Math.min(...Object.values(sourceLatencies).filter(v => v !== null) as number[]) }}ms
               </template>
               <template v-else>
                 测速完成 · 所有源均无法连接
@@ -1090,64 +1123,56 @@ const retestLatency = async () => {
             </div>
           </div>
 
-          <div v-if="episodesList.length > 0" class="flex items-center justify-between px-3 pb-3 text-xs text-white/60">
-            <NButton
-              size="tiny"
-              quaternary
-              :focusable="false"
-              :disabled="episode <= 1"
-              class="!text-white/60 disabled:!opacity-30"
-              @click="(() => { const prev = episodesList.find((e) => e.sort === episode - 1); if (prev) switchEpisode(prev.sort, prev.title); })()"
-            >
-              <template #icon>
-                <NIcon size="14"><ChevronLeft /></NIcon>
-              </template>
-              上一话
-            </NButton>
-            <NButton
-              size="tiny"
-              quaternary
-              :focusable="false"
-              :disabled="episode >= episodesList.length"
-              class="!text-white/60 disabled:!opacity-30"
-              @click="(() => { const next = episodesList.find((e) => e.sort === episode + 1); if (next) switchEpisode(next.sort, next.title); })()"
-            >
-              下一话
-              <template #icon>
-                <NIcon size="14"><ChevronRight /></NIcon>
-              </template>
-            </NButton>
-          </div>
+          <!-- divider -->
+          <div class="mx-3 h-px bg-white/5" />
 
-          <div class="min-h-0 flex-1 overflow-y-auto px-2 pb-3">
+          <!-- episode list (native buttons, custom design) -->
+          <div class="min-h-0 flex-1 overflow-y-auto px-2 py-2">
             <!-- log panel (toggleable) -->
-            <div v-if="showLog" class="mb-2 rounded-xl bg-black/60 p-2 font-mono text-[10px] leading-relaxed text-green-300 max-h-64 overflow-y-auto">
+            <div v-if="showLog" class="mb-2 rounded-lg bg-black/60 p-2 font-mono text-[10px] leading-relaxed text-green-300 max-h-48 overflow-y-auto">
               <div v-for="(line, i) in logLines" :key="i" class="whitespace-pre-wrap break-all">{{ line }}</div>
             </div>
-            <NEmpty
+            <div
               v-if="!episodes || episodes.length === 0"
-              class="!py-8"
-              description="暂无剧集"
-              :show-icon="true"
-            />
-            <div v-else class="space-y-1 p-1">
-              <NButton
+              class="flex flex-col items-center justify-center gap-2 py-10 text-white/40"
+            >
+              <ListVideo class="h-8 w-8 opacity-40" />
+              <p class="text-xs">暂无剧集</p>
+            </div>
+            <div v-else class="space-y-0.5">
+              <button
                 v-for="ep in episodesList"
                 :key="ep.sort"
-                quaternary
-                :focusable="false"
-                :class="cn(
-                  'state-layer !flex !w-full !items-center !gap-2.5 !rounded-xl !p-2 !text-left !transition-colors',
-                  ep.sort === episode ? '!bg-primary/20 !ring-1 !ring-primary/40' : 'hover:!bg-white/10'
-                )"
+                type="button"
                 @click="switchEpisode(ep.sort, ep.title)"
+                :class="cn(
+                  'group flex w-full items-center gap-3 rounded-lg px-2.5 py-2 text-left transition-colors',
+                  ep.sort === episode ? 'bg-primary/15' : 'hover:bg-white/5'
+                )"
               >
-                <span :class="cn('flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-xs font-bold', ep.sort === episode ? 'bg-primary text-primary-foreground' : 'bg-white/10 text-white/70')">{{ ep.sort }}</span>
-                <div class="min-w-0 flex-1">
-                  <p :class="cn('line-clamp-1 text-xs font-medium', ep.sort === episode ? 'text-white' : 'text-white/80')">{{ ep.title || `第 ${ep.sort} 话` }}</p>
-                </div>
-                <NIcon v-if="ep.sort === episode" size="12" class="fill-current !text-primary shrink-0"><Play /></NIcon>
-              </NButton>
+                <span
+                  :class="cn(
+                    'flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-[11px] font-semibold tabular-nums transition-colors',
+                    ep.sort === episode
+                      ? 'bg-primary text-primary-foreground'
+                      : 'bg-white/5 text-white/60 group-hover:bg-white/10 group-hover:text-white/80'
+                  )"
+                >
+                  {{ ep.sort }}
+                </span>
+                <p
+                  :class="cn(
+                    'min-w-0 flex-1 truncate text-xs',
+                    ep.sort === episode ? 'font-semibold text-white' : 'text-white/70'
+                  )"
+                >
+                  {{ ep.title || `第 ${ep.sort} 话` }}
+                </p>
+                <Play
+                  v-if="ep.sort === episode"
+                  class="h-3 w-3 shrink-0 fill-current text-primary"
+                />
+              </button>
             </div>
           </div>
             </div>
