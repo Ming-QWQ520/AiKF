@@ -40,12 +40,15 @@ const switchView = (key: ViewKey) => {
 };
 
 // ── Library entry progress helpers ──
+// Use currentEpisode first (highest marked-watched episode, set by markEpisode),
+// fall back to watchedEpisodes.length if currentEpisode is 0.
 const currentEp = (entry: { currentEpisode: number; watchedEpisodes: number[] }): number => {
   return entry.currentEpisode || entry.watchedEpisodes.length || 0;
 };
-const watchedPct = (entry: { watchedEpisodes: number[]; totalEpisodes: number }): number => {
+const watchedPct = (entry: { currentEpisode: number; watchedEpisodes: number[]; totalEpisodes: number }): number => {
+  const cur = currentEp(entry);
   if (entry.totalEpisodes <= 0) return 0;
-  return Math.min(100, Math.round((entry.watchedEpisodes.length / entry.totalEpisodes) * 100));
+  return Math.min(100, Math.round((cur / entry.totalEpisodes) * 100));
 };
 const progressLabel = (entry: { currentEpisode: number; watchedEpisodes: number[]; totalEpisodes: number }): string => {
   const cur = currentEp(entry);

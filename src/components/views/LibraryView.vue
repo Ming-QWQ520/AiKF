@@ -91,15 +91,30 @@ const doClear = () => {
               </div>
 
               <div class="mt-2.5">
-                <div class="flex items-center justify-between text-xs text-muted-foreground">
-                  <span>观看进度</span>
-                  <span class="font-medium text-foreground">
-                    {{ entry.watchedEpisodes.length }}{{ entry.totalEpisodes > 0 ? ` / ${entry.totalEpisodes}` : "" }} 话
-                    <span v-if="entry.totalEpisodes > 0" class="ml-1 text-muted-foreground">· {{ Math.round((entry.watchedEpisodes.length / entry.totalEpisodes) * 100) }}%</span>
+                <div class="flex items-center justify-between text-xs">
+                  <span class="text-muted-foreground">观看进度</span>
+                  <span class="font-medium text-foreground tabular-nums">
+                    <template v-if="entry.totalEpisodes > 0">
+                      {{ entry.currentEpisode || entry.watchedEpisodes.length }} / {{ entry.totalEpisodes }} 话
+                      <span class="ml-1 text-muted-foreground">· {{ Math.min(100, Math.round(((entry.currentEpisode || entry.watchedEpisodes.length) / entry.totalEpisodes) * 100)) }}%</span>
+                    </template>
+                    <template v-else-if="entry.watchedEpisodes.length > 0">
+                      已看 {{ entry.watchedEpisodes.length }} 话
+                    </template>
+                    <template v-else>
+                      未开始
+                    </template>
                   </span>
                 </div>
                 <div class="mt-1.5 h-2 overflow-hidden rounded-full bg-foreground/10">
-                  <div class="h-full rounded-full bg-gradient-to-r from-primary to-tertiary transition-all duration-500" :style="{ width: `${entry.totalEpisodes > 0 ? Math.round((entry.watchedEpisodes.length / entry.totalEpisodes) * 100) : (entry.watchedEpisodes.length > 0 ? 100 : 0)}%` }" />
+                  <div
+                    class="h-full rounded-full bg-gradient-to-r from-primary to-tertiary transition-all duration-500"
+                    :style="{
+                      width: `${entry.totalEpisodes > 0
+                        ? Math.min(100, Math.round(((entry.currentEpisode || entry.watchedEpisodes.length) / entry.totalEpisodes) * 100))
+                        : (entry.watchedEpisodes.length > 0 ? 100 : 0)}%`
+                    }"
+                  />
                 </div>
               </div>
 

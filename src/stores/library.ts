@@ -102,7 +102,18 @@ export const useLibraryStore = defineStore("library", {
       const existing = this.entries[info.id];
       const now = Date.now();
       const entry: LibraryEntry = existing
-        ? { ...existing, status, updatedAt: now }
+        ? {
+            ...existing,
+            status,
+            // Always refresh metadata from the latest API response so the
+            // library entry stays in sync (title/image/tagline/totalEpisodes
+            // can change between seasons or after backend data fixes).
+            title: info.title || existing.title,
+            image: info.image || existing.image,
+            tagline: info.tagline ?? existing.tagline,
+            totalEpisodes: info.totalEpisodes ?? existing.totalEpisodes,
+            updatedAt: now,
+          }
         : {
             id: info.id,
             title: info.title,

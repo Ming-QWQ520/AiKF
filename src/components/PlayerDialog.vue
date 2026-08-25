@@ -753,7 +753,7 @@ const retestLatency = async () => {
                     circle
                     quaternary
                     :focusable="false"
-                    class="!h-9 !w-9 !text-white hover:!bg-white/20"
+                    class="!h-9 !w-9 shrink-0 !text-white hover:!bg-white/20"
                     aria-label="最小化"
                     @click="closeOrPip"
                   >
@@ -761,9 +761,11 @@ const retestLatency = async () => {
                       <NIcon size="16"><X /></NIcon>
                     </template>
                   </NButton>
-                  <div class="min-w-0">
+                  <!-- 番剧名称 · 第N话 (同一行, 中点分隔) -->
+                  <div class="flex min-w-0 items-baseline gap-2">
                     <p class="line-clamp-1 text-sm font-bold text-white drop-shadow">{{ ui.player.title }}</p>
-                    <p class="text-xs text-white/60">第 {{ episode }} 话</p>
+                    <span class="text-white/30">·</span>
+                    <p class="shrink-0 text-xs text-white/70">第 {{ episode }} 话</p>
                   </div>
                 </div>
                 <div class="pointer-events-auto flex items-center gap-2">
@@ -1199,7 +1201,7 @@ const retestLatency = async () => {
             class="absolute inset-x-0 top-0 z-20 flex cursor-move items-center justify-between bg-gradient-to-b from-black/70 to-transparent px-2 py-1.5"
             @mousedown="onPipMouseDown"
           >
-            <span class="line-clamp-1 text-[10px] font-semibold text-white">{{ ui.player.title }} · 第{{ episode }}话</span>
+            <span class="line-clamp-1 text-[10px] font-semibold text-white">{{ ui.player.title }} · 第 {{ episode }} 话</span>
             <div class="flex items-center gap-1">
               <NButton
                 circle
