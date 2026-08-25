@@ -21,16 +21,31 @@ const { data: characters } = useAsync(() => anich.characters(idRef.value!), { en
 // When detail data loads, sync metadata into the library entry (if it exists).
 // This repairs legacy entries whose totalEpisodes was 0 (created before the
 // API returned episodesTotal, or before the addOrUpdate fix landed).
+// We also fall back to episodes.length when detail.episodesTotal is 0 — some
+// API responses don't populate episodesTotal but the episodes array is
+// authoritative and always reflects the actual episode count.
 watch(() => detail.value, (d) => {
   if (!d || ui.detailId == null) return;
-  // Only sync if entry already exists in library; otherwise nothing to repair.
   if (!library.has(ui.detailId)) return;
+  const total = d.episodesTotal || (episodes.value?.length ?? 0) || 0;
   library.syncMeta(ui.detailId, {
     title: d.title,
     image: d.image,
     tagline: d.genres?.join("/"),
-    totalEpisodes: d.episodesTotal,
+    totalEpisodes: total,
   });
+}, { immediate: true });
+
+// Also sync when episodes array loads (it may arrive after detail data and
+// provides a more accurate episode count when detail.episodesTotal is 0).
+watch(() => episodes.value, (eps) => {
+  if (!eps || ui.detailId == null) return;
+  if (!library.has(ui.detailId)) return;
+  const existing = library.get(ui.detailId);
+  // Only update if we now have a better value than what's stored
+  if (eps.length > 0 && (existing?.totalEpisodes ?? 0) < eps.length) {
+    library.syncMeta(ui.detailId, { totalEpisodes: eps.length });
+  }
 }, { immediate: true });
 
 // Comments — fetch for episode 1 + comment count

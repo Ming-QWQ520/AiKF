@@ -163,7 +163,11 @@ watch(() => filters.value.skip, () => window.scrollTo({ top: 0, behavior: "smoot
       <div v-else-if="items.length === 0" class="glass glass-sheen flex min-h-[200px] items-center justify-center rounded-3xl p-10 text-center text-muted-foreground">
         没有符合条件的番剧，试试调整筛选
       </div>
-      <div v-else class="grid grid-cols-2 gap-x-3 gap-y-4 sm:grid-cols-3 sm:gap-x-4 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
+      <!-- True responsive grid: auto-fill + minmax(140px, 1fr) means the
+           number of columns is determined by the actual available width,
+           not by breakpoints. This avoids both overflow (cards too wide)
+           and underutilization (too few columns on wide screens). -->
+      <div v-else class="grid min-w-0 gap-x-3 gap-y-4 [grid-template-columns:repeat(auto-fill,minmax(140px,1fr))]">
         <button
           v-for="item in items" :key="item.id"
           @click="ui.openDetail(item.id, item.image)"

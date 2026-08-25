@@ -241,42 +241,53 @@ const isPlaying = ref(false);
 const isMuted = ref(false);
 const isFullscreen = ref(false);
 const videoHovered = ref(false);
-// headerHovered: mouse is over the top overlay header region (title bar).
-// When true, controls stay visible regardless of mouseIdle — this fixes the
-// "hard to click the close button" issue where the header would fade out
-// just as the user moved the mouse up toward it.
-const headerHovered = ref(false);
+// mouseInHeaderZone: true when the mouse cursor is in the top ~80px of the
+// video container (i.e. over the title bar overlay). When true, controls stay
+// visible regardless of mouseIdle — fixes the "hard to click close button"
+// issue AND avoids the flicker that comes from using @mouseenter on a
+// pointer-events-none element (which never fires).
+const mouseInHeaderZone = ref(false);
 const mouseIdle = ref(false);
 let idleTimer: ReturnType<typeof setTimeout> | null = null;
 // Controls visible when:
 //   - mouse is over the video AND not idle, OR
-//   - mouse is over the header region (always visible while hovering header)
-const controlsVisible = computed(() => (videoHovered.value && !mouseIdle.value) || headerHovered.value);
+//   - mouse is in the top header zone (always visible there)
+const controlsVisible = computed(() => (videoHovered.value && !mouseIdle.value) || mouseInHeaderZone.value);
 const progressPct = computed(() => (duration.value > 0 ? (currentTime.value / duration.value) * 100 : 0));
 
-const onVideoMouseMove = () => {
+// Header zone height — matches the pt-3 + content + pb-10 of the header overlay.
+// Anything with clientY < 80 (relative to video container) is "header zone".
+const HEADER_ZONE_HEIGHT = 90;
+
+const onVideoMouseMove = (e: MouseEvent) => {
   videoHovered.value = true;
   mouseIdle.value = false;
-  if (idleTimer) clearTimeout(idleTimer);
-  // In fullscreen, auto-hide controls after 3s of no mouse movement
-  if (isFullscreen.value) {
-    idleTimer = setTimeout(() => { mouseIdle.value = true; }, 3000);
+  // Detect whether the cursor is in the top header zone by checking its
+  // Y coordinate relative to the video container. This is more reliable
+  // than @mouseenter on the header div (which has pointer-events:none and
+  // would never fire, causing the previous fix to be a no-op + flicker).
+  const rect = videoContainerRef.value?.getBoundingClientRect();
+  if (rect) {
+    const relY = e.clientY - rect.top;
+    mouseInHeaderZone.value = relY < HEADER_ZONE_HEIGHT;
+  }
+  // Only arm the idle-hide timer when NOT in the header zone — so moving
+  // the mouse up to the close button never triggers a fade-out.
+  if (!mouseInHeaderZone.value) {
+    if (idleTimer) clearTimeout(idleTimer);
+    if (isFullscreen.value) {
+      idleTimer = setTimeout(() => { mouseIdle.value = true; }, 3000);
+    }
+  } else {
+    // In header zone: cancel any pending hide so the controls stay put
+    if (idleTimer) { clearTimeout(idleTimer); idleTimer = null; }
   }
 };
 const onVideoMouseLeave = () => {
   videoHovered.value = false;
   mouseIdle.value = false;
+  mouseInHeaderZone.value = false;
   if (idleTimer) { clearTimeout(idleTimer); idleTimer = null; }
-};
-// Header hover handlers — keep controls visible while mouse is in the top bar.
-// Cancels pending idle-hide so the header doesn't fade mid-click.
-const onHeaderMouseEnter = () => {
-  headerHovered.value = true;
-  if (idleTimer) { clearTimeout(idleTimer); idleTimer = null; }
-  mouseIdle.value = false;
-};
-const onHeaderMouseLeave = () => {
-  headerHovered.value = false;
 };
 
 // Auto-save playback progress (throttled)
@@ -759,15 +770,15 @@ const retestLatency = async () => {
       <div class="flex min-h-0 flex-1 gap-0 md:flex-row">
         <!-- video (fills the entire left area, edge-to-edge) -->
         <div class="relative min-h-0 min-w-0 flex-1 bg-black">
-            <!-- top overlay header — transparent, fused with video, fades out on hover-out.
-                 While mouse is over this header region, controlsVisible is forced TRUE
-                 via headerHovered (see onHeaderMouseEnter), so the close/log/PiP
-                 buttons are always clickable. -->
+            <!-- top overlay header — transparent, fused with video.
+                 Controls stay visible while the mouse is in the top "header
+                 zone" (top ~90px of the video area), detected via mousemove
+                 Y coordinate (see onVideoMouseMove). No @mouseenter/leave on
+                 this div because it's pointer-events-none (those wouldn't
+                 fire anyway, and would cause flicker if they did). -->
             <Transition name="controls">
               <div
                 v-if="controlsVisible || vodLoading || vodIsError || sources.length === 0"
-                @mouseenter="onHeaderMouseEnter"
-                @mouseleave="onHeaderMouseLeave"
                 class="pointer-events-none absolute inset-x-0 top-0 z-30 flex items-start justify-between gap-3 bg-gradient-to-b from-black/80 via-black/40 to-transparent px-4 pb-10 pt-3"
               >
                 <div class="pointer-events-auto flex min-w-0 items-center gap-3">
