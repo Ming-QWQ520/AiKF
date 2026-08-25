@@ -289,6 +289,25 @@ const onVideoMouseLeave = () => {
   mouseInHeaderZone.value = false;
   if (idleTimer) { clearTimeout(idleTimer); idleTimer = null; }
 };
+// onHeaderMouseMove — bound to the header overlay div. Even though the div
+// itself is pointer-events-none, its pointer-events-auto children (NButton,
+// title text) DO receive mousemove, and those events bubble up to this div.
+// So when the user moves the mouse anywhere over the header's children, we
+// mark mouseInHeaderZone=true, which forces controlsVisible=true. This is
+// more reliable than relying on the video container's mousemove alone (which
+// doesn't fire while the cursor is over a pointer-events-auto child).
+const onHeaderMouseMove = (e: MouseEvent) => {
+  // Always treat movement on the header as "in header zone".
+  mouseInHeaderZone.value = true;
+  videoHovered.value = true;
+  mouseIdle.value = false;
+  // Cancel any pending idle-hide so the header stays put while hovered.
+  if (idleTimer) { clearTimeout(idleTimer); idleTimer = null; }
+  // Stop propagation so the video container's mousemove doesn't ALSO fire
+  // and re-evaluate the header zone based on Y coordinate (which could
+  // disagree and cause flicker).
+  e.stopPropagation();
+};
 
 // Auto-save playback progress (throttled)
 let lastProgressSave = 0;
@@ -771,14 +790,15 @@ const retestLatency = async () => {
         <!-- video (fills the entire left area, edge-to-edge) -->
         <div class="relative min-h-0 min-w-0 flex-1 bg-black">
             <!-- top overlay header — transparent, fused with video.
-                 Controls stay visible while the mouse is in the top "header
-                 zone" (top ~90px of the video area), detected via mousemove
-                 Y coordinate (see onVideoMouseMove). No @mouseenter/leave on
-                 this div because it's pointer-events-none (those wouldn't
-                 fire anyway, and would cause flicker if they did). -->
+                 Header zone is detected via the onHeaderMouseMove handler
+                 below, which sets mouseInHeaderZone=true. This is more
+                 reliable than relying on the video container's mousemove
+                 (which doesn't fire when the cursor is over NButton children
+                 with pointer-events-auto). -->
             <Transition name="controls">
               <div
                 v-if="controlsVisible || vodLoading || vodIsError || sources.length === 0"
+                @mousemove="onHeaderMouseMove"
                 class="pointer-events-none absolute inset-x-0 top-0 z-30 flex items-start justify-between gap-3 bg-gradient-to-b from-black/80 via-black/40 to-transparent px-4 pb-10 pt-3"
               >
                 <div class="pointer-events-auto flex min-w-0 items-center gap-3">

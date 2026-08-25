@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch } from "vue";
+import { computed, ref, watch, onMounted, onBeforeUnmount, nextTick } from "vue";
 import { LayoutGrid, ChevronLeft, ChevronRight, X } from "lucide-vue-next";
 import { anich } from "@/lib/anich/api-client";
 import { useUIStore } from "@/stores/ui";
@@ -12,6 +12,50 @@ import { cn } from "@/lib/utils";
 
 const ui = useUIStore();
 const PAGE_SIZE = 24;
+
+// ── Dynamic grid column count ──
+// CSS auto-fill + minmax doesn't reliably prevent overflow in all browser
+// environments (especially with scrollbars, subpixel rounding, etc.).
+// So we measure the actual container width with ResizeObserver and compute
+// the column count in JS — this is bulletproof.
+const MIN_CARD_WIDTH = 160;  // px — minimum card width
+const GRID_GAP = 12;          // px — gap-x-3
+const gridContainerRef = ref<HTMLElement | null>(null);
+const gridColCount = ref(2);
+
+const onGridResize = () => {
+  const el = gridContainerRef.value;
+  if (!el) return;
+  // Use clientWidth (excludes scrollbar) for accurate available width.
+  const available = el.clientWidth;
+  // floor((available + gap) / (min_card + gap)) = max cols that fit
+  const cols = Math.max(1, Math.floor((available + GRID_GAP) / (MIN_CARD_WIDTH + GRID_GAP)));
+  gridColCount.value = cols;
+};
+let resizeObserver: ResizeObserver | null = null;
+onMounted(() => {
+  // Wait for layout to settle, then start observing.
+  nextTick(() => {
+    onGridResize();
+    if (gridContainerRef.value) {
+      resizeObserver = new ResizeObserver(() => onGridResize());
+      resizeObserver.observe(gridContainerRef.value);
+    }
+  });
+});
+onBeforeUnmount(() => {
+  resizeObserver?.disconnect();
+  resizeObserver = null;
+});
+
+// gridStyle — set grid-template-columns to exactly N columns of 1fr each.
+// This is the only way to guarantee the column count without auto-fill
+// surprises.
+const gridStyle = computed(() => ({
+  display: 'grid',
+  gridTemplateColumns: `repeat(${gridColCount.value}, minmax(0, 1fr))`,
+  gap: `${GRID_GAP}px ${GRID_GAP}px`,
+}));
 
 const TYPE_OPTIONS: { value?: BangumiType; label: string }[] = [
   { value: undefined, label: "全部" },
@@ -163,16 +207,15 @@ watch(() => filters.value.skip, () => window.scrollTo({ top: 0, behavior: "smoot
       <div v-else-if="items.length === 0" class="glass glass-sheen flex min-h-[200px] items-center justify-center rounded-3xl p-10 text-center text-muted-foreground">
         没有符合条件的番剧，试试调整筛选
       </div>
-      <!-- True responsive grid via inline style. minmax(170px, 1fr) is
-           chosen so that on a 1280px window (256 sidebar + ~960 main),
-           the browser picks 5 columns (5×170 + 4×12 = 898 ≤ 960) instead
-           of 6 (6×150 + 5×12 = 960 — exactly fits but cuts off due to
-           subpixel rounding or hidden scrollbar width). 170px also gives
-           each card a more readable width. -->
+      <!-- Dynamic responsive grid. Column count is computed in JS based on
+           the actual measured container width (via ResizeObserver). This is
+           the ONLY reliable way to prevent overflow — CSS auto-fill doesn't
+           account for scrollbars / subpixel rounding / hidden overflow. -->
       <div
         v-else
-        class="grid min-w-0 w-full gap-x-3 gap-y-4 overflow-hidden"
-        style="grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));"
+        ref="gridContainerRef"
+        class="min-w-0 w-full overflow-hidden"
+        :style="gridStyle"
       >
         <button
           v-for="item in items" :key="item.id"
