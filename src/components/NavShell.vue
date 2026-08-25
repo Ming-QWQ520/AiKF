@@ -1,7 +1,6 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, onBeforeUnmount, watch, nextTick } from "vue";
-import { Compass, CalendarDays, LayoutGrid, Bookmark, Search as SearchIcon, ChevronDown, ChevronRight, Settings as SettingsIcon, PanelLeftClose, PanelLeftOpen } from "lucide-vue-next";
-import { gsap } from "gsap";
+import { ref, computed, onMounted, onBeforeUnmount, watch } from "vue";
+import { Compass, CalendarDays, LayoutGrid, Bookmark, Search as SearchIcon, ChevronDown, Settings as SettingsIcon, PanelLeftClose, PanelLeftOpen } from "lucide-vue-next";
 import { useUIStore, type ViewKey } from "@/stores/ui";
 import { useLibraryStore } from "@/stores/library";
 import { cn } from "@/lib/utils";
@@ -12,6 +11,7 @@ import {
   NIcon,
   NBadge,
   NTooltip,
+  NProgress,
 } from "naive-ui";
 
 const ui = useUIStore();
@@ -46,56 +46,44 @@ const manualCollapsed = ref<boolean | null>(null);
 const effectiveCollapsed = computed(() => manualCollapsed.value ?? sidebarCollapsed.value);
 const toggleSidebar = () => { manualCollapsed.value = !effectiveCollapsed.value; };
 
-// ── GSAP sidebar nav transition animation ──
-// When the active view changes, animate the entire nav list with a smooth
-// vertical slide: the whole list slides up/down as one block, giving a
-// clean "vertical pan" feel rather than per-button pops.
-const navRef = ref<HTMLElement | null>(null);
-const mobileNavRef = ref<HTMLElement | null>(null);
-const prevView = ref<ViewKey>(ui.view);
-
+// ── Lightweight nav animation (CSS-based, replaces GSAP) ──
+// Previously used GSAP to slide the whole nav list + a per-button staggered
+// animation on every view switch. That caused noticeable jank on lower-end
+// devices because:
+//   1. The container-level transform invalidated layout for the whole nav.
+//   2. The per-button stagger compounding caused many simultaneous tweens.
+//   3. `clearProps: "transform"` forced a reflow at animation end.
+//
+// New approach: pure CSS transitions on `background-color`, `transform`, and
+// `box-shadow`. The active button gets a brief scale "pop" via a one-shot
+// animation class, which is much cheaper than repositioning the whole list.
+const popKey = ref(0);  // bump to retrigger CSS keyframe animation on active button
 watch(() => ui.view, (newView, oldView) => {
   if (newView === oldView) return;
-  nextTick(() => {
-    const containers = [navRef.value, mobileNavRef.value].filter(Boolean) as HTMLElement[];
-    for (const container of containers) {
-      const buttons = container.querySelectorAll("button[data-nav-key]");
-      if (!buttons || buttons.length === 0) continue;
-
-      const activeBtn = container.querySelector(`button[data-nav-key="${newView}"]`) as HTMLElement | null;
-      const prevBtn = container.querySelector(`button[data-nav-key="${oldView}"]`) as HTMLElement | null;
-      if (!activeBtn || !prevBtn) continue;
-
-      // Determine direction: if the new active item is below the old one,
-      // the list slides up (negative y); if above, it slides down (positive y).
-      const allBtns = Array.from(buttons) as HTMLElement[];
-      const newIdx = allBtns.indexOf(activeBtn);
-      const oldIdx = allBtns.indexOf(prevBtn);
-      const dir = newIdx > oldIdx ? -1 : 1; // -1 = slide up, 1 = slide down
-
-      // Slide the whole nav list as one block (pure vertical translate, no scale)
-      gsap.fromTo(container,
-        { y: dir * -16 },   // start offset (opposite of slide direction)
-        { y: 0, duration: 0.45, ease: "power2.out", clearProps: "transform" }
-      );
-
-      // Each button also gets a subtle individual vertical slide (staggered)
-      // to enhance the "items flowing" feel — pure y translate, no scale.
-      allBtns.forEach((el, i) => {
-        gsap.fromTo(el,
-          { y: dir * 8 },
-          { y: 0, duration: 0.4, ease: "power2.out", delay: i * 0.025, clearProps: "transform" }
-        );
-      });
-    }
-    prevView.value = newView;
-  });
+  // Force restart of the pop animation by toggling the key
+  popKey.value = (popKey.value + 1) % 1000000;
 });
 
 // Wrapper view switch function that triggers the animation
 const switchView = (key: ViewKey) => {
   if (key === ui.view) return;
   ui.setView(key);
+};
+
+// ── Library entry progress helpers ──
+// Watched progress (for the bottom progress bar): percentage of total
+// episodes already watched, rounded to nearest integer.
+const watchedPct = (entry: { watchedEpisodes: number[]; totalEpisodes: number }): number => {
+  if (entry.totalEpisodes <= 0) return 0;
+  return Math.min(100, Math.round((entry.watchedEpisodes.length / entry.totalEpisodes) * 100));
+};
+// Compact progress label: "当前 X / Y 话" or "X / Y 话" when no current ep
+const progressLabel = (entry: { currentEpisode: number; totalEpisodes: number }): string => {
+  const cur = entry.currentEpisode || 0;
+  const total = entry.totalEpisodes || 0;
+  if (total > 0) return `当前 ${cur} / ${total} 话`;
+  if (cur > 0) return `当前 ${cur} 话`;
+  return "未开始";
 };
 </script>
 
@@ -118,9 +106,13 @@ const switchView = (key: ViewKey) => {
         </div>
         <nav ref="navRef" class="mt-2.5 flex flex-col gap-1">
           <!--
-            Naive UI NButton is used to render each nav entry. We keep our own
-            active-state styling (primary fill) and GSAP `data-nav-key` hooks
-            on top of NButton so the slide animation still works.
+            Each nav entry is a Naive UI NButton. The active state is set via
+            inline class binding (primary fill) — CSS `transition-colors`
+            handles the smooth background-color shift, no JS animation needed.
+
+            The active button also gets a one-shot `pop` keyframe animation
+            (see <style> block below) — much cheaper than repositioning the
+            whole list with GSAP.
           -->
           <NTooltip
             v-for="item in navItems"
@@ -135,12 +127,15 @@ const switchView = (key: ViewKey) => {
                 :type="ui.view === item.key ? 'primary' : 'default'"
                 :focusable="false"
                 :class="cn(
-                  'nav-btn state-layer group relative flex w-full items-center rounded-2xl text-sm font-medium transition-colors will-change-transform',
+                  'nav-btn state-layer group relative flex w-full items-center rounded-2xl text-sm font-medium',
+                  'transition-[background-color,color,box-shadow,transform] duration-200 ease-out',
+                  'will-change-[background-color,transform]',
                   effectiveCollapsed ? 'justify-center !px-2 !py-2.5' : 'gap-3 !px-3.5 !py-2.5',
                   ui.view === item.key
-                    ? '!bg-primary !text-primary-foreground shadow-lg shadow-primary/25'
+                    ? '!bg-primary !text-primary-foreground shadow-lg shadow-primary/25 nav-pop'
                     : 'text-muted-foreground hover:!bg-foreground/5 hover:text-foreground'
                 )"
+                :data-pop-key="popKey"
                 @click="switchView(item.key)"
               >
                 <template #icon>
@@ -162,8 +157,9 @@ const switchView = (key: ViewKey) => {
               quaternary
               :focusable="false"
               :class="cn(
-                'state-layer flex w-full items-center rounded-2xl text-left',
-                effectiveCollapsed ? 'justify-center !px-2 !py-2' : 'gap-2 !px-2 !py-2'
+                'state-layer flex w-full items-center rounded-2xl text-left transition-colors duration-200',
+                effectiveCollapsed ? 'justify-center !px-2 !py-2' : 'gap-2 !px-2 !py-2',
+                ui.view === 'library' ? 'nav-pop' : ''
               )"
               @click="ui.setView('library')"
             >
@@ -171,7 +167,7 @@ const switchView = (key: ViewKey) => {
                 <NBadge :value="libraryCount" :max="99" :color="'#fb7185'" :offset="[-4, 4]">
                   <span
                     :class="cn(
-                      'flex h-8 w-8 shrink-0 items-center justify-center rounded-xl',
+                      'flex h-8 w-8 shrink-0 items-center justify-center rounded-xl transition-colors duration-200',
                       ui.view === 'library' ? 'bg-primary text-primary-foreground' : 'bg-foreground/5 text-muted-foreground'
                     )"
                   >
@@ -187,10 +183,10 @@ const switchView = (key: ViewKey) => {
                 <span
                   v-if="libraryCount > 0"
                   @click.stop="libraryExpanded = !libraryExpanded"
-                  class="flex h-5 w-5 shrink-0 cursor-pointer items-center justify-center rounded text-muted-foreground hover:bg-foreground/10 hover:text-foreground"
+                  class="flex h-5 w-5 shrink-0 cursor-pointer items-center justify-center rounded text-muted-foreground transition-transform duration-200 hover:bg-foreground/10 hover:text-foreground"
+                  :class="libraryExpanded ? '' : '-rotate-90'"
                 >
-                  <ChevronDown v-if="libraryExpanded" class="h-3 w-3" />
-                  <ChevronRight v-else class="h-3 w-3" />
+                  <ChevronDown class="h-3 w-3 transition-transform duration-200" />
                 </span>
               </template>
             </NButton>
@@ -198,30 +194,45 @@ const switchView = (key: ViewKey) => {
           <span>追番库 ({{ libraryCount }})</span>
         </NTooltip>
 
-        <div v-if="!effectiveCollapsed && libraryExpanded && libraryCount > 0" class="mt-2 min-h-0 flex-1 space-y-1 overflow-y-auto pr-1">
+        <!-- Library entries with progress display -->
+        <div v-if="!effectiveCollapsed && libraryExpanded && libraryCount > 0" class="mt-2 min-h-0 flex-1 space-y-1.5 overflow-y-auto pr-1">
           <NButton
             v-for="entry in libraryList"
             :key="entry.id"
             quaternary
             :focusable="false"
-            class="state-layer !w-full !justify-start !gap-2.5 !rounded-xl !p-1.5 !text-left hover:!bg-foreground/5"
+            class="lib-entry state-layer !w-full !justify-start !gap-2.5 !rounded-xl !p-1.5 !text-left transition-colors duration-200 hover:!bg-foreground/5"
             @click="ui.openDetail(entry.id, entry.image)"
           >
             <img
               v-if="entry.image"
               :src="entry.image"
               :alt="entry.title"
-              class="h-10 w-7 shrink-0 rounded-md object-cover ring-1 ring-white/5"
+              class="h-12 w-8 shrink-0 rounded-md object-cover ring-1 ring-white/5"
               draggable="false"
             />
-            <div v-else class="flex h-10 w-7 shrink-0 items-center justify-center rounded-md bg-foreground/10">
+            <div v-else class="flex h-12 w-7 shrink-0 items-center justify-center rounded-md bg-foreground/10">
               <NIcon size="12" color="var(--muted-foreground)"><Bookmark /></NIcon>
             </div>
             <div class="min-w-0 flex-1">
               <p class="line-clamp-1 text-xs font-medium text-foreground">{{ entry.title || `#${entry.id}` }}</p>
-              <p class="text-[10px] text-muted-foreground">
-                {{ entry.watchedEpisodes.length }}{{ entry.totalEpisodes > 0 ? `/${entry.totalEpisodes}` : "" }}话
+              <p class="mt-0.5 text-[10px] text-muted-foreground">
+                {{ progressLabel(entry) }}
               </p>
+              <!-- Progress bar with percentage at bottom -->
+              <div class="mt-1.5 flex items-center gap-1.5">
+                <NProgress
+                  type="line"
+                  :percentage="watchedPct(entry)"
+                  :height="4"
+                  :border-radius="2"
+                  :show-indicator="false"
+                  :color="entry.totalEpisodes > 0 && entry.watchedEpisodes.length >= entry.totalEpisodes ? 'var(--tertiary)' : 'var(--primary)'"
+                  :rail-color="'var(--foreground)'"
+                  class="flex-1 !min-w-0"
+                />
+                <span class="shrink-0 text-[9px] font-mono tabular-nums text-muted-foreground">{{ watchedPct(entry) }}%</span>
+              </div>
             </div>
           </NButton>
         </div>
@@ -238,10 +249,11 @@ const switchView = (key: ViewKey) => {
             :focusable="false"
             :type="ui.view === 'settings' ? 'primary' : 'default'"
             :class="cn(
-              'state-layer mt-3 flex w-full items-center rounded-2xl text-sm font-medium transition-colors',
+              'state-layer mt-3 flex w-full items-center rounded-2xl text-sm font-medium',
+              'transition-[background-color,color,box-shadow,transform] duration-200 ease-out',
               effectiveCollapsed ? 'justify-center !px-2 !py-2.5' : 'gap-3 !px-3.5 !py-2.5',
               ui.view === 'settings'
-                ? '!bg-primary !text-primary-foreground shadow-lg shadow-primary/25'
+                ? '!bg-primary !text-primary-foreground shadow-lg shadow-primary/25 nav-pop'
                 : 'glass glass-sheen text-muted-foreground hover:!bg-foreground/5 hover:text-foreground'
             )"
             @click="ui.setView('settings')"
@@ -311,9 +323,9 @@ const switchView = (key: ViewKey) => {
           :data-nav-key="item.key"
           type="button"
           @click="switchView(item.key)"
-          class="state-layer relative flex flex-1 flex-col items-center gap-0.5 rounded-full py-2 text-[10px] font-medium will-change-transform"
+          class="state-layer relative flex flex-1 flex-col items-center gap-0.5 rounded-full py-2 text-[10px] font-medium transition-colors duration-200"
         >
-          <span :class="cn('flex h-8 w-12 items-center justify-center rounded-full transition-all', ui.view === item.key ? 'bg-primary text-primary-foreground shadow-md shadow-primary/30' : 'text-muted-foreground')">
+          <span :class="cn('flex h-8 w-12 items-center justify-center rounded-full transition-all duration-200', ui.view === item.key ? 'bg-primary text-primary-foreground shadow-md shadow-primary/30' : 'text-muted-foreground')">
             <component :is="item.icon" class="h-5 w-5" />
           </span>
           <span :class="ui.view === item.key ? 'text-primary' : 'text-muted-foreground'">{{ item.label }}</span>
@@ -324,14 +336,40 @@ const switchView = (key: ViewKey) => {
 </template>
 
 <style scoped>
-/* Override Naive UI's default button padding/height so it visually matches
-   the original glass nav design (which used Tailwind py-2.5 / px-3.5). */
+/* Naive UI NButton overrides for nav layout */
 .nav-btn :deep(.n-button__content) {
   width: 100%;
   justify-content: flex-start;
 }
-/* Make NButton's icon slot vertical-centered and shrink-0 */
 .nav-btn :deep(.n-button__icon) {
   margin-right: 0;
+}
+.lib-entry :deep(.n-button__content) {
+  width: 100%;
+  justify-content: flex-start;
+  align-items: stretch;
+}
+.lib-entry :deep(.n-button__icon) {
+  margin: 0;
+  align-self: flex-start;
+}
+
+/* One-shot pop animation for active nav buttons.
+   Triggered by toggling `nav-pop` class + `data-pop-key` attribute. */
+.nav-pop {
+  animation: nav-pop-anim 280ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@keyframes nav-pop-anim {
+  0%   { transform: scale(0.94); opacity: 0.5; }
+  60%  { transform: scale(1.04); opacity: 1; }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+/* Reduce-motion accessibility: disable the pop animation entirely. */
+@media (prefers-reduced-motion: reduce) {
+  .nav-pop {
+    animation: none;
+  }
 }
 </style>

@@ -24,8 +24,7 @@ concurrency:
   group: build-${{ github.ref }}
   cancel-in-progress: true
 
-# Default GITHUB_TOKEN needs write permission on contents so the workflow
-# can create/upload artifacts (and optionally create a release later).
+# Default GITHUB_TOKEN needs write permission on contents to upload artifacts.
 permissions:
   contents: write
 
@@ -74,10 +73,12 @@ jobs:
           if-no-files-found: error
 
   # ───────────────────────────────────────────────────────────────
-  # Tauri Windows build: produces .msi / .exe installers.
+  # Tauri Windows portable build: produces just the .exe + supporting
+  # files (no MSI / NSIS installer), then zips them into a portable
+  # archive the user can extract and run directly.
   # ───────────────────────────────────────────────────────────────
   build-tauri-windows:
-    name: Build Tauri (Windows x64)
+    name: Build Tauri (Windows Portable)
     needs: build-frontend
     runs-on: windows-latest
     timeout-minutes: 60
@@ -108,29 +109,59 @@ jobs:
         uses: swatinem/rust-cache@v2
         with:
           workspaces: src-tauri
-          key: windows-x64
+          key: windows-x64-portable
 
       - name: 📥 Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: 🏗️ Build Tauri app (Windows)
-        run: pnpm tauri build --target x86_64-pc-windows-msvc
-        env:
-          # Suppress WebView2 downloader prompt on headless runners
-          WEBVIEW2_DOWNLOAD_URL: https://go.microsoft.com/fwlink/p/?LinkId=2124703
+      - name: 🏗️ Build Tauri app (no installer, portable exe only)
+        # --no-bundle skips MSI / NSIS installer generation entirely.
+        # The compiled .exe + any sidecar DLLs land directly under the
+        # release/ directory.
+        run: pnpm tauri build --no-bundle --target x86_64-pc-windows-msvc
 
-      - name: 📤 Upload MSI installer artifact
+      - name: 📦 Create portable zip archive
+        shell: pwsh
+        run: |
+          $releaseDir = "src-tauri/target/x86_64-pc-windows-msvc/release"
+          $stageDir = "aikf-windows-portable"
+          New-Item -ItemType Directory -Force -Path $stageDir | Out-Null
+
+          # Copy the main executable (name comes from tauri.conf.json productName)
+          Copy-Item -Path "$releaseDir/AiKF.exe" -Destination "$stageDir/" -ErrorAction Stop
+
+          # Copy any companion DLLs (WebView2Loader.dll, sidecar DLLs, etc.)
+          Get-ChildItem -Path $releaseDir -Filter "*.dll" -ErrorAction SilentlyContinue |
+            ForEach-Object { Copy-Item -Path $_.FullName -Destination "$stageDir/" }
+
+          # Copy resources/ if present (sidecar resources referenced by tauri.conf.json)
+          if (Test-Path "$releaseDir/resources") {
+            Copy-Item -Path "$releaseDir/resources" -Destination "$stageDir/" -Recurse
+          }
+
+          # Write a brief README so users know how to run it
+          @"
+          # AiKF · 爱看番 (Portable Build)
+
+          直接双击 ``AiKF.exe`` 即可运行，无需安装。
+
+          - 系统要求：Windows 10 1803+ / Windows 11 (已内置 WebView2 Runtime)
+          - 若运行报错提示缺少 WebView2，请从微软官网下载安装：
+            https://developer.microsoft.com/microsoft-edge/webview2/
+
+          Build SHA: ${{ github.sha }}
+          Build Time: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss zzz')
+          "@ | Out-File -FilePath "$stageDir/README.txt" -Encoding utf8
+
+          # Compress the staged folder into a single zip
+          Compress-Archive -Path "$stageDir/*" -DestinationPath "aikf-windows-portable.zip" -CompressionLevel Optimal
+          Write-Host "✅ Portable zip created: aikf-windows-portable.zip"
+          Get-ChildItem -Path "aikf-windows-portable.zip" | Select-Object Name, @{N='SizeMB';E={[math]::Round($_.Length/1MB,2)}}
+
+      - name: 📤 Upload portable zip artifact
         uses: actions/upload-artifact@v4
         with:
-          name: aikf-windows-msi
-          path: src-tauri/target/x86_64-pc-windows-msvc/release/bundle/msi/*.msi
+          name: aikf-windows-portable
+          path: aikf-windows-portable.zip
           retention-days: 30
-          if-no-files-found: warn
-
-      - name: 📤 Upload NSIS installer artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: aikf-windows-nsis
-          path: src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/*.exe
-          retention-days: 30
-          if-no-files-found: warn
+          if-no-files-found: error
