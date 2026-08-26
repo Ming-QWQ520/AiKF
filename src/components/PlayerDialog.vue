@@ -280,11 +280,12 @@ function createArt(container: HTMLElement, url: string) {
   };
 
   try {
-    // Use minimal options first to avoid init errors. ArtPlayer is strict
-    // about option types — passing wrong-shaped objects in `controls` or
-    // `settings` can throw during construction.
+    // Use minimal options first to avoid init errors. ArtPlayer 5.x uses
+    // `container` (not `el` like 4.x). The container must be a string
+    // selector or HTMLDivElement — passing the wrong option name throws
+    // "option.container require 'string' or 'Element' type" at construction.
     const options: any = {
-      el: container,
+      container: container,
       url: url,
       type: isHls ? "m3u8" : "",
       customType: isHls ? {
@@ -324,7 +325,6 @@ function createArt(container: HTMLElement, url: string) {
       aspectRatio: true,
       fullscreen: true,
       fullscreenWeb: true,
-      mini: false,
       pip: true,
       airplay: false,
       theme: "#fb7185",
