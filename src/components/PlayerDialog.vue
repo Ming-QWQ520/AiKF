@@ -284,6 +284,10 @@ function createArt(container: HTMLElement, url: string) {
     // `container` (not `el` like 4.x). The container must be a string
     // selector or HTMLDivElement — passing the wrong option name throws
     // "option.container require 'string' or 'Element' type" at construction.
+    // Also customType must always be an object (not undefined) — ArtPlayer
+    // does strict recursive type validation and throws
+    // "option.customType require 'object' type, but got 'undefined'" if
+    // the value is undefined even though the type is optional.
     const options: any = {
       container: container,
       url: url,
@@ -313,7 +317,7 @@ function createArt(container: HTMLElement, url: string) {
             }
           });
         },
-      } : undefined,
+      } : {},  // Always pass an object (not undefined) — ArtPlayer strict-checks
       autoplay: !savedVideoState,
       autoSize: false,
       autoMini: false,
