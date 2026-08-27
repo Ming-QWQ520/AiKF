@@ -5,9 +5,13 @@ import { anich } from "@/lib/anich/api-client";
 import { useUIStore } from "@/stores/ui";
 import { useLibraryStore, STATUS_LABELS, STATUS_ORDER } from "@/stores/library";
 import { useAsync } from "@/composables/useAsync";
+import { useResponsiveGrid } from "@/composables/useResponsiveGrid";
 import CoverImage from "@/components/CoverImage.vue";
 import { formatDate } from "@/lib/anich/format";
 import { cn } from "@/lib/utils";
+
+// Responsive grid for the "related anime" tab.
+const { containerRef: relatedGridRef, style: relatedGridStyle } = useResponsiveGrid({ minWidth: 160, gap: 12 });
 
 const ui = useUIStore();
 const library = useLibraryStore();
@@ -261,8 +265,8 @@ const fmtCommentDate = (ts: number) => {
       <!-- Related -->
       <div v-if="activeTab === 'related'">
         <div v-if="!related || related.length === 0" class="py-8 text-center text-sm text-muted-foreground">暂无相关推荐</div>
-        <div v-else class="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
-          <button v-for="item in related.slice(0, 12)" :key="item.id" @click="ui.openDetail(item.id, item.image)" class="group flex flex-col text-left">
+        <div v-else ref="relatedGridRef" class="min-w-0 w-full overflow-hidden" :style="relatedGridStyle">
+          <button v-for="item in related.slice(0, 12)" :key="item.id" @click="ui.openDetail(item.id, item.image)" class="group flex min-w-0 flex-col text-left">
             <CoverImage :src="item.image" :alt="item.title" ratio="portrait" rounded="rounded-lg" class="transition-transform group-hover:scale-[1.03]" />
             <p class="mt-1.5 line-clamp-1 text-xs font-medium text-foreground">{{ item.title }}</p>
             <p v-if="item.type" class="text-[10px] text-muted-foreground">{{ item.type }}</p>

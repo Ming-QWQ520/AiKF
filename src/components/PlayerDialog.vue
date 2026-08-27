@@ -1,22 +1,22 @@
 <script setup lang="ts">
 import { ref, computed, watch, onBeforeUnmount, onMounted, nextTick } from "vue";
 import Artplayer from "artplayer";
-import { X, Play, Loader2, ListVideo, ChevronLeft, ChevronRight, ChevronDown, AlertCircle, Link as LinkIcon, Maximize, Zap } from "lucide-vue-next";
+import artplayerPluginAutoThumbnail from "artplayer-plugin-auto-thumbnail";
+import { X, ListVideo, ChevronLeft, ChevronRight, ChevronDown, AlertCircle, Link as LinkIcon, Zap, Loader2, Home, Maximize } from "lucide-vue-next";
 import { anich } from "@/lib/anich/api-client";
 import { useUIStore } from "@/stores/ui";
 import { useLibraryStore } from "@/stores/library";
 import { useSettingsStore } from "@/stores/settings";
 import { useAsync } from "@/composables/useAsync";
 import { cn } from "@/lib/utils";
-import TitleBar from "@/components/TitleBar.vue";
+import { Minus, Square } from "lucide-vue-next";
+import { invoke } from "@tauri-apps/api/core";
 
 // ─── Logging ──────────────────────────────────────────────────────────────
 const LOG_PREFIX = "%c[AiKF Player]";
 const LOG_STYLE = "color:#e879f9;font-weight:bold";
 function log(...args: unknown[]) { console.log(LOG_PREFIX, LOG_STYLE, ...args); }
 function logError(...args: unknown[]) { console.error(LOG_PREFIX, LOG_STYLE, ...args); }
-
-type Tab = "episodes";
 
 const ui = useUIStore();
 const library = useLibraryStore();
@@ -26,7 +26,6 @@ const open = computed(() => ui.player.open);
 const bangumiID = computed(() => ui.player.bangumiID);
 const episode = computed(() => ui.player.episode);
 
-const activeTab = ref<Tab>("episodes");
 const sourceIdx = ref(-1);
 const videoError = ref<string | null>(null);
 const logLines = ref<string[]>([]);
@@ -41,7 +40,13 @@ function pushLog(msg: string) {
   log(msg);
 }
 
-pushLog("PlayerDialog (ArtPlayer) component mounted");
+pushLog("PlayerDialog (ArtPlayer) mounted");
+
+// ─── Tauri window controls (for the fused title bar) ─────────────────────
+const isTauri = typeof window !== "undefined" && ("__TAURI_INTERNALS__" in window || "__TAURI__" in window);
+const winMinimize = async () => { if (isTauri) try { await invoke("plugin:window|minimize"); } catch {} };
+const winToggleMax = async () => { if (isTauri) try { await invoke("plugin:window|toggle_maximize"); } catch {} };
+const winClose = async () => { if (isTauri) try { await invoke("plugin:window|close"); } catch {} };
 
 // ─── Source classification ────────────────────────────────────────────────
 function isDirectMedia(url: string) {
@@ -54,23 +59,14 @@ function sourceName(url: string): string {
   try {
     const host = new URL(url).hostname;
     const map: Record<string, string> = {
-      "v1.adkwai.com": "快手",
-      "vo-cdn.emmmm.eu.org": "Anich直连",
-      "v-cdn.emmmm.eu.org": "Anich CDN",
-      "app.emmmm.eu.org.cdn.cloudflare.net": "Anich代理",
-      "vod-cdn.sends.eu.org.cdn.cloudflare.net": "Sends CDN",
-      "m3u8132.yhdmm3u8.top": "樱花M3U8",
-      "m3u8.cyz.app": "CYZ",
-      "yun.92cj.com": "92影视",
-      "xgct-video.vzcdn.net": "西瓜视频",
-      "aigua.emmmm.eu.org": "艾瓜",
-      "dc.xhscdn.com": "小红书",
+      "v1.adkwai.com": "快手", "vo-cdn.emmmm.eu.org": "Anich直连", "v-cdn.emmmm.eu.org": "Anich CDN",
+      "app.emmmm.eu.org.cdn.cloudflare.net": "Anich代理", "vod-cdn.sends.eu.org.cdn.cloudflare.net": "Sends CDN",
+      "m3u8132.yhdmm3u8.top": "樱花M3U8", "m3u8.cyz.app": "CYZ", "yun.92cj.com": "92影视",
+      "xgct-video.vzcdn.net": "西瓜视频", "aigua.emmmm.eu.org": "艾瓜", "dc.xhscdn.com": "小红书",
       "lf3-static.bytednsdoc.com": "字节CDN",
     };
     return map[host] || host.replace(/^www\./, "").split(".")[0];
-  } catch {
-    return "未知源";
-  }
+  } catch { return "未知源"; }
 }
 function sourceLabel(s: { url: string; caption: string }): string {
   const name = sourceName(s.url);
@@ -88,17 +84,10 @@ function classifySource(url: string): string {
 function pickPreferred(sources: { url: string }[]): number {
   if (!sources.length) return 0;
   const pref = settings.data.defaultSource;
-  if (pref === "adkwai") {
-    const ks = sources.findIndex((s) => s.url.includes("adkwai.com"));
-    if (ks >= 0) return ks;
-  } else if (pref === "anich") {
-    const an = sources.findIndex((s) => s.url.includes("emmmm.eu.org"));
-    if (an >= 0) return an;
-  }
-  const h = sources.findIndex((s) => isHlsMedia(s.url));
-  if (h >= 0) return h;
-  const d = sources.findIndex((s) => isDirectMedia(s.url));
-  if (d >= 0) return d;
+  if (pref === "adkwai") { const ks = sources.findIndex((s) => s.url.includes("adkwai.com")); if (ks >= 0) return ks; }
+  else if (pref === "anich") { const an = sources.findIndex((s) => s.url.includes("emmmm.eu.org")); if (an >= 0) return an; }
+  const h = sources.findIndex((s) => isHlsMedia(s.url)); if (h >= 0) return h;
+  const d = sources.findIndex((s) => isDirectMedia(s.url)); if (d >= 0) return d;
   return 0;
 }
 
@@ -111,22 +100,11 @@ async function testLatency(url: string, timeoutMs = 5000): Promise<number | null
   return new Promise((resolve) => {
     const start = performance.now();
     let done = false;
-    const finish = (ok: boolean) => {
-      if (done) return;
-      done = true;
-      cleanup();
-      resolve(ok ? Math.round(performance.now() - start) : null);
-    };
+    const finish = (ok: boolean) => { if (done) return; done = true; cleanup(); resolve(ok ? Math.round(performance.now() - start) : null); };
     const img = new Image();
     const timer = setTimeout(() => finish(false), timeoutMs);
-    const cleanup = () => {
-      clearTimeout(timer);
-      img.onload = null;
-      img.onerror = null;
-      img.src = "";
-    };
-    img.onload = () => finish(true);
-    img.onerror = () => finish(true);
+    const cleanup = () => { clearTimeout(timer); img.onload = null; img.onerror = null; img.src = ""; };
+    img.onload = () => finish(true); img.onerror = () => finish(true);
     img.src = url + (url.includes("?") ? "&" : "?") + "_t=" + Date.now();
   });
 }
@@ -135,28 +113,18 @@ async function pickFastestSource(srcs: { url: string }[], ek: string): Promise<n
   latencyTesting.value = true;
   sourceLatencies.value = {};
   pushLog(`Latency test: testing ${srcs.length} sources…`);
-  const testable = srcs
-    .map((s, i) => ({ idx: i, url: s.url, kind: classifySource(s.url) }))
-    .filter((s) => s.kind === "hls" || s.kind === "direct");
-  if (testable.length === 0) {
-    latencyTesting.value = false;
-    return pickPreferred(srcs);
-  }
-  const results = await Promise.all(
-    testable.map(async (t) => {
-      const ms = await testLatency(t.url);
-      sourceLatencies.value = { ...sourceLatencies.value, [t.idx]: ms };
-      pushLog(`Latency [${t.idx}] ${sourceName(t.url)}: ${ms !== null ? ms + "ms" : "FAIL"}`);
-      return { idx: t.idx, ms, kind: t.kind };
-    })
-  );
+  const testable = srcs.map((s, i) => ({ idx: i, url: s.url, kind: classifySource(s.url) })).filter((s) => s.kind === "hls" || s.kind === "direct");
+  if (testable.length === 0) { latencyTesting.value = false; return pickPreferred(srcs); }
+  const results = await Promise.all(testable.map(async (t) => {
+    const ms = await testLatency(t.url);
+    sourceLatencies.value = { ...sourceLatencies.value, [t.idx]: ms };
+    return { idx: t.idx, ms, kind: t.kind };
+  }));
   latencyTesting.value = false;
   latencyDone.value = ek;
   const valid = results.filter((r) => r.ms !== null).sort((a, b) => (a.ms! - b.ms!));
   if (valid.length === 0) return pickPreferred(srcs);
-  const chosen = valid[0];
-  pushLog(`Latency test: picked [${chosen.idx}] at ${chosen.ms}ms`);
-  return chosen.idx;
+  return valid[0].idx;
 }
 
 const openRef = computed(() => open.value && bangumiID.value != null);
@@ -183,9 +151,7 @@ watch(
   ([count, ek]) => {
     if (count > 0 && autoPickedFor.value !== ek) {
       autoPickedFor.value = ek;
-      const pref = pickPreferred(sources.value);
-      pushLog(`Default source: index=${pref}`);
-      sourceIdx.value = pref;
+      sourceIdx.value = pickPreferred(sources.value);
     }
   },
   { immediate: true }
@@ -197,14 +163,11 @@ const currentSource = computed(() => {
   return idx >= 0 && idx < sources.value.length ? sources.value[idx] : undefined;
 });
 const episodesList = computed(() => episodes.value ?? []);
-
 const mediaUrl = computed(() => currentSource.value?.url);
 
 // ─── ArtPlayer instance management ───────────────────────────────────────
 const artContainerRef = ref<HTMLElement | null>(null);
-const pipArtContainerRef = ref<HTMLElement | null>(null);
 
-// Saved video state for PiP <-> fullscreen / source switch transitions
 interface SavedState { time: number; paused: boolean; muted: boolean; volume: number; }
 let savedVideoState: SavedState | null = null;
 
@@ -212,7 +175,7 @@ function saveVideoState() {
   if (!art) return;
   savedVideoState = {
     time: art.currentTime,
-    paused: art.playing ? false : true,
+    paused: !art.playing,
     muted: art.muted,
     volume: art.volume,
   };
@@ -226,75 +189,134 @@ function restoreVideoState() {
   pushLog(`restoreVideoState: time=${Math.round(s.time)}s, paused=${s.paused}`);
   a.volume = s.volume;
   a.muted = s.muted;
-  // Defer seek to next tick so HLS manifest is parsed first
   nextTick(() => {
-    if (s.time > 1) {
-      try { a.currentTime = s.time; } catch (e) { pushLog(`seek failed: ${e}`); }
-    }
-    if (!s.paused) {
-      a.play().catch((e: unknown) => pushLog(`play() rejected: ${e}`));
-    }
+    if (s.time > 1) { try { a.currentTime = s.time; } catch (e) { pushLog(`seek failed: ${e}`); } }
+    if (!s.paused) { a.play().catch((e: unknown) => pushLog(`play() rejected: ${e}`)); }
   });
   savedVideoState = null;
 }
 
 function destroyArt() {
-  if (art) {
-    pushLog("destroying ArtPlayer instance");
-    art.destroy(false);
-    art = null;
-  }
+  if (art) { pushLog("destroying ArtPlayer"); art.destroy(false); art = null; }
 }
 
 function createArt(container: HTMLElement, url: string) {
   pushLog(`Creating ArtPlayer: url=${url.slice(0, 80)}…`);
   destroyArt();
-
   const kind = classifySource(url);
   const isHls = kind === "hls";
 
-  // Custom HLS config (same as before — large buffer, error recovery)
   const hlsConfig: Record<string, unknown> = {
-    enableWorker: true,
-    lowLatencyMode: false,
-    autoStartLoad: true,
-    startLevel: -1,
+    enableWorker: true, lowLatencyMode: false, autoStartLoad: true, startLevel: -1,
     maxBufferLength: settings.data.bufferSize,
     maxMaxBufferLength: Math.max(600, settings.data.bufferSize * 6),
-    backBufferLength: 0,
-    maxBufferSize: 200 * 1000 * 1000,
-    maxBufferHole: 0.5,
-    nudgeMaxRetry: 10,
-    nudgeOffset: 0.2,
-    abrEwmaDefaultEstimate: 2e6,
-    abrBandWidthFactor: 0.9,
-    abrBandWidthUpFactor: 0.7,
-    manifestLoadingMaxRetry: 4,
-    manifestLoadingRetryDelay: 1000,
-    levelLoadingMaxRetry: 4,
-    levelLoadingRetryDelay: 1000,
-    fragLoadingMaxRetry: 6,
-    fragLoadingRetryDelay: 1000,
-    startFragPrefetch: true,
+    backBufferLength: 0, maxBufferSize: 200 * 1000 * 1000, maxBufferHole: 0.5,
+    nudgeMaxRetry: 10, nudgeOffset: 0.2, abrEwmaDefaultEstimate: 2e6,
+    abrBandWidthFactor: 0.9, abrBandWidthUpFactor: 0.7,
+    manifestLoadingMaxRetry: 4, manifestLoadingRetryDelay: 1000,
+    levelLoadingMaxRetry: 4, levelLoadingRetryDelay: 1000,
+    fragLoadingMaxRetry: 6, fragLoadingRetryDelay: 1000, startFragPrefetch: true,
     xhrSetup: (xhr: XMLHttpRequest) => { xhr.withCredentials = false; },
   };
 
   try {
-    // Use minimal options first to avoid init errors. ArtPlayer 5.x uses
-    // `container` (not `el` like 4.x). The container must be a string
-    // selector or HTMLDivElement — passing the wrong option name throws
-    // "option.container require 'string' or 'Element' type" at construction.
-    // Also customType must always be an object (not undefined) — ArtPlayer
-    // does strict recursive type validation and throws
-    // "option.customType require 'object' type, but got 'undefined'" if
-    // the value is undefined even though the type is optional.
+    // ── Custom controls: minimal, performant, brand-themed ──
+    // Play/pause + progress + time + volume + Pip + fullscreen + rate + settings
+    const controls: any[] = [
+      {
+        position: "left",
+        html: '<svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>',
+        tooltip: "播放/暂停",
+        click: function () { art?.toggle(); },
+      },
+      {
+        position: "left",
+        html: '<svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/></svg>',
+        tooltip: "音量",
+        click: function () { art?.constructor.prototype.toggleMute.call(art); },
+      },
+      {
+        position: "left",
+        html: '<svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>',
+        tooltip: "快退10秒",
+        click: function () { if (art) art.currentTime = Math.max(0, art.currentTime - 10); },
+      },
+      {
+        position: "left",
+        html: '<svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/></svg>',
+        tooltip: "快进10秒",
+        click: function () { if (art) art.currentTime = Math.min(art.duration, art.currentTime + 10); },
+      },
+    ];
+
+    // Right-side controls
+    controls.push(
+      {
+        position: "right",
+        html: '<svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>',
+        tooltip: "测速",
+        click: function () { retestLatency(); },
+      },
+      {
+        position: "right",
+        html: '<svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/><rect x="7" y="7" width="10" height="10" rx="1"/></svg>',
+        tooltip: "画中画",
+        click: function () { art?.constructor.prototype.requestPictureInPicture?.call(art); },
+      },
+      {
+        position: "right",
+        html: '<svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3"/><path d="M21 8V5a2 2 0 0 0-2-2h-3"/><path d="M3 16v3a2 2 0 0 0 2 2h3"/><path d="M16 21h3a2 2 0 0 0 2-2v-3"/></svg>',
+        tooltip: "全屏",
+        click: function () { art?.constructor.prototype.fullscreen?.toggle?.call(art); },
+      }
+    );
+
+    // Settings panel — playback rate + aspect ratio + flip
+    const settings: any[] = [
+      {
+        html: "播放速度",
+        tooltip: "Playback Rate",
+        selector: [
+          { html: "0.5x", value: 0.5 },
+          { html: "0.75x", value: 0.75 },
+          { html: "1x (默认)", value: 1, default: true },
+          { html: "1.25x", value: 1.25 },
+          { html: "1.5x", value: 1.5 },
+          { html: "2x", value: 2 },
+        ],
+        onSelect: function (item: { html: string; value: number }) {
+          if (art) art.playbackRate = item.value;
+          return item.html;
+        },
+      },
+      {
+        html: "画面比例",
+        tooltip: "Aspect Ratio",
+        selector: [
+          { html: "默认", value: "default", default: true },
+          { html: "16:9", value: "16:9" },
+          { html: "4:3", value: "4:3" },
+          { html: "填满", value: "fill" },
+        ],
+        onSelect: function (item: { html: string; value: string }) {
+          // ArtPlayer doesn't expose aspect-ratio via simple API; we use CSS on video
+          const v = (art as any)?.template?.$video as HTMLVideoElement | undefined;
+          if (v) {
+            if (item.value === "fill") v.style.objectFit = "fill";
+            else if (item.value === "default") { v.style.objectFit = ""; v.style.aspectRatio = ""; }
+            else { v.style.objectFit = ""; v.style.aspectRatio = item.value; }
+          }
+          return item.html;
+        },
+      },
+    ];
+
     const options: any = {
       container: container,
       url: url,
       type: isHls ? "m3u8" : "",
       customType: isHls ? {
         m3u8: function (video: HTMLVideoElement, src: string) {
-          // Use hls.js for HLS playback
           import("hls.js").then((mod) => {
             const Hls = mod.default;
             if (Hls.isSupported()) {
@@ -317,34 +339,48 @@ function createArt(container: HTMLElement, url: string) {
             }
           });
         },
-      } : {},  // Always pass an object (not undefined) — ArtPlayer strict-checks
+      } : {},
       autoplay: !savedVideoState,
       autoSize: false,
       autoMini: false,
       screenshot: true,
       setting: true,
       loop: false,
-      flip: false,
-      playbackRate: true,
-      aspectRatio: true,
+      flip: true,
+      playbackRate: false,  // we add our own
+      aspectRatio: false,   // we add our own
       fullscreen: true,
       fullscreenWeb: true,
-      pip: true,
+      pip: false,           // we add our own
       airplay: false,
       theme: "#fb7185",
       volume: 1,
       lang: "zh-cn",
       title: "",
+      controls: controls,
+      settings: settings,
+      // ── Plugins ──
+      plugins: [
+        // Auto-generate video thumbnails for the progress bar hover preview.
+        // Requires CORS-enabled video URL; falls back silently if it fails.
+        artplayerPluginAutoThumbnail({
+          width: 160,
+          number: 80,
+          scale: 1,
+        }),
+      ],
+      // ── Custom progress bar — show small bottom bar when controls hidden ──
+      // ArtPlayer doesn't expose this directly; we use CSS overrides + custom
+      // control point. See <style> below for the slim progress indicator.
     };
+
     art = new Artplayer(options);
 
-    // Register event handlers via .on() AFTER construction (more reliable
-    // than passing them in `videoEvents` option, which has type issues).
+    // ── Event registration (after construction) ──
     art.on("ready", () => {
       pushLog("ArtPlayer ready");
-      if (savedVideoState) {
-        restoreVideoState();
-      } else if (bangumiID.value) {
+      if (savedVideoState) { restoreVideoState(); }
+      else if (bangumiID.value) {
         const progress = library.getPlaybackProgress(bangumiID.value, episode.value);
         if (progress && progress.time > 5 && progress.time < progress.duration - 10) {
           pushLog(`Restoring playback progress: ${Math.round(progress.time)}s`);
@@ -354,7 +390,6 @@ function createArt(container: HTMLElement, url: string) {
     });
 
     art.on("video:play", () => {
-      pushLog("video play — marking episode watched");
       if (bangumiID.value) library.markEpisode(bangumiID.value, episode.value);
     });
 
@@ -363,7 +398,6 @@ function createArt(container: HTMLElement, url: string) {
       tryAutoAdvance(effectiveIdx.value);
     });
 
-    // Auto-save playback progress (throttled)
     let lastProgressSave = 0;
     art.on("video:timeupdate", () => {
       if (!art) return;
@@ -378,7 +412,6 @@ function createArt(container: HTMLElement, url: string) {
   } catch (err) {
     logError("ArtPlayer creation failed:", err);
     pushLog(`Error details: ${err instanceof Error ? err.message : String(err)}`);
-    pushLog(`Error stack: ${err instanceof Error ? err.stack : "no stack"}`);
     videoError.value = `播放器初始化失败: ${err instanceof Error ? err.message : String(err)}`;
   }
 }
@@ -391,10 +424,7 @@ watch(
     if (!isOpen) return;
     if (srcCount === 0) return;
     if (!url) return;
-    if (!container) {
-      pushLog("container not mounted — retry next tick");
-      return;
-    }
+    if (!container) { pushLog("container not mounted — retry next tick"); return; }
     triedSources.add(idx);
     videoError.value = null;
     createArt(container as HTMLElement, url);
@@ -405,38 +435,29 @@ watch(
 function tryAutoAdvance(currentIdx: number) {
   const next = sources.value.findIndex((_, i) => !triedSources.has(i));
   pushLog(`auto-advance: current=${currentIdx}, next=${next}`);
-  if (next >= 0 && next !== currentIdx) {
-    sourceIdx.value = next;
-  } else {
-    videoError.value = "所有播放源均无法播放，请稍后重试或更换剧集";
-  }
+  if (next >= 0 && next !== currentIdx) sourceIdx.value = next;
+  else videoError.value = "所有播放源均无法播放，请稍后重试或更换剧集";
 }
 
-onBeforeUnmount(() => {
-  destroyArt();
-});
+onBeforeUnmount(() => { destroyArt(); });
 
 const switchEpisode = (sort: number, title: string) => {
   pushLog(`switchEpisode: ${sort} - ${title}`);
   ui.setPlayerEpisode(sort, title);
-  activeTab.value = "episodes";
 };
 
 const showLog = ref(false);
 const toggleLog = () => { showLog.value = !showLog.value; pushLog(`log panel ${showLog.value ? "opened" : "closed"}`); };
 const sidebarCollapsed = ref(false);
 const sourcesExpanded = ref(false);
-const pipMode = ref(false);
 
-// Header hover — keep title bar visible while mouse is over it
-const headerHovered = ref(false);
-const onHeaderMouseEnter = () => { headerHovered.value = true; };
-const onHeaderMouseLeave = () => { headerHovered.value = false; };
-// Header is visible when: video loading, error, empty sources, OR header hovered,
-// OR ArtPlayer controls are visible (we approximate with "always show on hover")
-const headerVisible = computed(() =>
-  headerHovered.value || vodLoading.value || vodIsError.value || sources.value.length === 0
-);
+// ── PiP mode (custom, not ArtPlayer's built-in) ──
+const pipMode = ref(false);
+const pipPos = ref({ x: typeof window !== "undefined" ? window.innerWidth - 380 : 0, y: typeof window !== "undefined" ? window.innerHeight - 220 : 0 });
+let pipDragging = false;
+let pipDragStart = { x: 0, y: 0 };
+const pipWidth = computed(() => Math.min(360, Math.max(240, Math.floor((typeof window !== "undefined" ? window.innerWidth : 1280) * 0.3))));
+const pipHeight = computed(() => Math.floor(pipWidth.value * 9 / 16));
 
 const enterPip = () => {
   if (art) saveVideoState();
@@ -448,21 +469,23 @@ const exitPip = () => {
   pipMode.value = false;
   ui.setView("detail");
 };
-const closeFromPip = () => {
+const closeFromPip = () => { pipMode.value = false; ui.closePlayer(); };
+const closeOrPip = () => { if (pipMode.value) closeFromPip(); else enterPip(); };
+
+// ── Return to home from PiP ──
+const goHomeFromPip = () => {
   pipMode.value = false;
-  ui.closePlayer();
-};
-const closeOrPip = () => {
-  if (pipMode.value) closeFromPip();
-  else enterPip();
+  ui.setView("discover");
 };
 
-// PiP dragging
-const pipPos = ref({ x: typeof window !== "undefined" ? window.innerWidth - 380 : 0, y: typeof window !== "undefined" ? window.innerHeight - 220 : 0 });
-let pipDragging = false;
-let pipDragStart = { x: 0, y: 0 };
-const pipWidth = computed(() => Math.min(360, Math.max(240, Math.floor((typeof window !== "undefined" ? window.innerWidth : 1280) * 0.3))));
-const pipHeight = computed(() => Math.floor(pipWidth.value * 9 / 16));
+// ── Header hover (keep title bar visible while hovered) ──
+const headerHovered = ref(false);
+const onHeaderMouseEnter = () => { headerHovered.value = true; };
+const onHeaderMouseLeave = () => { headerHovered.value = false; };
+const headerVisible = computed(() =>
+  headerHovered.value || vodLoading.value || vodIsError.value || sources.value.length === 0
+);
+
 const onPipMouseDown = (e: MouseEvent) => {
   if ((e.target as HTMLElement).closest("button")) return;
   pipDragging = true;
@@ -492,98 +515,125 @@ const retestLatency = async () => {
   await pickFastestSource(sources.value, epKey.value);
   pushLog("测速完成，用户手动选择源");
 };
-
-// Sync ArtPlayer source selector when sources change
-watch(() => sources.value, (srcs) => {
-  if (art && srcs.length > 0) {
-    // Re-create the player to update the source selector
-    // (ArtPlayer doesn't support dynamically updating settings selector)
-  }
-}, { deep: true });
 </script>
 
 <template>
   <Transition name="player">
     <div v-if="open && bangumiID != null && !pipMode" class="fixed inset-0 z-[100] flex flex-col bg-black">
-      <TitleBar />
+      <!-- ═══ Fused title bar (transparent, draggable, integrated with video) ═══ -->
+      <!-- The title bar shares the same gradient overlay as the player header
+           so it visually melts into the video. Window controls are on the right. -->
+      <Transition name="controls">
+        <div
+          v-if="headerVisible"
+          @mouseenter="onHeaderMouseEnter"
+          @mouseleave="onHeaderMouseLeave"
+          data-tauri-drag-region
+          class="pointer-events-none absolute inset-x-0 top-0 z-40 flex items-start justify-between gap-3 bg-gradient-to-b from-black/80 via-black/40 to-transparent pl-4 pr-2 pb-10 pt-2"
+        >
+          <!-- Left: logo + title + episode (all in one row) -->
+          <div class="pointer-events-auto flex min-w-0 items-center gap-3" data-tauri-drag-region>
+            <img src="/aikf-logo-128.png" alt="AiKF" class="h-6 w-6 shrink-0 rounded-md" draggable="false" data-tauri-drag-region />
+            <span data-tauri-drag-region class="text-xs font-bold tracking-tight text-white/90">AiKF</span>
+            <span class="text-white/20">·</span>
+            <div class="flex min-w-0 items-baseline gap-2">
+              <p class="line-clamp-1 text-sm font-bold text-white drop-shadow" :title="ui.player.title">{{ ui.player.title }}</p>
+              <span class="text-white/30">·</span>
+              <p class="shrink-0 text-xs text-white/70">第 {{ episode }} 话</p>
+            </div>
+          </div>
 
-      <div class="flex min-h-0 flex-1 gap-0 md:flex-row">
+          <!-- Right: action buttons + window controls in one row -->
+          <div class="pointer-events-auto flex shrink-0 items-center gap-1">
+            <button
+              type="button"
+              @click="toggleLog"
+              :class="cn('flex h-8 items-center rounded-md px-2.5 text-xs font-medium transition-colors', showLog ? 'bg-tertiary/30 text-tertiary-foreground' : 'text-white/70 hover:bg-white/15 hover:text-white')"
+            >
+              日志
+            </button>
+            <button
+              type="button"
+              @click="enterPip"
+              class="hidden h-8 items-center rounded-md px-2.5 text-xs font-medium text-white/70 transition-colors hover:bg-white/15 hover:text-white sm:flex"
+            >
+              画中画
+            </button>
+            <button
+              type="button"
+              @click="closeOrPip"
+              class="flex h-8 w-8 items-center justify-center rounded-md text-white/70 transition-colors hover:bg-white/15 hover:text-white"
+              aria-label="最小化"
+            >
+              <X class="h-4 w-4" />
+            </button>
+            <!-- Window controls divider -->
+            <div class="mx-1 h-5 w-px bg-white/10"></div>
+            <button
+              v-if="isTauri"
+              type="button"
+              @click="winMinimize"
+              aria-label="最小化窗口"
+              class="flex h-8 w-9 items-center justify-center rounded-md text-white/70 transition-colors hover:bg-white/15 hover:text-white"
+            >
+              <Minus class="h-4 w-4" />
+            </button>
+            <button
+              v-if="isTauri"
+              type="button"
+              @click="winToggleMax"
+              aria-label="最大化/还原"
+              class="flex h-8 w-9 items-center justify-center rounded-md text-white/70 transition-colors hover:bg-white/15 hover:text-white"
+            >
+              <Square class="h-3.5 w-3.5" />
+            </button>
+            <button
+              v-if="isTauri"
+              type="button"
+              @click="winClose"
+              aria-label="关闭窗口"
+              class="flex h-8 w-9 items-center justify-center rounded-md text-white/70 transition-colors hover:bg-destructive hover:text-white"
+            >
+              <X class="h-4 w-4" />
+            </button>
+          </div>
+        </div>
+      </Transition>
+
+      <!-- Body -->
+      <div class="flex min-h-0 flex-1 gap-0 md:flex-row pt-0">
+        <!-- Video area -->
         <div class="relative min-h-0 min-w-0 flex-1 bg-black">
-            <!-- top overlay header — transparent, fused with video.
-                 Header stays visible while hovered (headerHovered) so the
-                 close/log/PiP buttons are always clickable. -->
-            <Transition name="controls">
-              <div
-                v-if="headerVisible"
-                @mouseenter="onHeaderMouseEnter"
-                @mouseleave="onHeaderMouseLeave"
-                class="pointer-events-none absolute inset-x-0 top-0 z-30 flex items-start justify-between gap-3 bg-gradient-to-b from-black/80 via-black/40 to-transparent px-4 pb-10 pt-3"
-              >
-                <div class="pointer-events-auto flex min-w-0 items-center gap-3">
-                  <button
-                    type="button"
-                    @click="closeOrPip"
-                    class="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-white transition-colors hover:bg-white/20"
-                    aria-label="最小化"
-                  >
-                    <X class="h-4 w-4" />
-                  </button>
-                  <div class="flex min-w-0 items-baseline gap-2">
-                    <p class="line-clamp-1 text-sm font-bold text-white drop-shadow">{{ ui.player.title }}</p>
-                    <span class="text-white/30">·</span>
-                    <p class="shrink-0 text-xs text-white/70">第 {{ episode }} 话</p>
-                  </div>
-                </div>
-                <div class="pointer-events-auto flex items-center gap-2">
-                  <button
-                    type="button"
-                    @click="toggleLog"
-                    :class="cn('rounded-full px-3 py-1.5 text-xs font-medium transition-colors', showLog ? 'bg-tertiary/30 text-tertiary-foreground' : 'text-white/70 hover:bg-white/15 hover:text-white')"
-                  >
-                    日志
-                  </button>
-                  <button
-                    type="button"
-                    @click="enterPip"
-                    class="hidden rounded-full px-3 py-1.5 text-xs font-medium text-white/70 transition-colors hover:bg-white/15 hover:text-white sm:block"
-                  >
-                    查看详情
-                  </button>
-                </div>
-              </div>
-            </Transition>
-
-            <!-- Loading / error / empty states -->
-            <div v-if="vodLoading" class="absolute inset-0 z-20 flex flex-col items-center justify-center gap-3 text-white/70">
-              <Loader2 class="h-10 w-10 animate-spin text-primary" />
-              <p class="text-sm">正在加载播放源…</p>
+          <!-- Loading / error / empty states -->
+          <div v-if="vodLoading" class="absolute inset-0 z-20 flex flex-col items-center justify-center gap-3 text-white/70">
+            <Loader2 class="h-10 w-10 animate-spin text-primary" />
+            <p class="text-sm">正在加载播放源…</p>
+          </div>
+          <div v-else-if="vodIsError" class="absolute inset-0 z-20 flex flex-col items-center justify-center gap-3 px-6 text-center text-white/70">
+            <AlertCircle class="h-10 w-10 text-destructive" />
+            <p class="text-sm">播放源加载失败</p>
+            <button @click="vodRefetch()" class="rounded-full bg-white/10 px-4 py-1.5 text-xs text-white hover:bg-white/20">重试</button>
+          </div>
+          <div v-else-if="sources.length === 0" class="absolute inset-0 z-20 flex flex-col items-center justify-center gap-2 text-white/60">
+            <AlertCircle class="h-10 w-10" />
+            <p class="text-sm">暂无可用的播放源</p>
+          </div>
+          <template v-else>
+            <!-- ArtPlayer container — fills the video area.
+                 Add a class hook so our custom <style> can target it for the
+                 slim progress indicator + thumbnail tooltip. -->
+            <div
+              ref="artContainerRef"
+              class="art-container absolute inset-0 bg-black"
+              style="width: 100%; height: 100%;"
+            ></div>
+            <div v-if="videoError" class="absolute inset-x-0 bottom-16 mx-auto max-w-md rounded-xl bg-destructive/90 px-4 py-2 text-center text-xs text-white">
+              {{ videoError }}
             </div>
-            <div v-else-if="vodIsError" class="absolute inset-0 z-20 flex flex-col items-center justify-center gap-3 px-6 text-center text-white/70">
-              <AlertCircle class="h-10 w-10 text-destructive" />
-              <p class="text-sm">播放源加载失败</p>
-              <button @click="vodRefetch()" class="rounded-full bg-white/10 px-4 py-1.5 text-xs text-white hover:bg-white/20">重试</button>
-            </div>
-            <div v-else-if="sources.length === 0" class="absolute inset-0 z-20 flex flex-col items-center justify-center gap-2 text-white/60">
-              <AlertCircle class="h-10 w-10" />
-              <p class="text-sm">暂无可用的播放源</p>
-            </div>
-            <template v-else>
-              <!-- ArtPlayer container — fills the video area.
-                   ArtPlayer needs an explicit-size container at construction
-                   time. Using inline style w/h 100% ensures the container has
-                   a definite size even before layout settles. -->
-              <div
-                ref="artContainerRef"
-                class="absolute inset-0 bg-black"
-                style="width: 100%; height: 100%;"
-              ></div>
-              <div v-if="videoError" class="absolute inset-x-0 bottom-16 mx-auto max-w-md rounded-xl bg-destructive/90 px-4 py-2 text-center text-xs text-white">
-                {{ videoError }}
-              </div>
-            </template>
+          </template>
         </div>
 
-        <!-- side panel (collapsible) — native elements for max perf -->
+        <!-- Side panel (collapsible) — native elements for max perf -->
         <div class="relative flex shrink-0 items-stretch">
           <button
             type="button"
@@ -596,157 +646,138 @@ watch(() => sources.value, (srcs) => {
           </button>
           <Transition name="sidebar">
             <div v-show="!sidebarCollapsed" class="flex min-h-0 w-full flex-col bg-black/70 backdrop-blur-xl md:w-80 lg:w-96">
-          <div class="flex items-center justify-between gap-2 px-3 py-3">
-            <span class="flex items-center gap-1.5 text-xs font-bold tracking-wide text-white/80">
-              <ListVideo class="h-3.5 w-3.5" /> 剧集列表
-            </span>
-            <div v-if="episodesList.length > 0" class="flex items-center gap-1">
-              <button
-                type="button"
-                :disabled="episode <= 1"
-                @click="(() => { const prev = episodesList.find((e) => e.sort === episode - 1); if (prev) switchEpisode(prev.sort, prev.title); })()"
-                class="state-layer flex h-6 items-center gap-0.5 rounded-md px-1.5 text-[10px] text-white/50 transition-colors hover:bg-white/10 hover:text-white disabled:opacity-30 disabled:hover:bg-transparent"
-              >
-                <ChevronLeft class="h-3 w-3" /> 上一话
-              </button>
-              <button
-                type="button"
-                :disabled="episode >= episodesList.length"
-                @click="(() => { const next = episodesList.find((e) => e.sort === episode + 1); if (next) switchEpisode(next.sort, next.title); })()"
-                class="state-layer flex h-6 items-center gap-0.5 rounded-md px-1.5 text-[10px] text-white/50 transition-colors hover:bg-white/10 hover:text-white disabled:opacity-30 disabled:hover:bg-transparent"
-              >
-                下一话 <ChevronRight class="h-3 w-3" />
-              </button>
-            </div>
-          </div>
-
-          <div v-if="sources.length > 0" class="px-3 pb-3">
-            <div class="flex items-center justify-between">
-              <span class="flex items-center gap-1.5 text-[11px] font-medium text-white/60">
-                <LinkIcon class="h-3 w-3" /> 播放源
-              </span>
-              <div class="flex items-center gap-1.5">
-                <button
-                  type="button"
-                  :disabled="latencyTesting"
-                  @click="retestLatency"
-                  class="state-layer flex h-5 items-center gap-1 rounded-md bg-white/5 px-2 text-[10px] font-medium text-white/60 transition-colors hover:bg-white/10 hover:text-white disabled:opacity-50"
-                >
-                  <Loader2 v-if="latencyTesting" class="h-2.5 w-2.5 animate-spin" />
-                  <Zap v-else class="h-2.5 w-2.5" />
-                  测速
-                </button>
-                <button
-                  type="button"
-                  @click="sourcesExpanded = !sourcesExpanded"
-                  class="state-layer flex h-5 items-center gap-1 rounded-md bg-white/5 px-2 text-[10px] font-medium text-white/60 transition-colors hover:bg-white/10 hover:text-white"
-                >
-                  {{ sourcesExpanded ? "收起" : `${sources.length}源` }}
-                  <ChevronDown v-if="sourcesExpanded" class="h-2.5 w-2.5" />
-                  <ChevronRight v-else class="h-2.5 w-2.5" />
-                </button>
-              </div>
-            </div>
-            <button
-              v-if="currentSource"
-              type="button"
-              @click="sourceIdx = effectiveIdx; triedSources.clear(); triedSources.add(effectiveIdx)"
-              class="state-layer mt-2 flex w-full items-center justify-between gap-2 rounded-lg bg-primary/15 px-2.5 py-1.5 text-left ring-1 ring-primary/30 transition-colors hover:bg-primary/20"
-            >
-              <div class="min-w-0 flex-1">
-                <p class="truncate text-[11px] font-medium text-white">{{ sourceLabel(currentSource) }}</p>
-                <p class="text-[9px] text-white/40">当前播放源</p>
-              </div>
-              <span
-                v-if="sourceLatencies[effectiveIdx] !== undefined"
-                class="shrink-0 rounded px-1 py-0.5 text-[9px] font-mono tabular-nums"
-                :class="sourceLatencies[effectiveIdx] !== null ? 'bg-secondary/20 text-secondary' : 'bg-destructive/20 text-destructive'"
-              >
-                {{ sourceLatencies[effectiveIdx] !== null ? sourceLatencies[effectiveIdx] + 'ms' : '✕' }}
-              </span>
-            </button>
-            <Transition name="source-list">
-              <div v-if="sourcesExpanded" class="mt-1.5 max-h-56 space-y-0.5 overflow-y-auto pr-1">
-                <button
-                  v-for="(s, i) in sources"
-                  :key="i"
-                  type="button"
-                  @click="sourceIdx = i; triedSources.clear(); triedSources.add(i); sourcesExpanded = false"
-                  :class="cn(
-                    'state-layer flex w-full items-center justify-between gap-2 rounded-md px-2.5 py-1.5 text-left transition-colors',
-                    i === effectiveIdx ? 'bg-primary/10 ring-1 ring-primary/20' : 'hover:bg-white/5'
-                  )"
-                >
-                  <p class="truncate text-[10px] font-medium text-white/80">{{ sourceLabel(s) }}</p>
-                  <span
-                    v-if="sourceLatencies[i] !== undefined"
-                    class="shrink-0 rounded px-1 py-0.5 text-[9px] font-mono tabular-nums"
-                    :class="sourceLatencies[i] !== null ? 'text-secondary' : 'text-destructive'"
+              <div class="flex items-center justify-between gap-2 px-3 py-3">
+                <span class="flex items-center gap-1.5 text-xs font-bold tracking-wide text-white/80">
+                  <ListVideo class="h-3.5 w-3.5" /> 剧集列表
+                </span>
+                <div v-if="episodesList.length > 0" class="flex items-center gap-1">
+                  <button
+                    type="button"
+                    :disabled="episode <= 1"
+                    @click="(() => { const prev = episodesList.find((e) => e.sort === episode - 1); if (prev) switchEpisode(prev.sort, prev.title); })()"
+                    class="state-layer flex h-6 items-center gap-0.5 rounded-md px-1.5 text-[10px] text-white/50 transition-colors hover:bg-white/10 hover:text-white disabled:opacity-30 disabled:hover:bg-transparent"
                   >
-                    {{ sourceLatencies[i] !== null ? sourceLatencies[i] + 'ms' : '✕' }}
+                    <ChevronLeft class="h-3 w-3" /> 上一话
+                  </button>
+                  <button
+                    type="button"
+                    :disabled="episode >= episodesList.length"
+                    @click="(() => { const next = episodesList.find((e) => e.sort === episode + 1); if (next) switchEpisode(next.sort, next.title); })()"
+                    class="state-layer flex h-6 items-center gap-0.5 rounded-md px-1.5 text-[10px] text-white/50 transition-colors hover:bg-white/10 hover:text-white disabled:opacity-30 disabled:hover:bg-transparent"
+                  >
+                    下一话 <ChevronRight class="h-3 w-3" />
+                  </button>
+                </div>
+              </div>
+
+              <div v-if="sources.length > 0" class="px-3 pb-3">
+                <div class="flex items-center justify-between">
+                  <span class="flex items-center gap-1.5 text-[11px] font-medium text-white/60">
+                    <LinkIcon class="h-3 w-3" /> 播放源
+                  </span>
+                  <div class="flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      :disabled="latencyTesting"
+                      @click="retestLatency"
+                      class="state-layer flex h-5 items-center gap-1 rounded-md bg-white/5 px-2 text-[10px] font-medium text-white/60 transition-colors hover:bg-white/10 hover:text-white disabled:opacity-50"
+                    >
+                      <Loader2 v-if="latencyTesting" class="h-2.5 w-2.5 animate-spin" />
+                      <Zap v-else class="h-2.5 w-2.5" />
+                      测速
+                    </button>
+                    <button
+                      type="button"
+                      @click="sourcesExpanded = !sourcesExpanded"
+                      class="state-layer flex h-5 items-center gap-1 rounded-md bg-white/5 px-2 text-[10px] font-medium text-white/60 transition-colors hover:bg-white/10 hover:text-white"
+                    >
+                      {{ sourcesExpanded ? "收起" : `${sources.length}源` }}
+                      <ChevronDown v-if="sourcesExpanded" class="h-2.5 w-2.5" />
+                      <ChevronRight v-else class="h-2.5 w-2.5" />
+                    </button>
+                  </div>
+                </div>
+                <button
+                  v-if="currentSource"
+                  type="button"
+                  @click="sourceIdx = effectiveIdx; triedSources.clear(); triedSources.add(effectiveIdx)"
+                  class="state-layer mt-2 flex w-full items-center justify-between gap-2 rounded-lg bg-primary/15 px-2.5 py-1.5 text-left ring-1 ring-primary/30 transition-colors hover:bg-primary/20"
+                >
+                  <div class="min-w-0 flex-1">
+                    <p class="truncate text-[11px] font-medium text-white">{{ sourceLabel(currentSource) }}</p>
+                    <p class="text-[9px] text-white/40">当前播放源</p>
+                  </div>
+                  <span
+                    v-if="sourceLatencies[effectiveIdx] !== undefined"
+                    class="shrink-0 rounded px-1 py-0.5 text-[9px] font-mono tabular-nums"
+                    :class="sourceLatencies[effectiveIdx] !== null ? 'bg-secondary/20 text-secondary' : 'bg-destructive/20 text-destructive'"
+                  >
+                    {{ sourceLatencies[effectiveIdx] !== null ? sourceLatencies[effectiveIdx] + 'ms' : '✕' }}
                   </span>
                 </button>
+                <Transition name="source-list">
+                  <div v-if="sourcesExpanded" class="mt-1.5 max-h-56 space-y-0.5 overflow-y-auto pr-1">
+                    <button
+                      v-for="(s, i) in sources"
+                      :key="i"
+                      type="button"
+                      @click="sourceIdx = i; triedSources.clear(); triedSources.add(i); sourcesExpanded = false"
+                      :class="cn(
+                        'state-layer flex w-full items-center justify-between gap-2 rounded-md px-2.5 py-1.5 text-left transition-colors',
+                        i === effectiveIdx ? 'bg-primary/10 ring-1 ring-primary/20' : 'hover:bg-white/5'
+                      )"
+                    >
+                      <p class="truncate text-[10px] font-medium text-white/80">{{ sourceLabel(s) }}</p>
+                      <span
+                        v-if="sourceLatencies[i] !== undefined"
+                        class="shrink-0 rounded px-1 py-0.5 text-[9px] font-mono tabular-nums"
+                        :class="sourceLatencies[i] !== null ? 'text-secondary' : 'text-destructive'"
+                      >
+                        {{ sourceLatencies[i] !== null ? sourceLatencies[i] + 'ms' : '✕' }}
+                      </span>
+                    </button>
+                  </div>
+                </Transition>
+                <div v-if="latencyDone && !latencyTesting && Object.keys(sourceLatencies).length > 0" class="mt-1.5 rounded-md bg-white/5 px-2 py-1 text-[9px] text-white/40">
+                  <template v-if="Object.values(sourceLatencies).some(v => v !== null)">
+                    测速完成 · 最低: {{ Math.min(...Object.values(sourceLatencies).filter(v => v !== null) as number[]) }}ms
+                  </template>
+                  <template v-else>
+                    测速完成 · 所有源均无法连接
+                  </template>
+                </div>
               </div>
-            </Transition>
-            <div v-if="latencyDone && !latencyTesting && Object.keys(sourceLatencies).length > 0" class="mt-1.5 rounded-md bg-white/5 px-2 py-1 text-[9px] text-white/40">
-              <template v-if="Object.values(sourceLatencies).some(v => v !== null)">
-                测速完成 · 最低: {{ Math.min(...Object.values(sourceLatencies).filter(v => v !== null) as number[]) }}ms
-              </template>
-              <template v-else>
-                测速完成 · 所有源均无法连接
-              </template>
-            </div>
-          </div>
 
-          <div class="mx-3 h-px bg-white/5" />
+              <div class="mx-3 h-px bg-white/5" />
 
-          <div class="min-h-0 flex-1 overflow-y-auto px-2 py-2">
-            <div v-if="showLog" class="mb-2 rounded-lg bg-black/60 p-2 font-mono text-[10px] leading-relaxed text-green-300 max-h-48 overflow-y-auto">
-              <div v-for="(line, i) in logLines" :key="i" class="whitespace-pre-wrap break-all">{{ line }}</div>
-            </div>
-            <div
-              v-if="!episodes || episodes.length === 0"
-              class="flex flex-col items-center justify-center gap-2 py-10 text-white/40"
-            >
-              <ListVideo class="h-8 w-8 opacity-40" />
-              <p class="text-xs">暂无剧集</p>
-            </div>
-            <div v-else class="space-y-0.5">
-              <button
-                v-for="ep in episodesList"
-                :key="ep.sort"
-                type="button"
-                @click="switchEpisode(ep.sort, ep.title)"
-                :class="cn(
-                  'group flex w-full items-center gap-3 rounded-lg px-2.5 py-2 text-left transition-colors',
-                  ep.sort === episode ? 'bg-primary/15' : 'hover:bg-white/5'
-                )"
-              >
-                <span
-                  :class="cn(
-                    'flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-[11px] font-semibold tabular-nums transition-colors',
-                    ep.sort === episode
-                      ? 'bg-primary text-primary-foreground'
-                      : 'bg-white/5 text-white/60 group-hover:bg-white/10 group-hover:text-white/80'
-                  )"
-                >
-                  {{ ep.sort }}
-                </span>
-                <p
-                  :class="cn(
-                    'min-w-0 flex-1 truncate text-xs',
-                    ep.sort === episode ? 'font-semibold text-white' : 'text-white/70'
-                  )"
-                >
-                  {{ ep.title || `第 ${ep.sort} 话` }}
-                </p>
-                <Play
-                  v-if="ep.sort === episode"
-                  class="h-3 w-3 shrink-0 fill-current text-primary"
-                />
-              </button>
-            </div>
-          </div>
+              <div class="min-h-0 flex-1 overflow-y-auto px-2 py-2">
+                <div v-if="showLog" class="mb-2 rounded-lg bg-black/60 p-2 font-mono text-[10px] leading-relaxed text-green-300 max-h-48 overflow-y-auto">
+                  <div v-for="(line, i) in logLines" :key="i" class="whitespace-pre-wrap break-all">{{ line }}</div>
+                </div>
+                <div v-if="!episodes || episodes.length === 0" class="flex flex-col items-center justify-center gap-2 py-10 text-white/40">
+                  <ListVideo class="h-8 w-8 opacity-40" />
+                  <p class="text-xs">暂无剧集</p>
+                </div>
+                <div v-else class="space-y-0.5">
+                  <button
+                    v-for="ep in episodesList"
+                    :key="ep.sort"
+                    type="button"
+                    @click="switchEpisode(ep.sort, ep.title)"
+                    :class="cn(
+                      'group flex w-full items-center gap-3 rounded-lg px-2.5 py-2 text-left transition-colors',
+                      ep.sort === episode ? 'bg-primary/15' : 'hover:bg-white/5'
+                    )"
+                  >
+                    <span :class="cn('flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-[11px] font-semibold tabular-nums transition-colors', ep.sort === episode ? 'bg-primary text-primary-foreground' : 'bg-white/5 text-white/60 group-hover:bg-white/10 group-hover:text-white/80')">
+                      {{ ep.sort }}
+                    </span>
+                    <p :class="cn('min-w-0 flex-1 truncate text-xs', ep.sort === episode ? 'font-semibold text-white' : 'text-white/70')">
+                      {{ ep.title || `第 ${ep.sort} 话` }}
+                    </p>
+                  </button>
+                </div>
+              </div>
             </div>
           </Transition>
         </div>
@@ -754,74 +785,126 @@ watch(() => sources.value, (srcs) => {
     </div>
   </Transition>
 
-  <!-- Picture-in-picture floating window -->
+  <!-- ═══ Picture-in-picture floating window ═══ -->
+  <!-- Shows anime title + a "back to home" button at the top. -->
   <Transition name="pip">
     <div
       v-if="open && bangumiID != null && pipMode"
       class="fixed z-[100] overflow-hidden rounded-xl bg-black shadow-2xl ring-1 ring-white/10"
       :style="{ left: pipPos.x + 'px', top: pipPos.y + 'px', width: pipWidth + 'px' }"
     >
-      <div ref="pipArtContainerRef" class="relative aspect-video w-full bg-black">
-        <video autoplay playsinline preload="auto" class="h-full w-full" />
-        <Transition name="pip-controls">
-          <div
-            v-if="true"
-            class="absolute inset-x-0 top-0 z-20 flex cursor-move items-center justify-between bg-gradient-to-b from-black/70 to-transparent px-2 py-1.5"
-            @mousedown="onPipMouseDown"
-          >
-            <span class="line-clamp-1 text-[10px] font-semibold text-white">{{ ui.player.title }} · 第 {{ episode }} 话</span>
-            <div class="flex items-center gap-1">
-              <button @click="exitPip" class="flex h-5 w-5 items-center justify-center rounded-full bg-white/20 text-white hover:bg-white/40" aria-label="展开">
-                <Maximize class="h-2.5 w-2.5" />
-              </button>
-              <button @click="closeFromPip" class="flex h-5 w-5 items-center justify-center rounded-full bg-white/20 text-white hover:bg-destructive" aria-label="关闭">
-                <X class="h-2.5 w-2.5" />
-              </button>
-            </div>
-          </div>
-        </Transition>
+      <!-- PiP header — title + home + close (draggable) -->
+      <div
+        class="flex cursor-move items-center justify-between gap-1 bg-gradient-to-b from-black/80 to-transparent px-2 py-1.5"
+        @mousedown="onPipMouseDown"
+      >
+        <div class="flex min-w-0 items-center gap-1.5">
+          <img src="/aikf-logo-128.png" alt="" class="h-3.5 w-3.5 shrink-0 rounded-sm" draggable="false" />
+          <p class="line-clamp-1 text-[10px] font-semibold text-white" :title="`${ui.player.title} · 第${episode}话`">
+            {{ ui.player.title }} · 第{{ episode }}话
+          </p>
+        </div>
+        <div class="flex shrink-0 items-center gap-0.5">
+          <button @click="goHomeFromPip" class="flex h-5 w-5 items-center justify-center rounded text-white/70 transition-colors hover:bg-white/20 hover:text-white" aria-label="回到主页" title="回到主页">
+            <Home class="h-3 w-3" />
+          </button>
+          <button @click="exitPip" class="flex h-5 w-5 items-center justify-center rounded text-white/70 transition-colors hover:bg-white/20 hover:text-white" aria-label="展开" title="展开">
+            <Maximize class="h-2.5 w-2.5" />
+          </button>
+          <button @click="closeFromPip" class="flex h-5 w-5 items-center justify-center rounded text-white/70 transition-colors hover:bg-destructive hover:text-white" aria-label="关闭" title="关闭">
+            <X class="h-2.5 w-2.5" />
+          </button>
+        </div>
       </div>
+      <!-- PiP video container — the ArtPlayer instance lives here -->
+      <div ref="artContainerRef" class="art-container relative aspect-video w-full bg-black" style="width: 100%;"></div>
     </div>
   </Transition>
 </template>
 
 <style scoped>
-.player-enter-active,
-.player-leave-active { transition: opacity 0.25s ease; }
-.player-enter-from,
-.player-leave-to { opacity: 0; }
-.controls-enter-active,
-.controls-leave-active { transition: opacity 0.25s ease, transform 0.25s ease; }
-.controls-enter-from,
-.controls-leave-to { opacity: 0; transform: translateY(10px); }
-.sidebar-enter-active,
-.sidebar-leave-active { transition: opacity 0.25s ease, width 0.25s ease; }
-.sidebar-enter-from,
-.sidebar-leave-to { opacity: 0; }
-.pip-enter-active,
-.pip-leave-active { transition: opacity 0.3s ease, transform 0.3s ease; }
-.pip-enter-from,
-.pip-leave-to { opacity: 0; transform: scale(0.8) translateY(20px); }
-.source-list-enter-active,
-.source-list-leave-active { transition: all 0.25s ease; }
-.source-list-enter-from,
-.source-list-leave-to { opacity: 0; max-height: 0; }
-.pip-controls-enter-active,
-.pip-controls-leave-active { transition: opacity 0.2s ease; }
-.pip-controls-enter-from,
-.pip-controls-leave-to { opacity: 0; }
+.player-enter-active, .player-leave-active { transition: opacity 0.25s ease; }
+.player-enter-from, .player-leave-to { opacity: 0; }
+.controls-enter-active, .controls-leave-active { transition: opacity 0.25s ease, transform 0.25s ease; }
+.controls-enter-from, .controls-leave-to { opacity: 0; transform: translateY(-10px); }
+.sidebar-enter-active, .sidebar-leave-active { transition: opacity 0.25s ease, width 0.25s ease; }
+.sidebar-enter-from, .sidebar-leave-to { opacity: 0; }
+.pip-enter-active, .pip-leave-active { transition: opacity 0.3s ease, transform 0.3s ease; }
+.pip-enter-from, .pip-leave-to { opacity: 0; transform: scale(0.8) translateY(20px); }
+.source-list-enter-active, .source-list-leave-active { transition: all 0.25s ease; }
+.source-list-enter-from, .source-list-leave-to { opacity: 0; max-height: 0; }
 </style>
 
 <style>
-/* Artplayer global styles — ensure it fills the container */
+/* ── ArtPlayer global style overrides ── */
+
+/* Player fills container */
 .art-video-player {
   width: 100% !important;
   height: 100% !important;
   background: #000;
+  font-family: inherit;
 }
+
+/* Video fills player with object-contain */
 .art-video-player .art-video {
   width: 100% !important;
   height: 100% !important;
   object-fit: contain;
+}
+
+/* Theme color = AiKF primary (sakura rose) */
+.art-video-player .art-progress .art-progress-played,
+.art-video-player .art-progress .art-progress-loaded,
+.art-video-player .art-icon:hover,
+.art-video-player .art-setting .art-setting-item-hover {
+  background-color: #fb7185 !important;
+}
+.art-video-player .art-icon-hover svg,
+.art-video-player .art-control svg {
+  transition: transform 0.15s ease, color 0.15s ease;
+}
+
+/* ── Slim progress bar at bottom when controls are hidden ──
+   When the user isn't hovering, ArtPlayer hides the full control bar but
+   leaves a tiny 2px progress indicator so the user can still see how far
+   into the video they are. This matches the user's request.
+*/
+.art-video-player.art-state-hide-control .art-progress-bar {
+  height: 3px !important;
+  bottom: 0 !important;
+  border-radius: 0 !important;
+  background: rgba(255, 255, 255, 0.15) !important;
+  transition: height 0.2s ease !important;
+}
+.art-video-player.art-state-hide-control:hover .art-progress-bar {
+  height: 6px !important;
+}
+
+/* ── Volume control: drag-to-seek style ──
+   Make the volume popup wider and easier to drag, with a visible fill.
+*/
+.art-video-player .art-control-volume-panel {
+  width: 80px !important;
+}
+.art-video-player .art-control-volume-panel .art-control-volume-inner {
+  width: 60px !important;
+}
+.art-video-player .art-volume-slider-handle {
+  width: 12px !important;
+  height: 12px !important;
+  background: #fb7185 !important;
+  border: 2px solid #fff !important;
+}
+
+/* ── Thumbnail tooltip on progress hover ──
+   The auto-thumbnail plugin generates a sprite sheet and writes to
+   art.thumbnails. ArtPlayer displays it automatically when hovering the
+   progress bar — no extra CSS needed, but we style the popup.
+*/
+.art-video-player .art-progress-tip {
+  border-radius: 8px !important;
+  overflow: hidden !important;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4) !important;
 }
 </style>
