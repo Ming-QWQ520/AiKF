@@ -42,11 +42,10 @@ function pushLog(msg: string) {
 
 pushLog("PlayerDialog (ArtPlayer) mounted");
 
-// ─── Tauri window controls (for the fused title bar) ─────────────────────
+// ─── Tauri window controls (for the title bar) ─────────────────────
 const isTauri = typeof window !== "undefined" && ("__TAURI_INTERNALS__" in window || "__TAURI__" in window);
 const winMinimize = async () => { if (isTauri) try { await invoke("plugin:window|minimize"); } catch {} };
 const winToggleMax = async () => { if (isTauri) try { await invoke("plugin:window|toggle_maximize"); } catch {} };
-const winClose = async () => { if (isTauri) try { await invoke("plugin:window|close"); } catch {} };
 
 // ─── Source classification ────────────────────────────────────────────────
 function isDirectMedia(url: string) {
@@ -220,9 +219,17 @@ function createArt(container: HTMLElement, url: string) {
   };
 
   try {
-    // ── Custom controls: minimal, performant, brand-themed ──
-    // Play/pause + progress + time + volume + Pip + fullscreen + rate + settings
+    // ── Minimal custom controls ──
+    // We disable ALL of ArtPlayer's built-in control buttons and only add
+    // the ones we actually need, in a clean order. This avoids the clutter
+    // (multiple volume buttons, screenshot, flip, fast-forward, etc.) that
+    // was overwhelming the control bar.
+    //
+    // Layout (left → right):
+    //   [Play/Pause] [Volume]    [progress bar fills middle]    [Time]
+    //   [Next Ep] [PiP] [Fullscreen] [Settings]
     const controls: any[] = [
+      // ── Left side: play/pause + volume ──
       {
         position: "left",
         html: '<svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>',
@@ -233,49 +240,43 @@ function createArt(container: HTMLElement, url: string) {
         position: "left",
         html: '<svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/></svg>',
         tooltip: "音量",
-        click: function () { art?.constructor.prototype.toggleMute.call(art); },
+        click: function () { (art as any)?.toggleMute?.(); },
       },
-      {
-        position: "left",
-        html: '<svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>',
-        tooltip: "快退10秒",
-        click: function () { if (art) art.currentTime = Math.max(0, art.currentTime - 10); },
-      },
-      {
-        position: "left",
-        html: '<svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/></svg>',
-        tooltip: "快进10秒",
-        click: function () { if (art) art.currentTime = Math.min(art.duration, art.currentTime + 10); },
-      },
-    ];
-
-    // Right-side controls
-    controls.push(
+      // ── Right side: next episode + PiP + fullscreen + settings ──
       {
         position: "right",
-        html: '<svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>',
-        tooltip: "测速",
-        click: function () { retestLatency(); },
+        html: '<svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 4 15 12 5 20 5 4"/><line x1="19" y1="5" x2="19" y2="19"/></svg>',
+        tooltip: "下一话",
+        click: function () {
+          const next = episodesList.value.find((e) => e.sort === episode.value + 1);
+          if (next) switchEpisode(next.sort, next.title);
+        },
       },
       {
         position: "right",
-        html: '<svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/><rect x="7" y="7" width="10" height="10" rx="1"/></svg>',
-        tooltip: "画中画",
-        click: function () { art?.constructor.prototype.requestPictureInPicture?.call(art); },
+        html: '<svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="14" rx="2"/><path d="M7 21h10"/></svg>',
+        tooltip: "网页全屏",
+        click: function () { (art as any)?.fullscreenWeb?.toggle?.(); },
       },
       {
         position: "right",
         html: '<svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3"/><path d="M21 8V5a2 2 0 0 0-2-2h-3"/><path d="M3 16v3a2 2 0 0 0 2 2h3"/><path d="M16 21h3a2 2 0 0 0 2-2v-3"/></svg>',
         tooltip: "全屏",
-        click: function () { art?.constructor.prototype.fullscreen?.toggle?.call(art); },
-      }
-    );
+        click: function () { (art as any)?.fullscreen?.toggle?.(); },
+      },
+      {
+        position: "right",
+        html: '<svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>',
+        tooltip: "设置",
+        click: function () { (art as any)?.setting?.show?.(); },
+      },
+    ];
 
-    // Settings panel — playback rate + aspect ratio + flip
+    // Settings panel — playback rate only
     const settings: any[] = [
       {
         html: "播放速度",
-        tooltip: "Playback Rate",
+        icon: '<svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>',
         selector: [
           { html: "0.5x", value: 0.5 },
           { html: "0.75x", value: 0.75 },
@@ -286,26 +287,6 @@ function createArt(container: HTMLElement, url: string) {
         ],
         onSelect: function (item: { html: string; value: number }) {
           if (art) art.playbackRate = item.value;
-          return item.html;
-        },
-      },
-      {
-        html: "画面比例",
-        tooltip: "Aspect Ratio",
-        selector: [
-          { html: "默认", value: "default", default: true },
-          { html: "16:9", value: "16:9" },
-          { html: "4:3", value: "4:3" },
-          { html: "填满", value: "fill" },
-        ],
-        onSelect: function (item: { html: string; value: string }) {
-          // ArtPlayer doesn't expose aspect-ratio via simple API; we use CSS on video
-          const v = (art as any)?.template?.$video as HTMLVideoElement | undefined;
-          if (v) {
-            if (item.value === "fill") v.style.objectFit = "fill";
-            else if (item.value === "default") { v.style.objectFit = ""; v.style.aspectRatio = ""; }
-            else { v.style.objectFit = ""; v.style.aspectRatio = item.value; }
-          }
           return item.html;
         },
       },
@@ -343,16 +324,20 @@ function createArt(container: HTMLElement, url: string) {
       autoplay: !savedVideoState,
       autoSize: false,
       autoMini: false,
-      screenshot: true,
-      setting: true,
+      // ── Disable ALL ArtPlayer built-in buttons to avoid clutter ──
+      // We add our own controls via the `controls` array below.
+      screenshot: false,    // remove screenshot button (clutter)
+      setting: false,       // we add our own settings button
       loop: false,
-      flip: true,
-      playbackRate: false,  // we add our own
-      aspectRatio: false,   // we add our own
-      fullscreen: true,
-      fullscreenWeb: true,
-      pip: false,           // we add our own
+      flip: false,          // remove flip
+      playbackRate: false,  // we add our own in settings
+      aspectRatio: false,   // not needed for anime
+      fullscreen: false,    // we add our own fullscreen button
+      fullscreenWeb: false, // we add our own web-fullscreen button
+      pip: false,           // we use our own custom PiP (more reliable)
       airplay: false,
+      fastForward: false,   // remove fast-forward (we have +/- 10s in hotkeys)
+      hotkey: true,          // keep keyboard shortcuts (space, arrows, etc.)
       theme: "#fb7185",
       volume: 1,
       lang: "zh-cn",
@@ -361,17 +346,12 @@ function createArt(container: HTMLElement, url: string) {
       settings: settings,
       // ── Plugins ──
       plugins: [
-        // Auto-generate video thumbnails for the progress bar hover preview.
-        // Requires CORS-enabled video URL; falls back silently if it fails.
         artplayerPluginAutoThumbnail({
           width: 160,
           number: 80,
           scale: 1,
         }),
       ],
-      // ── Custom progress bar — show small bottom bar when controls hidden ──
-      // ArtPlayer doesn't expose this directly; we use CSS overrides + custom
-      // control point. See <style> below for the slim progress indicator.
     };
 
     art = new Artplayer(options);
@@ -396,6 +376,17 @@ function createArt(container: HTMLElement, url: string) {
     art.on("video:error", () => {
       pushLog("video error event");
       tryAutoAdvance(effectiveIdx.value);
+    });
+
+    // ── Auto-play next episode when current one ends ──
+    art.on("video:ended", () => {
+      pushLog("video ended — auto-playing next episode");
+      const next = episodesList.value.find((e) => e.sort === episode.value + 1);
+      if (next) {
+        switchEpisode(next.sort, next.title);
+      } else {
+        pushLog("no next episode — playback finished");
+      }
     });
 
     let lastProgressSave = 0;
@@ -478,13 +469,10 @@ const goHomeFromPip = () => {
   ui.setView("discover");
 };
 
-// ── Header hover (keep title bar visible while hovered) ──
-const headerHovered = ref(false);
-const onHeaderMouseEnter = () => { headerHovered.value = true; };
-const onHeaderMouseLeave = () => { headerHovered.value = false; };
-const headerVisible = computed(() =>
-  headerHovered.value || vodLoading.value || vodIsError.value || sources.value.length === 0
-);
+// ── Header visibility ──
+// Title bar is ALWAYS visible so the user can always see the title + close
+// button + window controls. No hover-based hide behavior anymore.
+const headerVisible = computed(() => true);
 
 const onPipMouseDown = (e: MouseEvent) => {
   if ((e.target as HTMLElement).closest("button")) return;
@@ -520,88 +508,75 @@ const retestLatency = async () => {
 <template>
   <Transition name="player">
     <div v-if="open && bangumiID != null && !pipMode" class="fixed inset-0 z-[100] flex flex-col bg-black">
-      <!-- ═══ Fused title bar (transparent, draggable, integrated with video) ═══ -->
-      <!-- The title bar shares the same gradient overlay as the player header
-           so it visually melts into the video. Window controls are on the right. -->
-      <Transition name="controls">
-        <div
-          v-if="headerVisible"
-          @mouseenter="onHeaderMouseEnter"
-          @mouseleave="onHeaderMouseLeave"
-          data-tauri-drag-region
-          class="pointer-events-none absolute inset-x-0 top-0 z-40 flex items-start justify-between gap-3 bg-gradient-to-b from-black/80 via-black/40 to-transparent pl-4 pr-2 pb-10 pt-2"
-        >
-          <!-- Left: logo + title + episode (all in one row) -->
-          <div class="pointer-events-auto flex min-w-0 items-center gap-3" data-tauri-drag-region>
-            <img src="/aikf-logo-128.png" alt="AiKF" class="h-6 w-6 shrink-0 rounded-md" draggable="false" data-tauri-drag-region />
-            <span data-tauri-drag-region class="text-xs font-bold tracking-tight text-white/90">AiKF</span>
-            <span class="text-white/20">·</span>
-            <div class="flex min-w-0 items-baseline gap-2">
-              <p class="line-clamp-1 text-sm font-bold text-white drop-shadow" :title="ui.player.title">{{ ui.player.title }}</p>
-              <span class="text-white/30">·</span>
-              <p class="shrink-0 text-xs text-white/70">第 {{ episode }} 话</p>
-            </div>
-          </div>
-
-          <!-- Right: action buttons + window controls in one row -->
-          <div class="pointer-events-auto flex shrink-0 items-center gap-1">
-            <button
-              type="button"
-              @click="toggleLog"
-              :class="cn('flex h-8 items-center rounded-md px-2.5 text-xs font-medium transition-colors', showLog ? 'bg-tertiary/30 text-tertiary-foreground' : 'text-white/70 hover:bg-white/15 hover:text-white')"
-            >
-              日志
-            </button>
-            <button
-              type="button"
-              @click="enterPip"
-              class="hidden h-8 items-center rounded-md px-2.5 text-xs font-medium text-white/70 transition-colors hover:bg-white/15 hover:text-white sm:flex"
-            >
-              画中画
-            </button>
-            <button
-              type="button"
-              @click="closeOrPip"
-              class="flex h-8 w-8 items-center justify-center rounded-md text-white/70 transition-colors hover:bg-white/15 hover:text-white"
-              aria-label="最小化"
-            >
-              <X class="h-4 w-4" />
-            </button>
-            <!-- Window controls divider -->
-            <div class="mx-1 h-5 w-px bg-white/10"></div>
-            <button
-              v-if="isTauri"
-              type="button"
-              @click="winMinimize"
-              aria-label="最小化窗口"
-              class="flex h-8 w-9 items-center justify-center rounded-md text-white/70 transition-colors hover:bg-white/15 hover:text-white"
-            >
-              <Minus class="h-4 w-4" />
-            </button>
-            <button
-              v-if="isTauri"
-              type="button"
-              @click="winToggleMax"
-              aria-label="最大化/还原"
-              class="flex h-8 w-9 items-center justify-center rounded-md text-white/70 transition-colors hover:bg-white/15 hover:text-white"
-            >
-              <Square class="h-3.5 w-3.5" />
-            </button>
-            <button
-              v-if="isTauri"
-              type="button"
-              @click="winClose"
-              aria-label="关闭窗口"
-              class="flex h-8 w-9 items-center justify-center rounded-md text-white/70 transition-colors hover:bg-destructive hover:text-white"
-            >
-              <X class="h-4 w-4" />
-            </button>
+      <!-- ═══ Title bar (always visible, integrated with the dark player background) ═══ -->
+      <!-- A real fixed-height bar (h-10) so it occupies layout space, not floating.
+           Video area starts below it. Drag region covers the empty center area. -->
+      <div
+        v-if="headerVisible"
+        data-tauri-drag-region
+        class="relative z-40 flex h-10 shrink-0 items-center justify-between gap-3 bg-black px-2 sm:px-3"
+      >
+        <!-- Left: logo + title + episode -->
+        <div class="flex min-w-0 items-center gap-2.5" data-tauri-drag-region>
+          <img src="/aikf-logo-128.png" alt="AiKF" class="h-5 w-5 shrink-0 rounded-md" draggable="false" data-tauri-drag-region />
+          <span data-tauri-drag-region class="text-xs font-bold tracking-tight text-white/90">AiKF</span>
+          <span class="text-white/20">·</span>
+          <div class="flex min-w-0 items-baseline gap-2" data-tauri-drag-region>
+            <p class="line-clamp-1 text-sm font-bold text-white" :title="ui.player.title">{{ ui.player.title }}</p>
+            <span class="text-white/30">·</span>
+            <p class="shrink-0 text-xs text-white/70">第 {{ episode }} 话</p>
           </div>
         </div>
-      </Transition>
 
-      <!-- Body -->
-      <div class="flex min-h-0 flex-1 gap-0 md:flex-row pt-0">
+        <!-- Right: action buttons + window controls in one row -->
+        <div class="flex shrink-0 items-center gap-1">
+          <button
+            type="button"
+            @click="toggleLog"
+            :class="cn('flex h-7 items-center rounded-md px-2 text-xs font-medium transition-colors', showLog ? 'bg-tertiary/30 text-tertiary-foreground' : 'text-white/70 hover:bg-white/15 hover:text-white')"
+          >
+            日志
+          </button>
+          <button
+            type="button"
+            @click="enterPip"
+            class="hidden h-7 items-center rounded-md px-2 text-xs font-medium text-white/70 transition-colors hover:bg-white/15 hover:text-white sm:flex"
+            title="画中画"
+          >
+            画中画
+          </button>
+          <!-- Window controls (min/max/close) -->
+          <button
+            v-if="isTauri"
+            type="button"
+            @click="winMinimize"
+            aria-label="最小化窗口"
+            class="flex h-8 w-9 items-center justify-center rounded-md text-white/70 transition-colors hover:bg-white/15 hover:text-white"
+          >
+            <Minus class="h-4 w-4" />
+          </button>
+          <button
+            v-if="isTauri"
+            type="button"
+            @click="winToggleMax"
+            aria-label="最大化/还原"
+            class="flex h-8 w-9 items-center justify-center rounded-md text-white/70 transition-colors hover:bg-white/15 hover:text-white"
+          >
+            <Square class="h-3.5 w-3.5" />
+          </button>
+          <button
+            type="button"
+            @click="closeOrPip"
+            aria-label="关闭"
+            class="flex h-8 w-9 items-center justify-center rounded-md text-white/70 transition-colors hover:bg-destructive hover:text-white"
+          >
+            <X class="h-4 w-4" />
+          </button>
+        </div>
+      </div>
+
+      <!-- Body — video + sidebar (below the title bar) -->
+      <div class="flex min-h-0 flex-1 gap-0 md:flex-row">
         <!-- Video area -->
         <div class="relative min-h-0 min-w-0 flex-1 bg-black">
           <!-- Loading / error / empty states -->
@@ -619,9 +594,7 @@ const retestLatency = async () => {
             <p class="text-sm">暂无可用的播放源</p>
           </div>
           <template v-else>
-            <!-- ArtPlayer container — fills the video area.
-                 Add a class hook so our custom <style> can target it for the
-                 slim progress indicator + thumbnail tooltip. -->
+            <!-- ArtPlayer container — fills the video area. -->
             <div
               ref="artContainerRef"
               class="art-container absolute inset-0 bg-black"
