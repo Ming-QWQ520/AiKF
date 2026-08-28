@@ -5522,56 +5522,37 @@ function anichPreset(params = {}) {
   if (!container)
     throw new Error("anichPreset requires `container`");
   const controls = [
-    // play / pause
-    {
-      position: "left",
-      html: ANICH_ICONS.play,
-      tooltip: "播放",
-      click(art) {
-        art.toggle();
-      },
-      mounted(art) {
-        art.on("video:play", () => {
-          art.controls.items[0].$control.innerHTML = ANICH_ICONS.pause;
-        });
-        art.on("video:pause", () => {
-          art.controls.items[0].$control.innerHTML = ANICH_ICONS.play;
-        });
-      }
-    },
-    // mute toggle
+    // mute toggle (icon swaps between volume / muted on `volumechange`)
     {
       position: "left",
       html: ANICH_ICONS.volume,
       tooltip: "静音",
-      click(art) {
-        art.toggleMute?.();
+      click() {
+        this.toggleMute?.();
       },
-      mounted(art) {
-        art.on("video:volumechange", () => {
-          const item = art.controls.items[1];
-          if (item)
-            item.$control.innerHTML = art.muted ? ANICH_ICONS.muted : ANICH_ICONS.volume;
+      mounted($ref) {
+        this.on("video:volumechange", () => {
+          $ref.innerHTML = this.muted ? ANICH_ICONS.muted : ANICH_ICONS.volume;
         });
       }
     },
-    // next episode (host wires up the actual `click`)
+    // next episode (host wires up the actual switching on `anich:next-episode`)
     {
       position: "left",
       html: ANICH_ICONS.next,
       tooltip: "下一集",
-      click(art) {
-        art.emit("anich:next-episode");
+      click() {
+        this.emit("anich:next-episode");
       }
     },
-    // danmaku toggle
+    // danmaku toggle (show/hide)
     {
       position: "right",
       html: ANICH_ICONS.danmaku,
       tooltip: "弹幕",
-      click(art) {
-        if (art.danmuku) {
-          art.danmuku.show = !art.danmuku.show;
+      click() {
+        if (this.danmuku) {
+          this.danmuku.show = !this.danmuku.show;
         }
       }
     },
@@ -5580,8 +5561,8 @@ function anichPreset(params = {}) {
       position: "right",
       html: ANICH_ICONS.fullscreenWeb,
       tooltip: "网页全屏",
-      click(art) {
-        art.fullscreenWeb?.toggle?.();
+      click() {
+        this.fullscreenWeb?.toggle?.();
       }
     },
     // real fullscreen
@@ -5589,17 +5570,17 @@ function anichPreset(params = {}) {
       position: "right",
       html: ANICH_ICONS.fullscreen,
       tooltip: "全屏",
-      click(art) {
-        art.fullscreen?.toggle?.();
+      click() {
+        this.fullscreen?.toggle?.();
       }
     },
-    // settings
+    // settings menu
     {
       position: "right",
       html: ANICH_ICONS.settings,
       tooltip: "设置",
-      click(art) {
-        art.setting?.show?.();
+      click() {
+        this.setting?.show?.();
       }
     },
     ...customControls

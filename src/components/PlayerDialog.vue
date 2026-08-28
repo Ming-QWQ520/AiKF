@@ -398,8 +398,16 @@ function createArt(container: HTMLElement, url: string) {
     pushLog("ArtPlayer instance created successfully");
   } catch (err) {
     logError("ArtPlayer creation failed:", err);
-    pushLog(`Error details: ${err instanceof Error ? err.message : String(err)}`);
-    videoError.value = `播放器初始化失败: ${err instanceof Error ? err.message : String(err)}`;
+    // Surface the full error chain — `err.message` alone often hides
+    // the underlying cause (e.g., `art.on is not a function` from a
+    // broken preset callback). Walk `err.stack` and any `.cause` to
+    // give the user something actionable in the red banner.
+    const msg = err instanceof Error
+      ? `${err.name}: ${err.message}`
+      : String(err);
+    const stack = err instanceof Error && err.stack ? `\n${err.stack.split("\n").slice(0, 4).join("\n")}` : "";
+    pushLog(`Error details: ${msg}${stack}`);
+    videoError.value = `播放器初始化失败: ${msg}`;
   }
 }
 
@@ -854,6 +862,16 @@ const retestLatency = async () => {
   height: 100% !important;
   background: #000;
   font-family: inherit;
+}
+
+/* ── Bottom spacing — push controls further from the screen edge ──
+   Default `--art-bottom-offset` is 20px which feels too tight when the
+   player fills the full viewport. Bump it to 40px so the control bar
+   sits comfortably above the bottom of the window / dialog, matching
+   the spacing of the title bar at the top.
+*/
+.art-video-player {
+  --art-bottom-offset: 40px !important;
 }
 
 /* Video fills player with object-contain */
