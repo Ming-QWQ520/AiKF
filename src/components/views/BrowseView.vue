@@ -176,14 +176,14 @@ watch(() => filters.value.skip, () => window.scrollTo({ top: 0, behavior: "smoot
         没有符合条件的番剧，试试调整筛选
       </div>
       <!-- Dynamic responsive grid. Column count is computed in JS based on
-           the actual measured container width (via ResizeObserver). This is
-           the ONLY reliable way to prevent overflow — CSS auto-fill doesn't
-           account for scrollbars / subpixel rounding / hidden overflow. -->
+           the actual measured container width (via ResizeObserver). Container
+           has overflow:hidden + contain:layout + maxWidth:100% as triple
+           protection against any subpixel rounding or scrollbar timing issues. -->
       <div
         v-else
         ref="gridContainerRef"
         class="min-w-0 w-full overflow-hidden"
-        :style="gridStyle"
+        :style="{ ...gridStyle, contain: 'layout', maxWidth: '100%' }"
       >
         <button
           v-for="item in items" :key="item.id"

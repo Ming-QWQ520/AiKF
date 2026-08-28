@@ -69,7 +69,12 @@ export function useResponsiveGrid(options: ResponsiveGridOptions = {}) {
     // Mathematical max cols that fit without overflow:
     //   cols * minWidth + (cols - 1) * gap <= available
     //   cols <= (available + gap) / (minWidth + gap)
-    const cols = Math.max(1, Math.floor((available + gap) / (minWidth + gap)));
+    // Subtract 1px safety margin to handle subpixel rounding (e.g. when
+    // available = 976.5px, floor((976.5 + 12) / 172) = 5, but browser
+    // might render 6 columns due to rounding). The -1 forces one fewer
+    // column when the result is very close to the boundary.
+    const raw = (available + gap) / (minWidth + gap);
+    const cols = Math.max(1, Math.floor(raw - 0.01));
     colCount.value = cols;
   };
 

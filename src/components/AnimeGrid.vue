@@ -37,12 +37,14 @@ const { containerRef, style } = useResponsiveGrid({
     </svg>
     <p class="text-sm text-muted-foreground">{{ emptyHint ?? "暂无内容" }}</p>
   </div>
-  <!-- Dynamic responsive grid — column count computed via ResizeObserver. -->
+  <!-- Dynamic responsive grid — column count computed via ResizeObserver.
+       Container has overflow:hidden + contain:layout to prevent any child
+       from causing horizontal overflow even if column count calc is off. -->
   <div
     v-else
     ref="containerRef"
     :class="cn('min-w-0 w-full overflow-hidden')"
-    :style="style"
+    :style="{ ...style, contain: 'layout', maxWidth: '100%' }"
   >
     <AnimeCard
       v-for="(item, i) in items"

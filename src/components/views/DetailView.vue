@@ -124,7 +124,7 @@ const fmtCommentDate = (ts: number) => {
 
 <template>
   <div v-if="ui.detailId == null" class="mx-auto mt-20 max-w-md rounded-2xl bg-card p-10 text-center text-muted-foreground">未选择番剧</div>
-  <div v-else class="mx-auto max-w-[1200px]">
+  <div v-else class="mx-auto min-w-0 w-full max-w-[1200px] overflow-x-hidden">
     <button @click="ui.setView('discover')" class="mb-4 flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
       <ArrowLeft class="h-4 w-4" /> 返回
     </button>
@@ -207,17 +207,17 @@ const fmtCommentDate = (ts: number) => {
     </div>
 
     <!-- Tab content -->
-    <div class="mt-6">
+    <div class="mt-6 min-w-0">
       <!-- Episodes -->
       <div v-if="activeTab === 'episodes'">
         <div v-if="!episodes || episodes.length === 0" class="py-8 text-center text-sm text-muted-foreground">暂无剧集</div>
-        <div v-else class="flex flex-wrap gap-2">
+        <div v-else class="flex flex-wrap gap-2 min-w-0">
           <button v-for="ep in episodes" :key="ep.sort" @click="handlePlay(ep.sort)" :class="cn('flex h-10 min-w-[2.5rem] items-center justify-center rounded-lg px-3 text-sm font-medium transition-colors', ep.sort === 1 ? 'bg-primary text-primary-foreground' : 'bg-foreground/5 text-foreground hover:bg-foreground/10')">{{ ep.sort }}</button>
         </div>
         <!-- Characters -->
-        <div v-if="characters && characters.length > 0" class="mt-8">
+        <div v-if="characters && characters.length > 0" class="mt-8 min-w-0">
           <h4 class="mb-3 text-sm font-bold text-foreground">角色 · 声优</h4>
-          <div class="no-scrollbar flex gap-3 overflow-x-auto pb-1">
+          <div class="no-scrollbar flex min-w-0 gap-3 overflow-x-auto pb-1">
             <div v-for="c in characters" :key="c.id" class="glass w-28 shrink-0 rounded-xl p-2 text-center">
               <CoverImage :src="c.image" :alt="c.name" ratio="square" class="mx-auto w-full" rounded="rounded-lg" />
               <p class="mt-1 line-clamp-1 text-xs font-semibold text-foreground">{{ c.name }}</p>
