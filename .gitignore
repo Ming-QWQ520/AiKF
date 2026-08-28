@@ -12,6 +12,14 @@ dist
 dist-ssr
 *.local
 
+# Vendored ArtPlayer Anich Edition — its `dist/` directory contains the
+# precompiled bundle produced by the ArtPlayer repo's GitHub Actions.
+# Without this exception, the global `dist` rule above would strip the
+# vendored bundle from the repo and break `pnpm install` / `vite build`
+# in CI clones of this repository.
+!third_party/artplayer-anich/dist/
+!third_party/artplayer-anich/dist/**
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
