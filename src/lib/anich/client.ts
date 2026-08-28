@@ -10,15 +10,28 @@
  */
 
 import { invoke } from "@tauri-apps/api/core";
+import Artplayer from "artplayer";
 import {
   parseBangumiCharacters,
   parseBangumiLatest,
-  parseBangumiList,
   parseBangumiPersons,
   parseBangumiRelated,
   parseEpisodes,
-  parseVOD,
 } from "./parsers";
+
+// ── Anich SDK parsers come from the customized ArtPlayer bundle ──
+// AiKF delegates VOD / danmaku / bangumi-list / playback-URL decoding
+// to the `Artplayer.anich` namespace shipped inside the vendored
+// ArtPlayer Anich Edition (`third_party/artplayer-anich`). This keeps
+// a single source of truth for the wire-format decoders — the JS port
+// is shipped inside ArtPlayer, and AiKF simply calls into it.
+const anich = Artplayer.anich;
+const {
+  parseVOD,
+  parseDanmakuPage,
+  parseBangumiList,
+  decodePlaybackURL,
+} = anich;
 import type {
   BangumiCalendar,
   BangumiCharacterDetail,
@@ -111,37 +124,15 @@ async function proxyGet<T>(path: string): Promise<T> {
   return json.data as T;
 }
 
-/* ── Playback URL decoding ── */
-
-function decodeBase64Flex(s: string): string {
-  const clean = s.replace(/[\r\n\t ]/g, "");
-  const padded = clean + "=".repeat((4 - (clean.length % 4)) % 4);
-  const variants: { enc: "std" | "url"; pad: boolean }[] = [
-    { enc: "std", pad: true },
-    { enc: "url", pad: true },
-    { enc: "std", pad: false },
-    { enc: "url", pad: false },
-  ];
-  let lastErr: unknown = null;
-  for (const v of variants) {
-    const input = v.pad ? padded : clean.replace(/=+$/, "");
-    try {
-      const bin = atob(v.enc === "url" ? input.replace(/-/g, "+").replace(/_/g, "/") : input);
-      const bytes = new Uint8Array(bin.length);
-      for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
-      return new TextDecoder().decode(bytes);
-    } catch (e) {
-      lastErr = e;
-    }
-  }
-  throw new Error(`base64 decode failed: ${lastErr}`);
-}
-
-export function decodePlaybackURL(raw: string): string {
-  if (raw.startsWith("http://") || raw.startsWith("https://")) return raw;
-  if (raw.length < 4) throw new Error("playback URL token is too short");
-  return decodeBase64Flex(raw.slice(0, 3) + raw.slice(4));
-}
+/* ── Playback URL decoding ──
+ * `decodePlaybackURL` and `decodeBase64Flex` are now provided by
+ * `Artplayer.anich` from the vendored ArtPlayer Anich Edition bundle.
+ * The bundled JS implementation is byte-for-byte compatible with the
+ * previous TS port (both were derived from anichsdk Go source). We
+ * re-export it here so existing call sites that import from this
+ * module keep working.
+ */
+export { decodePlaybackURL };
 
 /* ── Public API (dual-mode) ── */
 
@@ -265,7 +256,8 @@ export async function getCommentReplies(commentID: string, skip?: string): Promi
 
 /* ── Danmaku (弹幕) ── */
 
-import { parseDanmakuPage } from "./parsers";
+// `parseDanmakuPage` is provided by the bundled `Artplayer.anich`
+// namespace — see the destructuring at the top of this file.
 import type { DanmakuItem, DanmakuPage, PostDanmakuRequest } from "./types";
 
 const DANMAKU_PAGE_SIZE = 3000;

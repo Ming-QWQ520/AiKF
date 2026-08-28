@@ -14,6 +14,18 @@ import { cn } from "@/lib/utils";
 import { Minus, Square } from "lucide-vue-next";
 import { invoke } from "@tauri-apps/api/core";
 
+// ── Reference the bundled ArtPlayer Anich Edition preset + helpers ──
+// `Artplayer.presets.anich(...)` returns a ready-to-use option object
+// pre-wired with:
+//   - `blankSlate: true`  → force-disable all 11 built-in control buttons
+//   - `anichTheme: true`  → attach the Anich rose-theme CSS class
+//   - 7 custom controls (play / mute / next / danmaku / web-fs / fs / settings)
+//   - 1 settings submenu (playback speed)
+//   - `customType.m3u8` with the new destroy lifecycle contract
+// Host overrides (Hls.js config, plugins, callbacks) get layered on top.
+const { presets } = Artplayer;
+const { toDanmukuItems } = presets;
+
 // ─── Logging ──────────────────────────────────────────────────────────────
 const LOG_PREFIX = "%c[AiKF Player]";
 const LOG_STYLE = "color:#e879f9;font-weight:bold";
@@ -221,176 +233,117 @@ function createArt(container: HTMLElement, url: string) {
   };
 
   try {
-    // ── Minimal custom controls ──
-    // We disable ALL of ArtPlayer's built-in control buttons and only add
-    // the ones we actually need, in a clean order. This avoids the clutter
-    // (multiple volume buttons, screenshot, flip, fast-forward, etc.) that
-    // was overwhelming the control bar.
-    //
-    // Layout (left → right):
-    //   [Play/Pause] [Volume]    [progress bar fills middle]    [Time]
-    //   [Next Ep] [PiP] [Fullscreen] [Settings]
-    const controls: any[] = [
-      // ── Left side: play/pause + volume ──
-      {
-        position: "left",
-        html: '<svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>',
-        tooltip: "播放/暂停",
-        click: function () { art?.toggle(); },
-      },
-      {
-        position: "left",
-        html: '<svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/></svg>',
-        tooltip: "音量",
-        click: function () { (art as any)?.toggleMute?.(); },
-      },
-      // ── Right side: next episode + danmaku toggle + PiP + fullscreen + settings ──
-      {
-        position: "right",
-        html: '<svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 4 15 12 5 20 5 4"/><line x1="19" y1="5" x2="19" y2="19"/></svg>',
-        tooltip: "下一话",
-        click: function () {
-          const next = episodesList.value.find((e) => e.sort === episode.value + 1);
-          if (next) switchEpisode(next.sort, next.title);
-        },
-      },
-      // Danmaku (弹幕) toggle — switches danmaku visibility on/off
-      {
-        position: "right",
-        html: '<svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>',
-        tooltip: "弹幕",
-        style: { opacity: 1 },
-        click: function () {
-          danmakuEnabled.value = !danmakuEnabled.value;
-          if (art && (art as any).danmuku) {
-            if (danmakuEnabled.value) {
-              (art as any).danmuku.show();
-              pushLog("Danmaku enabled");
-            } else {
-              (art as any).danmuku.hide();
-              pushLog("Danmaku disabled");
-            }
-          }
-        },
-      },
-      {
-        position: "right",
-        html: '<svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="14" rx="2"/><path d="M7 21h10"/></svg>',
-        tooltip: "网页全屏",
-        click: function () { (art as any)?.fullscreenWeb?.toggle?.(); },
-      },
-      {
-        position: "right",
-        html: '<svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3"/><path d="M21 8V5a2 2 0 0 0-2-2h-3"/><path d="M3 16v3a2 2 0 0 0 2 2h3"/><path d="M16 21h3a2 2 0 0 0 2-2v-3"/></svg>',
-        tooltip: "全屏",
-        click: function () { (art as any)?.fullscreen?.toggle?.(); },
-      },
-      {
-        position: "right",
-        html: '<svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>',
-        tooltip: "设置",
-        click: function () { (art as any)?.setting?.show?.(); },
-      },
-    ];
-
-    // Settings panel — playback rate only
-    const settings: any[] = [
-      {
-        html: "播放速度",
-        icon: '<svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>',
-        selector: [
-          { html: "0.5x", value: 0.5 },
-          { html: "0.75x", value: 0.75 },
-          { html: "1x (默认)", value: 1, default: true },
-          { html: "1.25x", value: 1.25 },
-          { html: "1.5x", value: 1.5 },
-          { html: "2x", value: 2 },
-        ],
-        onSelect: function (item: { html: string; value: number }) {
-          if (art) art.playbackRate = item.value;
-          return item.html;
-        },
-      },
-    ];
-
-    const options: any = {
-      container: container,
-      url: url,
+    // ── Build options via the bundled `Artplayer.presets.anich()` factory ──
+    // The preset already wires:
+    //   - blankSlate: true      (force-disable 11 built-in control buttons)
+    //   - anichTheme: true      (apply Anich rose-theme CSS class)
+    //   - 7 custom controls + 1 settings submenu
+    //   - customType.m3u8 with the new destroy lifecycle contract
+    // We pass an `m3u8Loader` that returns a `{ destroy() }` handle so the
+    // ArtPlayer core can release Hls.js when the source switches (via the
+    // new `customtype:destroy` event).
+    const preset = presets.anich({
+      container,
+      url,
       type: isHls ? "m3u8" : "",
-      customType: isHls ? {
-        m3u8: function (video: HTMLVideoElement, src: string) {
-          import("hls.js").then((mod) => {
-            const Hls = mod.default;
-            if (Hls.isSupported()) {
-              const h = new Hls(hlsConfig);
-              h.on(Hls.Events.ERROR, (_e, data) => {
-                if (data.fatal) {
-                  pushLog(`HLS fatal: ${data.details || data.type}`);
-                  if (data.type === Hls.ErrorTypes.NETWORK_ERROR) h.startLoad();
-                  else if (data.type === Hls.ErrorTypes.MEDIA_ERROR) h.recoverMediaError();
-                  else {
-                    videoError.value = `播放失败：${data.details || data.type}`;
-                    tryAutoAdvance(effectiveIdx.value);
-                  }
-                }
-              });
-              h.loadSource(src);
-              h.attachMedia(video);
-            } else if (video.canPlayType("application/vnd.apple.mpegurl")) {
-              video.src = src;
-            }
-          });
-        },
-      } : {},
+      anichTheme: true,
       autoplay: !savedVideoState,
-      autoSize: false,
-      autoMini: false,
-      // ── Disable ALL ArtPlayer built-in buttons to avoid clutter ──
-      // We add our own controls via the `controls` array below.
-      screenshot: false,    // remove screenshot button (clutter)
-      setting: false,       // we add our own settings button
-      loop: false,
-      flip: false,          // remove flip
-      playbackRate: false,  // we add our own in settings
-      aspectRatio: false,   // not needed for anime
-      fullscreen: false,    // we add our own fullscreen button
-      fullscreenWeb: false, // we add our own web-fullscreen button
-      pip: false,           // we use our own custom PiP (more reliable)
-      airplay: false,
-      fastForward: false,   // remove fast-forward (we have +/- 10s in hotkeys)
-      hotkey: true,          // keep keyboard shortcuts (space, arrows, etc.)
-      theme: "#fb7185",
       volume: 1,
       lang: "zh-cn",
-      title: "",
-      controls: controls,
-      settings: settings,
-      // ── Plugins ──
+      // Plugins — host still owns danmaku + auto-thumbnail plugin instances
+      // because the Anich Edition core deliberately does NOT bundle these
+      // (so the core stays lean and the host can pick versions).
       plugins: [
-        // Auto-generate video thumbnails for progress bar hover preview
-        artplayerPluginAutoThumbnail({
-          width: 160,
-          number: 80,
-          scale: 1,
-        }),
-        // Danmaku (弹幕) plugin — displays scrolling comments over the video.
-        // Danmaku data is loaded asynchronously via anich.danmaku() and
-        // pushed to the plugin via art.danmuku.load().
+        artplayerPluginAutoThumbnail({ width: 160, number: 80, scale: 1 }),
         artplayerPluginDanmuku({
-          danmuku: [],  // initial empty — loaded async in watch(epKey)
-          speed: 5,        // pixels per second
-          opacity: 1,      // 0-1
-          fontSize: 16,    // base font size (px)
+          danmuku: [],          // initial empty — loaded async in watch(epKey)
+          speed: 5,
+          opacity: 1,
+          fontSize: 16,
           color: "#ffffff",
-          mode: 0,         // 0=scroll, 1=top, 2=bottom
+          mode: 0,
           antiOverlap: true,
           fontFamily: "inherit",
-          disable: false,   // controlled via toggle button
+          disable: false,
         } as any),
       ],
+      // m3u8 loader: ArtPlayer will call this when `type === "m3u8"`.
+      // Returning a `{ destroy }` handle lets the core clean up the Hls
+      // instance via the new `customtype:destroy` event (added in the
+      // Anich Edition) instead of leaking it.
+      m3u8Loader: isHls
+        ? (video: HTMLVideoElement, src: string) => {
+            // Lazy-import hls.js to keep the initial bundle small for
+            // direct-media sources.
+            let hls: any = null;
+            import("hls.js").then((mod) => {
+              const Hls = mod.default;
+              if (Hls.isSupported()) {
+                hls = new Hls(hlsConfig);
+                hls.on(Hls.Events.ERROR, (_e: unknown, data: any) => {
+                  if (data.fatal) {
+                    pushLog(`HLS fatal: ${data.details || data.type}`);
+                    if (data.type === Hls.ErrorTypes.NETWORK_ERROR) hls.startLoad();
+                    else if (data.type === Hls.ErrorTypes.MEDIA_ERROR) hls.recoverMediaError();
+                    else {
+                      videoError.value = `播放失败：${data.details || data.type}`;
+                      tryAutoAdvance(effectiveIdx.value);
+                    }
+                  }
+                });
+                hls.loadSource(src);
+                hls.attachMedia(video);
+              } else if (video.canPlayType("application/vnd.apple.mpegurl")) {
+                video.src = src;
+              }
+            });
+            return {
+              hls: { destroy: () => { try { hls?.destroy?.(); } catch (e) { pushLog(`Hls destroy threw: ${e}`); } } },
+              destroy: () => { try { hls?.destroy?.(); } catch (e) { pushLog(`Hls destroy threw: ${e}`); } },
+            };
+          }
+        : undefined,
+    });
+
+    const options: any = {
+      ...preset,
+      // ── Host-owned overrides ──
+      // (Plugins from the preset get merged — we just re-state them so
+      //  TypeScript sees the explicit object shape.)
+      plugins: preset.plugins,
+      controls: preset.controls,
+      settings: preset.settings,
+      customType: preset.customType,
+      title: "",
+      hotkey: true,
+      autoSize: false,
+      autoMini: false,
     };
 
     art = new Artplayer(options);
+
+    // ── Anich Edition events ──
+    // `anich:next-episode` fires when the user clicks the next-episode
+    // control button that the preset built. AiKF owns the actual episode
+    // switching logic so we hook it here.
+    art.on("anich:next-episode" as any, () => {
+      const next = episodesList.value.find((e) => e.sort === episode.value + 1);
+      if (next) {
+        pushLog(`anich:next-episode → switch to ep ${next.sort}`);
+        switchEpisode(next.sort, next.title);
+      } else {
+        pushLog("anich:next-episode → no next episode available");
+      }
+    });
+
+    // `customtype:destroy` fires when ArtPlayer tears down the current
+    // `customType.m3u8` handle. Host apps can use this hook to release
+    // references kept outside the player. Our m3u8Loader already returns
+    // a `destroy()` handle that ArtPlayer calls automatically — this
+    // event is just an observability hook so we can log the lifecycle.
+    art.on("customtype:destroy" as any, () => {
+      pushLog("customtype:destroy — Hls.js handle released by ArtPlayer");
+    });
 
     // ── Event registration (after construction) ──
     art.on("ready", () => {
@@ -494,15 +447,13 @@ const danmakuList = ref<DanmakuItem[]>([]);
 // const danmakuInputType = ref(0);  // 0=scroll, 1=top, 2=bottom
 // const danmakuInputColor = ref("#ffffff");
 
-/** Convert API DanmakuItem[] → ArtPlayer danmuku plugin format. */
+/** Convert API DanmakuItem[] → ArtPlayer danmuku plugin format.
+ *  Delegates to the bundled `Artplayer.presets.toDanmukuItems` helper
+ *  shipped inside the ArtPlayer Anich Edition bundle — keeps the
+ *  color / mode conversion logic in one place.
+ */
 function toArtDanmaku(items: DanmakuItem[]): any[] {
-  return items.map((item) => ({
-    text: item.text,
-    time: item.time,
-    mode: item.type === 1 ? "top" : item.type === 2 ? "bottom" : "scroll",
-    color: item.color || "#ffffff",
-    border: false,
-  }));
+  return toDanmukuItems(items as any[]);
 }
 
 // Load danmaku when episode changes (debounced — don't block video playback).
