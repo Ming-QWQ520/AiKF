@@ -14,9 +14,16 @@ const ui = useUIStore();
 
 // Two independent responsive grids — schedule grid and fresh grid. Each has
 // its own ResizeObserver-tracked container so they compute column counts
-// independently (e.g. when one is above the fold and one is below).
-const { containerRef: scheduleGridRef, style: scheduleGridStyle } = useResponsiveGrid({ minWidth: 150, gap: 12 });
-const { containerRef: freshGridRef, style: freshGridStyle } = useResponsiveGrid({ minWidth: 150, gap: 12 });
+// independently. Triggers on data length so the grid recomputes when data
+// arrives (skeleton → grid switch changes scrollbar → container width).
+const { containerRef: scheduleGridRef, style: scheduleGridStyle } = useResponsiveGrid({
+  minWidth: 150, gap: 12,
+  trigger: () => activeDayList.value.length,
+});
+const { containerRef: freshGridRef, style: freshGridStyle } = useResponsiveGrid({
+  minWidth: 150, gap: 12,
+  trigger: () => fresh.value.length,
+});
 
 const { data: latestData, isLoading: latestLoading } = useAsync(() => anich.latest(), { source: () => "latest" });
 const { data: calData, isLoading: calLoading } = useAsync(() => anich.calendar(), { source: () => "cal" });

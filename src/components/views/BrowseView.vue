@@ -16,7 +16,14 @@ const PAGE_SIZE = 24;
 
 // Bulletproof responsive grid — measures container width via ResizeObserver
 // and computes column count in JS. Never overflows (see composable docs).
-const { containerRef: gridContainerRef, style: gridStyle } = useResponsiveGrid({ minWidth: 160, gap: 12 });
+// Pass `trigger: () => items.value.length` so the grid recomputes when
+// data loads (skeleton → grid switch causes scrollbar to disappear,
+// which changes the container width).
+const { containerRef: gridContainerRef, style: gridStyle } = useResponsiveGrid({
+  minWidth: 160,
+  gap: 12,
+  trigger: () => items.value.length,
+});
 
 const TYPE_OPTIONS: { value?: BangumiType; label: string }[] = [
   { value: undefined, label: "全部" },

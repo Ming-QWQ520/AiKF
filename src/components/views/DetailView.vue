@@ -11,7 +11,14 @@ import { formatDate } from "@/lib/anich/format";
 import { cn } from "@/lib/utils";
 
 // Responsive grid for the "related anime" tab.
-const { containerRef: relatedGridRef, style: relatedGridStyle } = useResponsiveGrid({ minWidth: 160, gap: 12 });
+// Trigger on related.length AND activeTab so the grid recomputes when
+// the user switches to the "related" tab (the container was hidden before,
+// so clientWidth was 0).
+const { containerRef: relatedGridRef, style: relatedGridStyle } = useResponsiveGrid({
+  minWidth: 160,
+  gap: 12,
+  trigger: () => (related.value?.length ?? 0) + (activeTab.value === 'related' ? 1 : 0),
+});
 
 const ui = useUIStore();
 const library = useLibraryStore();

@@ -20,7 +20,11 @@ const active = computed(() => days.value.find((d) => d.sort % 7 === activeDay.va
 
 // Responsive grid for horizontal cards (cover + text). Each card needs ~280px
 // minimum width to display the cover + 2-line title + genre tags comfortably.
-const { containerRef: calGridRef, style: calGridStyle } = useResponsiveGrid({ minWidth: 280, gap: 12 });
+// Trigger on active.list.length so grid recomputes when day changes.
+const { containerRef: calGridRef, style: calGridStyle } = useResponsiveGrid({
+  minWidth: 280, gap: 12,
+  trigger: () => active.value?.list.length ?? 0,
+});
 </script>
 
 <template>
