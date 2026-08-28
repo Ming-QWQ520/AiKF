@@ -59,7 +59,7 @@
 | 样式 | Tailwind CSS 4 + 自定义 Liquid Glass |
 | UI 组件库 | **Naive UI 2.45** |
 | 图标 | lucide-vue-next + Naive UI NIcon |
-| 视频播放器 | hls.js |
+| 视频播放器 | hls.js + [ArtPlayer Anich Edition](./third_party/artplayer-anich/) (定制 fork, 内置 Anich SDK JS 端口) |
 | HTTP | 自定义 Rust 命令 (reqwest) |
 | 动画 | GSAP |
 | 包管理器 | pnpm |
