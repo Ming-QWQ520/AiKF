@@ -9,7 +9,7 @@ defineProps<{
 <template>
   <section
     :style="{ animationDelay: `${delay ?? 0}s` }"
-    :class="cn('glass glass-sheen rounded-3xl p-4 sm:p-5 fade-up', $attrs.class as string)"
+    :class="cn('glass glass-sheen rounded-3xl p-4 sm:p-5 fade-up min-w-0 w-full overflow-hidden', $attrs.class as string)"
   >
     <slot />
   </section>

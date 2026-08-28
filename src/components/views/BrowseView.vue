@@ -112,48 +112,48 @@ watch(() => filters.value.skip, () => window.scrollTo({ top: 0, behavior: "smoot
         </button>
       </div>
 
-      <div class="mt-4 flex flex-col gap-3">
+      <div class="mt-4 flex min-w-0 flex-col gap-3">
         <!-- 类型 -->
-        <div class="flex items-start gap-3">
+        <div class="flex min-w-0 items-start gap-3">
           <span class="mt-1.5 w-16 shrink-0 text-xs font-medium text-muted-foreground">类型</span>
-          <div class="flex flex-wrap gap-1.5">
+          <div class="flex min-w-0 flex-wrap gap-1.5">
             <button v-for="o in TYPE_OPTIONS" :key="o.label" @click="setFilter('type', o.value)" :class="cn('state-layer whitespace-nowrap rounded-full px-3 py-1.5 text-xs font-medium transition-colors', filters.type === o.value ? 'bg-primary text-primary-foreground' : 'bg-foreground/5 text-muted-foreground hover:bg-foreground/10 hover:text-foreground')">{{ o.label }}</button>
           </div>
         </div>
         <!-- 语言 -->
-        <div class="flex items-start gap-3">
+        <div class="flex min-w-0 items-start gap-3">
           <span class="mt-1.5 w-16 shrink-0 text-xs font-medium text-muted-foreground">语言</span>
-          <div class="flex flex-wrap gap-1.5">
+          <div class="flex min-w-0 flex-wrap gap-1.5">
             <button v-for="o in LANG_OPTIONS" :key="o.label" @click="setFilter('lang', o.value)" :class="cn('state-layer whitespace-nowrap rounded-full px-3 py-1.5 text-xs font-medium transition-colors', filters.lang === o.value ? 'bg-primary text-primary-foreground' : 'bg-foreground/5 text-muted-foreground hover:bg-foreground/10 hover:text-foreground')">{{ o.label }}</button>
           </div>
         </div>
         <!-- 年份 -->
-        <div class="flex items-start gap-3">
+        <div class="flex min-w-0 items-start gap-3">
           <span class="mt-1.5 w-16 shrink-0 text-xs font-medium text-muted-foreground">年份</span>
-          <div class="flex flex-wrap gap-1.5">
+          <div class="flex min-w-0 flex-wrap gap-1.5">
             <button v-for="y in YEAR_OPTIONS" :key="y || 'all'" @click="setFilter('year', y)" :class="cn('state-layer whitespace-nowrap rounded-full px-3 py-1.5 text-xs font-medium transition-colors', filters.year === y ? 'bg-primary text-primary-foreground' : 'bg-foreground/5 text-muted-foreground hover:bg-foreground/10 hover:text-foreground')">{{ YEAR_LABELS[y] ?? y }}</button>
           </div>
         </div>
-        <!-- 类型标签 -->
-        <div class="flex items-start gap-3">
+        <!-- 类型标签 — flex-wrap so tags wrap to next line instead of overflowing -->
+        <div class="flex min-w-0 items-start gap-3">
           <span class="mt-1.5 w-16 shrink-0 text-xs font-medium text-muted-foreground">类型标签</span>
-          <div class="no-scrollbar flex flex-nowrap gap-1.5 overflow-x-auto">
+          <div class="flex min-w-0 flex-wrap gap-1.5">
             <button @click="setFilter('genre', undefined)" :class="cn('state-layer whitespace-nowrap rounded-full px-3 py-1.5 text-xs font-medium transition-colors', !filters.genre ? 'bg-primary text-primary-foreground' : 'bg-foreground/5 text-muted-foreground hover:bg-foreground/10 hover:text-foreground')">全部</button>
             <button v-for="g in (genresData ?? [])" :key="g.name" @click="setFilter('genre', g.name)" :class="cn('state-layer whitespace-nowrap rounded-full px-3 py-1.5 text-xs font-medium transition-colors', filters.genre === g.name ? 'bg-primary text-primary-foreground' : 'bg-foreground/5 text-muted-foreground hover:bg-foreground/10 hover:text-foreground')">{{ g.name }} <span class="ml-1 text-[10px] opacity-60">{{ g.count }}</span></button>
           </div>
         </div>
-        <!-- 标记 -->
-        <div class="flex items-start gap-3">
+        <!-- 标记 — flex-wrap so tags wrap to next line instead of overflowing -->
+        <div class="flex min-w-0 items-start gap-3">
           <span class="mt-1.5 w-16 shrink-0 text-xs font-medium text-muted-foreground">标记</span>
-          <div class="no-scrollbar flex flex-nowrap gap-1.5 overflow-x-auto">
+          <div class="flex min-w-0 flex-wrap gap-1.5">
             <button @click="setFilter('mark', undefined)" :class="cn('state-layer whitespace-nowrap rounded-full px-3 py-1.5 text-xs font-medium transition-colors', !filters.mark ? 'bg-primary text-primary-foreground' : 'bg-foreground/5 text-muted-foreground hover:bg-foreground/10 hover:text-foreground')">全部</button>
             <button v-for="m in (marksData ?? [])" :key="m.name" @click="setFilter('mark', m.name)" :class="cn('state-layer whitespace-nowrap rounded-full px-3 py-1.5 text-xs font-medium transition-colors', filters.mark === m.name ? 'bg-primary text-primary-foreground' : 'bg-foreground/5 text-muted-foreground hover:bg-foreground/10 hover:text-foreground')">{{ m.name }} <span class="ml-1 text-[10px] opacity-60">{{ m.count }}</span></button>
           </div>
         </div>
         <!-- 排序 -->
-        <div class="flex items-start gap-3">
+        <div class="flex min-w-0 items-start gap-3">
           <span class="mt-1.5 w-16 shrink-0 text-xs font-medium text-muted-foreground">排序</span>
-          <div class="flex flex-wrap gap-1.5">
+          <div class="flex min-w-0 flex-wrap gap-1.5">
             <button v-for="o in SORT_OPTIONS" :key="o.value" @click="sortKey = o.value" :class="cn('state-layer whitespace-nowrap rounded-full px-3 py-1.5 text-xs font-medium transition-colors', sortKey === o.value ? 'bg-primary text-primary-foreground' : 'bg-foreground/5 text-muted-foreground hover:bg-foreground/10 hover:text-foreground')">{{ o.label }}</button>
           </div>
         </div>
@@ -161,7 +161,7 @@ watch(() => filters.value.skip, () => window.scrollTo({ top: 0, behavior: "smoot
     </SectionCard>
 
     <!-- Results -->
-    <section class="flex flex-col gap-4">
+    <section class="flex min-w-0 flex-col gap-4">
       <div class="flex items-center justify-between">
         <p class="text-sm text-muted-foreground">{{ isLoading ? "加载中…" : `共 ${items.length}${hasNext ? "+" : ""} 部结果` }}</p>
         <div class="flex items-center gap-1.5">
