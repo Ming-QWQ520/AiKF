@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, onBeforeUnmount, nextTick } from "vue";
+import { ref, computed, onMounted, onBeforeUnmount, nextTick, watch } from "vue";
 import { Compass, CalendarDays, LayoutGrid, Bookmark, Search as SearchIcon, ChevronDown, Settings as SettingsIcon, PanelLeftClose, PanelLeftOpen } from "lucide-vue-next";
 import { useUIStore, type ViewKey } from "@/stores/ui";
 import { useLibraryStore } from "@/stores/library";
@@ -33,6 +33,12 @@ const sidebarCollapsed = computed(() => !isMobile.value && winWidth.value < 1024
 const manualCollapsed = ref<boolean | null>(null);
 const effectiveCollapsed = computed(() => manualCollapsed.value ?? sidebarCollapsed.value);
 const toggleSidebar = () => { manualCollapsed.value = !effectiveCollapsed.value; };
+
+// Sync sidebar state to UI store so all views can react to it (e.g. to
+// recompute responsive grids when the sidebar toggles, changing main width).
+watch(effectiveCollapsed, (collapsed) => {
+  ui.setSidebarCollapsed(collapsed);
+}, { immediate: true });
 
 const switchView = (key: ViewKey) => {
   if (key === ui.view) return;

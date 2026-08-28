@@ -14,15 +14,15 @@ const ui = useUIStore();
 
 // Two independent responsive grids — schedule grid and fresh grid. Each has
 // its own ResizeObserver-tracked container so they compute column counts
-// independently. Triggers on data length so the grid recomputes when data
-// arrives (skeleton → grid switch changes scrollbar → container width).
+// independently. Triggers on data length + sidebar state so the grid
+// recomputes when data arrives OR sidebar toggles (changing main width).
 const { containerRef: scheduleGridRef, style: scheduleGridStyle } = useResponsiveGrid({
   minWidth: 150, gap: 12,
-  trigger: () => activeDayList.value.length,
+  trigger: () => `${activeDayList.value.length}-${ui.sidebarCollapsed}`,
 });
 const { containerRef: freshGridRef, style: freshGridStyle } = useResponsiveGrid({
   minWidth: 150, gap: 12,
-  trigger: () => fresh.value.length,
+  trigger: () => `${fresh.value.length}-${ui.sidebarCollapsed}`,
 });
 
 const { data: latestData, isLoading: latestLoading } = useAsync(() => anich.latest(), { source: () => "latest" });

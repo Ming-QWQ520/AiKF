@@ -10,16 +10,6 @@ import CoverImage from "@/components/CoverImage.vue";
 import { formatDate } from "@/lib/anich/format";
 import { cn } from "@/lib/utils";
 
-// Responsive grid for the "related anime" tab.
-// Trigger on related.length AND activeTab so the grid recomputes when
-// the user switches to the "related" tab (the container was hidden before,
-// so clientWidth was 0).
-const { containerRef: relatedGridRef, style: relatedGridStyle } = useResponsiveGrid({
-  minWidth: 160,
-  gap: 12,
-  trigger: () => (related.value?.length ?? 0) + (activeTab.value === 'related' ? 1 : 0),
-});
-
 const ui = useUIStore();
 const library = useLibraryStore();
 
@@ -28,6 +18,31 @@ const { data: detail, isLoading: detailLoading } = useAsync(() => anich.detail(i
 const { data: episodes } = useAsync(() => anich.episodes(idRef.value!), { enabled: idRef, source: idRef });
 const { data: related } = useAsync(() => anich.related(idRef.value!), { enabled: idRef, source: idRef });
 const { data: characters } = useAsync(() => anich.characters(idRef.value!), { enabled: idRef, source: idRef });
+
+const entry = computed(() => (ui.detailId != null ? library.entries[ui.detailId] : undefined));
+const cover = computed(() => detail.value?.image || ui.detailCover);
+const bestRating = computed(() => detail.value?.rating?.find((r) => r.score > 0));
+const activeTab = ref<"episodes" | "comments" | "related">("episodes");
+
+// Responsive grid for the "related anime" tab.
+// Trigger on related.length + activeTab + sidebar state so the grid
+// recomputes when the user switches to the "related" tab (container was
+// hidden before, so clientWidth was 0) OR when sidebar toggles.
+const { containerRef: relatedGridRef, style: relatedGridStyle } = useResponsiveGrid({
+  minWidth: 160,
+  gap: 12,
+  trigger: () => `${related.value?.length ?? 0}-${activeTab.value === 'related' ? 1 : 0}-${ui.sidebarCollapsed}`,
+});
+
+// Responsive grid for the "characters" section.
+// Trigger on characters.length + sidebar state so the grid recomputes
+// when data loads OR sidebar toggles.
+// Each character card needs ~112px (w-28 = 7rem) minimum.
+const { containerRef: charGridRef, style: charGridStyle } = useResponsiveGrid({
+  minWidth: 112,
+  gap: 12,
+  trigger: () => `${characters.value?.length ?? 0}-${ui.sidebarCollapsed}`,
+});
 
 // When detail data loads, sync metadata into the library entry (if it exists).
 // This repairs legacy entries whose totalEpisodes was 0 (created before the
@@ -91,11 +106,6 @@ const toggleReplies = async (commentId: string) => {
     repliesLoading.value.delete(commentId);
   }
 };
-
-const entry = computed(() => (ui.detailId != null ? library.entries[ui.detailId] : undefined));
-const cover = computed(() => detail.value?.image || ui.detailCover);
-const bestRating = computed(() => detail.value?.rating?.find((r) => r.score > 0));
-const activeTab = ref<"episodes" | "comments" | "related">("episodes");
 
 const handlePlay = (episode: number) => {
   if (!entry.value && detail.value) {
@@ -214,11 +224,15 @@ const fmtCommentDate = (ts: number) => {
         <div v-else class="flex flex-wrap gap-2 min-w-0">
           <button v-for="ep in episodes" :key="ep.sort" @click="handlePlay(ep.sort)" :class="cn('flex h-10 min-w-[2.5rem] items-center justify-center rounded-lg px-3 text-sm font-medium transition-colors', ep.sort === 1 ? 'bg-primary text-primary-foreground' : 'bg-foreground/5 text-foreground hover:bg-foreground/10')">{{ ep.sort }}</button>
         </div>
-        <!-- Characters -->
+        <!-- Characters — responsive grid (auto-fits column count to window) -->
         <div v-if="characters && characters.length > 0" class="mt-8 min-w-0">
           <h4 class="mb-3 text-sm font-bold text-foreground">角色 · 声优</h4>
-          <div class="no-scrollbar flex min-w-0 gap-3 overflow-x-auto pb-1">
-            <div v-for="c in characters" :key="c.id" class="glass w-28 shrink-0 rounded-xl p-2 text-center">
+          <div
+            ref="charGridRef"
+            class="min-w-0 w-full overflow-hidden"
+            :style="{ ...charGridStyle, contain: 'layout', maxWidth: '100%' }"
+          >
+            <div v-for="c in characters" :key="c.id" class="glass min-w-0 rounded-xl p-2 text-center">
               <CoverImage :src="c.image" :alt="c.name" ratio="square" class="mx-auto w-full" rounded="rounded-lg" />
               <p class="mt-1 line-clamp-1 text-xs font-semibold text-foreground">{{ c.name }}</p>
               <p class="line-clamp-1 text-[10px] text-primary">{{ c.role }}</p>

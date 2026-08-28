@@ -2,6 +2,9 @@
 import { cn } from "@/lib/utils";
 import AnimeCard from "./AnimeCard.vue";
 import { useResponsiveGrid } from "@/composables/useResponsiveGrid";
+import { useUIStore } from "@/stores/ui";
+
+const ui = useUIStore();
 
 const props = defineProps<{
   items: Array<{
@@ -20,13 +23,12 @@ const emit = defineEmits<{ (e: "select", id: number, cover?: string): void }>();
 
 // Bulletproof responsive grid — measures container width via ResizeObserver
 // and computes column count in JS. Never overflows (see composable docs).
-// Pass `trigger: () => props.items.length` so the grid recomputes when
-// data loads (skeleton → grid switch causes scrollbar to disappear,
-// which changes the container width).
+// Trigger combines items.length + sidebarCollapsed so the grid recomputes
+// when data loads OR when the sidebar toggles (changing main width).
 const { containerRef, style } = useResponsiveGrid({
   minWidth: 160,
   gap: 12,
-  trigger: () => props.items.length,
+  trigger: () => `${props.items.length}-${ui.sidebarCollapsed}`,
 });
 </script>
 

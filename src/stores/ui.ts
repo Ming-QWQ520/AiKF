@@ -34,6 +34,9 @@ interface UIState {
   searchQuery: string;
   browseFilters: BrowseFilters;
   player: PlayerState;
+  // Sidebar collapsed state — shared so all views can react to it (e.g. to
+  // recompute responsive grids when the sidebar toggles, changing main width).
+  sidebarCollapsed: boolean;
 }
 
 export const useUIStore = defineStore("ui", {
@@ -44,6 +47,7 @@ export const useUIStore = defineStore("ui", {
     searchQuery: "",
     browseFilters: { skip: 0 },
     player: { open: false, bangumiID: null, episode: 1, title: "", cover: "" },
+    sidebarCollapsed: false,
   }),
   actions: {
     setView(v: ViewKey) {
@@ -77,6 +81,9 @@ export const useUIStore = defineStore("ui", {
     },
     setPlayerEpisode(episode: number, title: string) {
       this.player = { ...this.player, episode, title };
+    },
+    setSidebarCollapsed(collapsed: boolean) {
+      this.sidebarCollapsed = collapsed;
     },
   },
 });
