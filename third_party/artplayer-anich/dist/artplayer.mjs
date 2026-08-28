@@ -5522,65 +5522,14 @@ function anichPreset(params = {}) {
   if (!container)
     throw new Error("anichPreset requires `container`");
   const controls = [
-    // mute toggle (icon swaps between volume / muted on `volumechange`)
-    {
-      position: "left",
-      html: ANICH_ICONS.volume,
-      tooltip: "静音",
-      click() {
-        this.toggleMute?.();
-      },
-      mounted($ref) {
-        this.on("video:volumechange", () => {
-          $ref.innerHTML = this.muted ? ANICH_ICONS.muted : ANICH_ICONS.volume;
-        });
-      }
-    },
     // next episode (host wires up the actual switching on `anich:next-episode`)
     {
-      position: "left",
+      name: "anichNextEpisode",
+      position: "right",
       html: ANICH_ICONS.next,
       tooltip: "下一集",
       click() {
         this.emit("anich:next-episode");
-      }
-    },
-    // danmaku toggle (show/hide)
-    {
-      position: "right",
-      html: ANICH_ICONS.danmaku,
-      tooltip: "弹幕",
-      click() {
-        if (this.danmuku) {
-          this.danmuku.show = !this.danmuku.show;
-        }
-      }
-    },
-    // web fullscreen
-    {
-      position: "right",
-      html: ANICH_ICONS.fullscreenWeb,
-      tooltip: "网页全屏",
-      click() {
-        this.fullscreenWeb?.toggle?.();
-      }
-    },
-    // real fullscreen
-    {
-      position: "right",
-      html: ANICH_ICONS.fullscreen,
-      tooltip: "全屏",
-      click() {
-        this.fullscreen?.toggle?.();
-      }
-    },
-    // settings menu
-    {
-      position: "right",
-      html: ANICH_ICONS.settings,
-      tooltip: "设置",
-      click() {
-        this.setting?.show?.();
       }
     },
     ...customControls
@@ -5625,8 +5574,9 @@ function anichPreset(params = {}) {
     url,
     type,
     customType,
-    // Anich Edition: blank slate + anich theme in one go
-    blankSlate: true,
+    // Anich Edition: anich theme in one go (marks container with
+    // `art-theme-anich` so the bundled Anich-flavored rose/Bilibili-style
+    // CSS overrides take effect).
     anichTheme,
     autoplay,
     autoSize: false,
@@ -5638,6 +5588,29 @@ function anichPreset(params = {}) {
     title: "",
     controls,
     settings,
+    // ── Built-in control flags ──
+    // We deliberately do NOT use `blankSlate: true` here, because the
+    // previous design's custom controls referenced APIs that only
+    // exist when the built-in controls are loaded (e.g.
+    // `this.setting.show` needs the Setting component to be rendered,
+    // `this.fullscreen = !this.fullscreen` needs the fullscreen
+    // setter to be defined). Instead we set the flags explicitly:
+    //   - Keep ON:  setting, fullscreen, fullscreenWeb  (we want these)
+    //   - Turn OFF: screenshot, pip, airplay, loop, flip,
+    //               playbackRate, aspectRatio, fastForward
+    //     (we don't want these — playbackRate is exposed via the
+    //      settings submenu instead, the others are just clutter)
+    screenshot: false,
+    pip: false,
+    airplay: false,
+    loop: false,
+    flip: false,
+    playbackRate: false,
+    aspectRatio: false,
+    fastForward: false,
+    setting: true,
+    fullscreen: true,
+    fullscreenWeb: true,
     // Host apps must still pass their own danmuku / auto-thumbnail
     // plugin instances through `plugins` — we don't auto-load them
     // to avoid bundling extra deps into the ArtPlayer core.
