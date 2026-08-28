@@ -57,10 +57,10 @@ const { containerRef: calGridRef, style: calGridStyle } = useResponsiveGrid({
     </SectionCard>
 
     <section class="flex flex-col gap-3">
-      <div v-if="isLoading" ref="calGridRef" class="min-w-0 w-full overflow-hidden" :style="calGridStyle">
+      <div v-if="isLoading" ref="calGridRef" class="min-w-0 w-full overflow-hidden" :style="{ ...calGridStyle, contain: 'layout', maxWidth: '100%' }">
         <div v-for="i in 6" :key="i" class="h-24 rounded-2xl shimmer" />
       </div>
-      <div v-else-if="active && active.list.length > 0" ref="calGridRef" class="min-w-0 w-full overflow-hidden" :style="calGridStyle">
+      <div v-else-if="active && active.list.length > 0" ref="calGridRef" class="min-w-0 w-full overflow-hidden" :style="{ ...calGridStyle, contain: 'layout', maxWidth: '100%' }">
         <button
           v-for="(item, i) in active.list" :key="item.id"
           @click="ui.openDetail(item.id, item.image)"

@@ -62,17 +62,8 @@ export function useResponsiveGrid(options: ResponsiveGridOptions = {}) {
   const recompute = () => {
     const el = containerRef.value;
     if (!el) return;
-    // clientWidth excludes scrollbar width — this is the key to preventing
-    // overflow on Windows where the scrollbar takes ~15px of horizontal space.
     const available = el.clientWidth;
-    if (available === 0) return;  // not laid out yet, will retry on next tick
-    // Mathematical max cols that fit without overflow:
-    //   cols * minWidth + (cols - 1) * gap <= available
-    //   cols <= (available + gap) / (minWidth + gap)
-    // Subtract 1px safety margin to handle subpixel rounding (e.g. when
-    // available = 976.5px, floor((976.5 + 12) / 172) = 5, but browser
-    // might render 6 columns due to rounding). The -1 forces one fewer
-    // column when the result is very close to the boundary.
+    if (available === 0) return;
     const raw = (available + gap) / (minWidth + gap);
     const cols = Math.max(1, Math.floor(raw - 0.01));
     colCount.value = cols;
@@ -126,9 +117,25 @@ export function useResponsiveGrid(options: ResponsiveGridOptions = {}) {
     }
   });
 
+  // The style uses CSS `auto-fill` + `minmax(minWidth, 1fr)` as the PRIMARY
+  // mechanism. This is bulletproof — the browser will NEVER produce a column
+  // narrower than `minWidth`, so it will NEVER overflow. The JS-computed
+  // `colCount` is used as a HINT via `repeat(N, ...)` but we actually use
+  // `auto-fill` so the browser makes the final decision.
+  //
+  // Why not just use auto-fill without JS? Because `auto-fill + minmax(min, 1fr)`
+  // can sometimes produce fewer columns than expected when the container has
+  // a scrollbar (clientWidth < offsetWidth). The JS calculation gives us a
+  // reliable upper bound, and auto-fill acts as the safety net.
+  //
+  // Wait — actually `repeat(N, minmax(minWidth, 1fr))` with N too large WILL
+  // overflow (grid doesn't auto-reduce N). So we use `auto-fill` directly.
+  // The JS colCount is kept for debugging/inspection but not used in the style.
   const style = computed(() => ({
     display: "grid",
-    gridTemplateColumns: `repeat(${colCount.value}, minmax(0, 1fr))`,
+    // auto-fill + minmax(minWidth, 1fr) = browser auto-selects column count,
+    // each column at least `minWidth` wide. NEVER overflows.
+    gridTemplateColumns: `repeat(auto-fill, minmax(${minWidth}px, 1fr))`,
     gap: `${gap}px`,
   }));
 

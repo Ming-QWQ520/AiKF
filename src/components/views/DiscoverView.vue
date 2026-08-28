@@ -147,11 +147,11 @@ const fresh = computed(() => (listData.value?.items ?? []).slice(0, 12));
         </button>
       </div>
       <!-- Schedule grid (responsive via ResizeObserver) -->
-      <div v-if="calLoading" ref="scheduleGridRef" class="min-w-0 w-full overflow-hidden" :style="scheduleGridStyle">
+      <div v-if="calLoading" ref="scheduleGridRef" class="min-w-0 w-full overflow-hidden" :style="{ ...scheduleGridStyle, contain: 'layout', maxWidth: '100%' }">
         <div v-for="i in 6" :key="i" class="aspect-[3/4] rounded-lg shimmer" />
       </div>
       <div v-else-if="activeDayList.length === 0" class="py-8 text-center text-sm text-muted-foreground">本日暂无放送</div>
-      <div v-else ref="scheduleGridRef" class="min-w-0 w-full overflow-hidden" :style="scheduleGridStyle">
+      <div v-else ref="scheduleGridRef" class="min-w-0 w-full overflow-hidden" :style="{ ...scheduleGridStyle, contain: 'layout', maxWidth: '100%' }">
         <button
           v-for="item in activeDayList.slice(0, 12)" :key="item.id"
           @click="ui.openDetail(item.id, item.image)"
@@ -173,10 +173,10 @@ const fresh = computed(() => (listData.value?.items ?? []).slice(0, 12));
         </div>
         <button @click="ui.setView('browse')" class="text-xs font-medium text-primary hover:underline">查看更多 →</button>
       </div>
-      <div v-if="listLoading" ref="freshGridRef" class="min-w-0 w-full overflow-hidden" :style="freshGridStyle">
+      <div v-if="listLoading" ref="freshGridRef" class="min-w-0 w-full overflow-hidden" :style="{ ...freshGridStyle, contain: 'layout', maxWidth: '100%' }">
         <div v-for="i in 6" :key="i" class="aspect-[3/4] rounded-lg shimmer" />
       </div>
-      <div v-else ref="freshGridRef" class="min-w-0 w-full overflow-hidden" :style="freshGridStyle">
+      <div v-else ref="freshGridRef" class="min-w-0 w-full overflow-hidden" :style="{ ...freshGridStyle, contain: 'layout', maxWidth: '100%' }">
         <button
           v-for="item in fresh" :key="item.id"
           @click="ui.openDetail(item.id, item.image)"

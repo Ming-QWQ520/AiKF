@@ -286,7 +286,7 @@ const fmtCommentDate = (ts: number) => {
       <!-- Related -->
       <div v-if="activeTab === 'related'">
         <div v-if="!related || related.length === 0" class="py-8 text-center text-sm text-muted-foreground">暂无相关推荐</div>
-        <div v-else ref="relatedGridRef" class="min-w-0 w-full overflow-hidden" :style="relatedGridStyle">
+        <div v-else ref="relatedGridRef" class="min-w-0 w-full overflow-hidden" :style="{ ...relatedGridStyle, contain: 'layout', maxWidth: '100%' }">
           <button v-for="item in related.slice(0, 12)" :key="item.id" @click="ui.openDetail(item.id, item.image)" class="group flex min-w-0 flex-col text-left">
             <CoverImage :src="item.image" :alt="item.title" ratio="portrait" rounded="rounded-lg" class="transition-transform group-hover:scale-[1.03]" />
             <p class="mt-1.5 line-clamp-1 text-xs font-medium text-foreground">{{ item.title }}</p>
