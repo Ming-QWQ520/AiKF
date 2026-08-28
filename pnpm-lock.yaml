@@ -41,6 +41,9 @@ importers:
       artplayer-plugin-auto-thumbnail:
         specifier: ^1.1.0
         version: 1.1.0
+      artplayer-plugin-danmuku:
+        specifier: ^5.3.0
+        version: 5.3.0
       clsx:
         specifier: ^2.1.1
         version: 2.1.1
@@ -730,6 +733,9 @@ packages:
 
   artplayer-plugin-auto-thumbnail@1.1.0:
     resolution: {integrity: sha512-ALrcLv+qEDime+R8p4628RZTfMGlrpX6d7PLIQaYWsQEN3lPzVjcVcARCFpqnFI8gvRdqt21w72sJphf50xtVw==}
+
+  artplayer-plugin-danmuku@5.3.0:
+    resolution: {integrity: sha512-a76bU1cWEZr53hD1X8IHfOzS4QawGHn8dQ3fIYyJ5TsyhTSnznhi2WzkS8M7LL3H02ekXRZTUFan9+9EERk12g==}
 
   artplayer@5.4.0:
     resolution: {integrity: sha512-2B+plbx8N2yNsjK4nJU3+EOG8TULm1LRZk/QPkWRAMEX2Ee/MSnZG/WJYz8kcoZxZuLKcQ3uXifqLuPxZOH29A==}
@@ -1575,6 +1581,8 @@ snapshots:
   alien-signals@1.0.13: {}
 
   artplayer-plugin-auto-thumbnail@1.1.0: {}
+
+  artplayer-plugin-danmuku@5.3.0: {}
 
   artplayer@5.4.0:
     dependencies:

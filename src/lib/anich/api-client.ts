@@ -13,6 +13,7 @@ import type {
   VOD,
   CommentList,
   CommentCount,
+  DanmakuItem,
 } from "./types";
 import {
   getBangumiCalendar,
@@ -29,6 +30,7 @@ import {
   searchBangumi,
   getEpisodeComments,
   getEpisodeCommentCount,
+  getAllDanmaku,
 } from "./client";
 import { withCache } from "./cache";
 
@@ -65,6 +67,9 @@ export const anich = {
     ),
   commentReplies: (commentID: string, skip?: string) =>
     getCommentReplies(commentID, skip),
+  // Danmaku — NOT cached (live data, may change between episodes/refreshes)
+  danmaku: (bangumiID: number, episode: number) =>
+    getAllDanmaku(bangumiID, episode),
 };
 
 export type {
@@ -81,4 +86,5 @@ export type {
   VOD,
   CommentList,
   CommentCount,
+  DanmakuItem,
 };

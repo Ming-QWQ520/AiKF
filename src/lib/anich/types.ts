@@ -255,3 +255,34 @@ export interface CommentCount {
   message: string;
   body: { data: number };
 }
+
+/* ── Danmaku (弹幕) ── */
+
+/** A single danmaku item, parsed from the Anich /danmaku protobuf response. */
+export interface DanmakuItem {
+  id: string;
+  color: string;   // hex color string, e.g. "#ffffff"
+  date: number;    // timestamp (seconds)
+  text: string;    // danmaku content
+  t: string;       // source type tag
+  time: number;    // position in video (seconds)
+  type: number;    // 0=scroll, 1=top, 2=bottom
+  from: string;    // source identifier
+}
+
+/** A page of danmaku items (paginated by DefaultDanmakuPageSize = 3000). */
+export interface DanmakuPage {
+  items: DanmakuItem[];
+  skip: number;
+}
+
+/** Request body for posting a new danmaku. */
+export interface PostDanmakuRequest {
+  bangumiID: number;
+  episode: number;
+  type: number;     // 0=scroll, 1=top, 2=bottom
+  time: number;     // position in video (seconds)
+  text: string;
+  color: string;    // hex color
+  token?: string;   // user auth token (optional)
+}

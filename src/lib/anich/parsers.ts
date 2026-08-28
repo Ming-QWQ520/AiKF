@@ -6,6 +6,7 @@ import {
   fieldVarintBool,
   fieldVarintNum,
   iterateFields,
+  nextField,
   normalizeWireData,
   type WireField,
 } from "./wire";
@@ -233,4 +234,52 @@ export function parseVOD(data: Uint8Array): { sources: PlaybackSource[] } {
     if (f.num === 1 && f.wire === 2) sources.push(parsePlaybackSource(f.bytes));
   }
   return { sources };
+}
+
+/* ── Danmaku parsing (ported from anichsdk/danmaku.go) ── */
+
+import type { DanmakuItem, DanmakuPage } from "./types";
+
+/** Parse a single DanmakuItem protobuf message. */
+function parseDanmakuItem(data: Uint8Array): DanmakuItem {
+  const item: DanmakuItem = {
+    id: "", color: "", date: 0, text: "", t: "", time: 0, type: 0, from: "",
+  };
+  let offset = 0;
+  while (offset < data.length) {
+    const res = nextField(data, offset);
+    if (!res) break;
+    const f = res.field;
+    offset = res.next;
+    switch (f.num) {
+      case 1: { const v = fieldString(f); if (v !== null) item.id = v; break; }
+      case 2: { const v = fieldString(f); if (v !== null) item.color = v; break; }
+      case 3: { const v = fieldDouble(f); if (v !== null) item.date = v; break; }
+      case 4: { const v = fieldString(f); if (v !== null) item.text = v; break; }
+      case 5: { const v = fieldString(f); if (v !== null) item.t = v; break; }
+      case 6: { const v = fieldDouble(f); if (v !== null) item.time = v; break; }
+      case 7: { if (f.wire === 0) item.type = Number(f.varint); break; }
+      case 8: { const v = fieldString(f); if (v !== null) item.from = v; break; }
+    }
+  }
+  return item;
+}
+
+/** Parse a DanmakuPage protobuf message (list of items + skip cursor). */
+export function parseDanmakuPage(data: Uint8Array): DanmakuPage {
+  const normalized = normalizeWireData(data);
+  const page: DanmakuPage = { items: [], skip: 0 };
+  let offset = 0;
+  while (offset < normalized.length) {
+    const res = nextField(normalized, offset);
+    if (!res) break;
+    const f = res.field;
+    offset = res.next;
+    if (f.num === 1 && f.wire === 2) {
+      page.items.push(parseDanmakuItem(f.bytes));
+    } else if (f.num === 2 && f.wire === 0) {
+      page.skip = Number(f.varint);
+    }
+  }
+  return page;
 }

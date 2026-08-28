@@ -2,8 +2,10 @@
 import { ref, computed, watch, onBeforeUnmount, onMounted, nextTick } from "vue";
 import Artplayer from "artplayer";
 import artplayerPluginAutoThumbnail from "artplayer-plugin-auto-thumbnail";
+import artplayerPluginDanmuku from "artplayer-plugin-danmuku";
 import { X, ListVideo, ChevronLeft, ChevronRight, ChevronDown, AlertCircle, Link as LinkIcon, Zap, Loader2, Home, Maximize } from "lucide-vue-next";
 import { anich } from "@/lib/anich/api-client";
+import type { DanmakuItem } from "@/lib/anich/types";
 import { useUIStore } from "@/stores/ui";
 import { useLibraryStore } from "@/stores/library";
 import { useSettingsStore } from "@/stores/settings";
@@ -242,7 +244,7 @@ function createArt(container: HTMLElement, url: string) {
         tooltip: "音量",
         click: function () { (art as any)?.toggleMute?.(); },
       },
-      // ── Right side: next episode + PiP + fullscreen + settings ──
+      // ── Right side: next episode + danmaku toggle + PiP + fullscreen + settings ──
       {
         position: "right",
         html: '<svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 4 15 12 5 20 5 4"/><line x1="19" y1="5" x2="19" y2="19"/></svg>',
@@ -250,6 +252,25 @@ function createArt(container: HTMLElement, url: string) {
         click: function () {
           const next = episodesList.value.find((e) => e.sort === episode.value + 1);
           if (next) switchEpisode(next.sort, next.title);
+        },
+      },
+      // Danmaku (弹幕) toggle — switches danmaku visibility on/off
+      {
+        position: "right",
+        html: '<svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>',
+        tooltip: "弹幕",
+        style: { opacity: 1 },
+        click: function () {
+          danmakuEnabled.value = !danmakuEnabled.value;
+          if (art && (art as any).danmuku) {
+            if (danmakuEnabled.value) {
+              (art as any).danmuku.show();
+              pushLog("Danmaku enabled");
+            } else {
+              (art as any).danmuku.hide();
+              pushLog("Danmaku disabled");
+            }
+          }
         },
       },
       {
@@ -346,11 +367,26 @@ function createArt(container: HTMLElement, url: string) {
       settings: settings,
       // ── Plugins ──
       plugins: [
+        // Auto-generate video thumbnails for progress bar hover preview
         artplayerPluginAutoThumbnail({
           width: 160,
           number: 80,
           scale: 1,
         }),
+        // Danmaku (弹幕) plugin — displays scrolling comments over the video.
+        // Danmaku data is loaded asynchronously via anich.danmaku() and
+        // pushed to the plugin via art.danmuku.load().
+        artplayerPluginDanmuku({
+          danmuku: [],  // initial empty — loaded async in watch(epKey)
+          speed: 5,        // pixels per second
+          opacity: 1,      // 0-1
+          fontSize: 16,    // base font size (px)
+          color: "#ffffff",
+          mode: 0,         // 0=scroll, 1=top, 2=bottom
+          antiOverlap: true,
+          fontFamily: "inherit",
+          disable: false,   // controlled via toggle button
+        } as any),
       ],
     };
 
@@ -366,6 +402,13 @@ function createArt(container: HTMLElement, url: string) {
           pushLog(`Restoring playback progress: ${Math.round(progress.time)}s`);
           try { art!.currentTime = progress.time; } catch (e) { pushLog(`seek failed: ${e}`); }
         }
+      }
+      // Push any already-loaded danmaku to the plugin (race condition: the
+      // watch(epKey) above may have fired and loaded danmaku before ArtPlayer
+      // was ready, so we check and push here).
+      if (danmakuEnabled.value && danmakuList.value.length > 0 && (art as any).danmuku) {
+        pushLog(`Pushing ${danmakuList.value.length} pre-loaded danmaku to ArtPlayer`);
+        (art as any).danmuku.load(toArtDanmaku(danmakuList.value));
       }
     });
 
@@ -441,6 +484,49 @@ const showLog = ref(false);
 const toggleLog = () => { showLog.value = !showLog.value; pushLog(`log panel ${showLog.value ? "opened" : "closed"}`); };
 const sidebarCollapsed = ref(false);
 const sourcesExpanded = ref(false);
+
+// ── Danmaku (弹幕) state ──
+const danmakuEnabled = ref(true);  // ON by default
+const danmakuLoading = ref(false);
+const danmakuList = ref<DanmakuItem[]>([]);
+// Danmaku input (for posting — requires token, disabled for now)
+// const danmakuInput = ref("");
+// const danmakuInputType = ref(0);  // 0=scroll, 1=top, 2=bottom
+// const danmakuInputColor = ref("#ffffff");
+
+/** Convert API DanmakuItem[] → ArtPlayer danmuku plugin format. */
+function toArtDanmaku(items: DanmakuItem[]): any[] {
+  return items.map((item) => ({
+    text: item.text,
+    time: item.time,
+    mode: item.type === 1 ? "top" : item.type === 2 ? "bottom" : "scroll",
+    color: item.color || "#ffffff",
+    border: false,
+  }));
+}
+
+// Load danmaku when episode changes (debounced — don't block video playback).
+watch(epKey, async (newKey, oldKey) => {
+  if (newKey === oldKey || !bangumiID.value || !episode.value) return;
+  if (!danmakuEnabled.value) return;
+  danmakuLoading.value = true;
+  try {
+    pushLog(`Loading danmaku for ${newKey}…`);
+    const list = await anich.danmaku(bangumiID.value, episode.value);
+    danmakuList.value = list;
+    pushLog(`Danmaku loaded: ${list.length} items`);
+    // If ArtPlayer already exists, update its danmaku
+    if (art && (art as any).danmuku) {
+      (art as any).danmuku.load(toArtDanmaku(list));
+      pushLog("Danmaku pushed to ArtPlayer");
+    }
+  } catch (e: any) {
+    pushLog(`Danmaku load failed: ${e?.message || e}`);
+    danmakuList.value = [];
+  } finally {
+    danmakuLoading.value = false;
+  }
+}, { immediate: true });
 
 // ── PiP mode (custom, not ArtPlayer's built-in) ──
 const pipMode = ref(false);

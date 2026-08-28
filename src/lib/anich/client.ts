@@ -262,3 +262,41 @@ export async function getCommentReplies(commentID: string, skip?: string): Promi
   if (isTauri()) return fetchJSON<CommentList>(`/comment/${encodeURIComponent(commentID)}/replies`, { skip });
   return proxyGet<CommentList>(`/comments/${encodeURIComponent(commentID)}/replies${skip ? `?skip=${skip}` : ""}`);
 }
+
+/* ── Danmaku (弹幕) ── */
+
+import { parseDanmakuPage } from "./parsers";
+import type { DanmakuItem, DanmakuPage, PostDanmakuRequest } from "./types";
+
+const DANMAKU_PAGE_SIZE = 3000;
+
+/** Get a single page of danmaku for a bangumi episode. */
+export async function getDanmakuPage(bangumiID: number, episode: number, skip: number): Promise<DanmakuPage> {
+  if (isTauri()) {
+    const bytes = await fetchBytes("/danmaku", { bangumi: bangumiID, episode, skip });
+    return parseDanmakuPage(bytes);
+  }
+  // Browser proxy fallback — returns JSON (not protobuf) in proxy mode
+  return proxyGet<DanmakuPage>(`/danmaku?bangumiID=${bangumiID}&episode=${episode}&skip=${skip}`);
+}
+
+/** Get ALL danmaku for a bangumi episode (paginates through all pages). */
+export async function getAllDanmaku(bangumiID: number, episode: number): Promise<DanmakuItem[]> {
+  const all: DanmakuItem[] = [];
+  for (let skip = 0; ; skip += DANMAKU_PAGE_SIZE) {
+    const page = await getDanmakuPage(bangumiID, episode, skip);
+    all.push(...page.items);
+    if (page.items.length < DANMAKU_PAGE_SIZE) return all;
+  }
+}
+
+/** Post a new danmaku. Requires a token (user auth). */
+export async function postDanmaku(req: PostDanmakuRequest): Promise<Record<string, unknown>> {
+  if (!req.bangumiID || !req.episode || !req.text) {
+    throw new Error("invalid post danmaku request");
+  }
+  // POST /danmaku?bangumi=ID&episode=EP with JSON body {text, type, time, color}
+  // Note: rustFetch currently only does GET. For POST, we'd need a new Rust command.
+  // For now, throw a clear error — POST support requires Rust backend changes.
+  throw new Error("post danmaku requires Rust POST support (not yet implemented)");
+}
