@@ -2,7 +2,7 @@
 name = "aikf"
 version = "0.1.0"
 description = "樱追番 · Anich — Tauri + Vue3 anime tracking app"
-authors = ["AiKF"]
+authors = ["Ming"]
 edition = "2021"
 
 [lib]
