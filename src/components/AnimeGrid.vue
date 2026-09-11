@@ -1,0 +1,65 @@
+<script setup lang="ts">
+import { cn } from "@/lib/utils";
+import AnimeCard from "./AnimeCard.vue";
+import { useResponsiveGrid } from "@/composables/useResponsiveGrid";
+import { useUIStore } from "@/stores/ui";
+
+const ui = useUIStore();
+
+const props = defineProps<{
+  items: Array<{
+    id: number;
+    title: string;
+    image: string;
+    tagline?: string;
+    episode?: number;
+    episodesTotal?: number;
+    name?: string;
+  }>;
+  emptyHint?: string;
+}>();
+
+const emit = defineEmits<{ (e: "select", id: number, cover?: string): void }>();
+
+// Bulletproof responsive grid — measures container width via ResizeObserver
+// and computes column count in JS. Never overflows (see composable docs).
+// Trigger combines items.length + sidebarCollapsed so the grid recomputes
+// when data loads OR when the sidebar toggles (changing main width).
+const { containerRef, style } = useResponsiveGrid({
+  minWidth: 160,
+  gap: 12,
+  trigger: () => `${props.items.length}-${ui.sidebarCollapsed}`,
+});
+</script>
+
+<template>
+  <div v-if="items.length === 0" class="flex min-h-[200px] flex-col items-center justify-center gap-2 rounded-2xl surface p-10 text-center">
+    <svg viewBox="0 0 24 24" fill="none" class="h-10 w-10 text-muted-foreground/40" stroke="currentColor" stroke-width="1.5">
+      <path stroke-linecap="round" stroke-linejoin="round" d="M9.879 7.519c1.171-1.025 3.071-1.025 4.242 0 1.172 1.025 1.172 2.687 0 3.712-.203.179-.43.326-.67.442-.745.361-1.45.999-1.45 1.827v.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9 5.25h.008v.008H12v-.008Z" />
+    </svg>
+    <p class="text-sm text-muted-foreground">{{ emptyHint ?? "暂无内容" }}</p>
+  </div>
+  <!-- Dynamic responsive grid — column count computed via ResizeObserver.
+       Container has overflow:hidden + contain:layout to prevent any child
+       from causing horizontal overflow even if column count calc is off. -->
+  <div
+    v-else
+    ref="containerRef"
+    :class="cn('min-w-0 w-full overflow-hidden')"
+    :style="{ ...style, contain: 'layout', maxWidth: '100%' }"
+  >
+    <AnimeCard
+      v-for="(item, i) in items"
+      :key="`${item.id}-${i}`"
+      :id="item.id"
+      :title="item.title"
+      :image="item.image"
+      :tagline="item.tagline"
+      :episode="item.episode"
+      :episodes-total="item.episodesTotal"
+      :latest-name="item.name"
+      :index="i"
+      @select="(id, cover) => emit('select', id, cover)"
+    />
+  </div>
+</template>

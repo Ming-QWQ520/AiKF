@@ -1,0 +1,45 @@
+import { createApp } from "vue";
+import { createPinia } from "pinia";
+import { gsap } from "gsap";
+import naive from "naive-ui";
+import App from "./App.vue";
+import "./assets/globals.css";
+import { useLibraryStore } from "@/stores/library";
+import { useSettingsStore } from "@/stores/settings";
+import { registerGlobalUX } from "@/lib/global-ux";
+import { registerPreloadImg } from "@/lib/preload-img";
+import { AIKF_VERSION, AIKF_BUILD_TAG } from "@/lib/version";
+
+// Startup banner — makes the running build identifiable in the devtools
+// console at a glance. If this banner is absent, you are on an old build.
+console.log(
+  `%c AiKF ${AIKF_VERSION} %c ${AIKF_BUILD_TAG} %c`,
+  "background:#e879f9;color:#fff;font-weight:bold;border-radius:3px 0 0 3px;padding:2px 6px",
+  "background:#27272a;color:#e4e4e7;padding:2px 6px;border-radius:0 3px 3px 0",
+  "color:inherit",
+);
+
+// GSAP global performance tuning
+gsap.config({ force3D: true, nullTargetWarn: false });
+gsap.ticker.lagSmoothing(500); // smooth out frame drops
+
+const app = createApp(App);
+const pinia = createPinia();
+app.use(pinia);
+
+// Naive UI — registered globally so NButton, NIcon, NSlider etc. are
+// available inside the player & sidebar templates.
+app.use(naive);
+
+// Hydrate persisted library data before mounting.
+useLibraryStore().hydrate();
+// Load persisted settings (theme, playback, background) before mounting.
+useSettingsStore();
+
+// Global UX: block web shortcuts + right-click (always on, not configurable),
+// spacebar scroll, img draggable=false.
+registerGlobalUX(app);
+// Image preload directive (fetches ~300px before entering viewport).
+registerPreloadImg(app);
+
+app.mount("#app");

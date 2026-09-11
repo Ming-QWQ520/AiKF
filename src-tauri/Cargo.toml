@@ -1,0 +1,41 @@
+[package]
+name = "aikf"
+version = "0.1.0"
+description = "樱追番 · Anich — Tauri + Vue3 anime tracking app"
+authors = ["AiKF"]
+edition = "2021"
+
+[lib]
+name = "aikf_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+# 注意：绝不能把 custom-protocol 写进这里的 features！
+# tauri/custom-protocol 会向前转发到 tauri-macros/custom-protocol，使宏内
+# dev 标志恒为 false → dev 也强制校验/嵌入 dist → 无 dist 时 pnpm tauri dev
+# 直接 panic（本包 v3.1 及之前的病根）。正确做法是只保留下方 [features] 段。
+tauri = { version = "2", features = ["protocol-asset", "devtools"] }
+tauri-plugin-opener = "2"
+tauri-plugin-http = { version = "2", features = ["unsafe-headers"] }
+tauri-plugin-dialog = "2"
+tauri-plugin-fs = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls-native-roots"] }
+tokio = { version = "1", features = ["time", "rt", "sync", "macros"] }
+
+[features]
+default = []
+# 由 `pnpm tauri build` 在生产构建时自动启用：把 ../dist 嵌入产物。
+# dev（pnpm tauri dev）不启用它 → 编译期跳过 dist 校验，页面走 vite dev server。
+custom-protocol = ["tauri/custom-protocol"]
+
+[profile.release]
+panic = "abort"
+codegen-units = 16
+lto = "thin"
+opt-level = "z"
+strip = true

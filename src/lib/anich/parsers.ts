@@ -1,0 +1,340 @@
+/** Protobuf message parsers → typed models. Ported from anichsdk Go files. */
+
+import {
+  fieldDouble,
+  fieldString,
+  fieldVarintBool,
+  fieldVarintNum,
+  iterateFields,
+  nextField,
+  normalizeWireData,
+  type WireField,
+} from "./wire";
+import type {
+  BangumiCharacterActor,
+  BangumiCharacterCredit,
+  BangumiLatestItem,
+  BangumiListItem,
+  BangumiPersonCredit,
+  BangumiRelatedItem,
+  Episode,
+  EpisodeRating,
+  EpisodeSite,
+  PlaybackSource,
+} from "./types";
+
+function parseItem<T>(
+  data: Uint8Array,
+  handler: (field: WireField, acc: T) => void,
+  init: T
+): T {
+  const acc = init;
+  for (const f of iterateFields(data)) handler(f, acc);
+  return acc;
+}
+
+/* ---------- BangumiListItem ---------- */
+export function parseBangumiListItem(data: Uint8Array): BangumiListItem {
+  return parseItem(data, (f, item: BangumiListItem) => {
+    switch (f.num) {
+      case 1: { const v = fieldVarintNum(f); if (v != null) item.id = v; break; }
+      case 2: { const v = fieldString(f); if (v != null) item.title = v; break; }
+      case 3: { const v = fieldVarintNum(f); if (v != null) item.episode = v; break; }
+      case 4: { const v = fieldVarintNum(f); if (v != null) item.episodesTotal = v; break; }
+      case 5: { const v = fieldString(f); if (v != null) item.status = v; break; }
+      case 6: { const v = fieldDouble(f); if (v != null) item.date = v; break; }
+      case 7: { const v = fieldString(f); if (v != null) item.image = v; break; }
+      case 8: { const v = fieldString(f); if (v != null) item.tagline = v; break; }
+    }
+  }, { id: 0, title: "", episode: 0, episodesTotal: 0, status: "", date: 0, image: "", tagline: "" });
+}
+
+export function parseBangumiList(data: Uint8Array) {
+  const normalized = normalizeWireData(data);
+  const items: BangumiListItem[] = [];
+  let prev = 0;
+  let next = 0;
+  for (const f of iterateFields(normalized)) {
+    switch (f.num) {
+      case 1:
+        if (f.wire === 2) items.push(parseBangumiListItem(f.bytes));
+        break;
+      case 2: { const v = fieldVarintNum(f); if (v != null) prev = v; break; }
+      case 3: { const v = fieldVarintNum(f); if (v != null) next = v; break; }
+    }
+  }
+  return { items, prev, next };
+}
+
+/* ---------- BangumiLatestItem ---------- */
+export function parseBangumiLatestItem(data: Uint8Array): BangumiLatestItem {
+  return parseItem(data, (f, item: BangumiLatestItem) => {
+    switch (f.num) {
+      case 1: { const v = fieldVarintBool(f); if (v != null) item.status = v; break; }
+      case 2: { const v = fieldVarintNum(f); if (v != null) item.id = v; break; }
+      case 3: { const v = fieldVarintNum(f); if (v != null) item.episode = v; break; }
+      case 4: { const v = fieldDouble(f); if (v != null) item.airdate = v; break; }
+      case 5: { const v = fieldVarintNum(f); if (v != null) item.duration = v; break; }
+      case 6: { const v = fieldString(f); if (v != null) item.image = v; break; }
+      case 7: { const v = fieldString(f); if (v != null) item.title = v; break; }
+      case 8: { const v = fieldString(f); if (v != null) item.name = v; break; }
+    }
+  }, { status: false, id: 0, episode: 0, airdate: 0, duration: 0, image: "", title: "", name: "" });
+}
+
+export function parseBangumiLatest(data: Uint8Array) {
+  const normalized = normalizeWireData(data);
+  const items: BangumiLatestItem[] = [];
+  for (const f of iterateFields(normalized)) {
+    if (f.num === 1 && f.wire === 2) items.push(parseBangumiLatestItem(f.bytes));
+  }
+  return { items };
+}
+
+/* ---------- Episodes ---------- */
+function parseEpisodeSite(data: Uint8Array): EpisodeSite {
+  return parseItem(data, (f, item: EpisodeSite) => {
+    switch (f.num) {
+      case 1: { const v = fieldString(f); if (v != null) item.site = v; break; }
+      case 2: { const v = fieldString(f); if (v != null) item.id = v; break; }
+    }
+  }, { site: "", id: "" });
+}
+
+function parseEpisodeRating(data: Uint8Array): EpisodeRating {
+  return parseItem(data, (f, item: EpisodeRating) => {
+    switch (f.num) {
+      case 1: { const v = fieldString(f); if (v != null) item.site = v; break; }
+      case 2: { const v = fieldVarintNum(f); if (v != null) item.score = v; break; }
+      case 3: { const v = fieldVarintNum(f); if (v != null) item.count = v; break; }
+    }
+  }, { site: "", score: 0, count: 0 });
+}
+
+function parseEpisode(data: Uint8Array): Episode {
+  return parseItem(data, (f, item: Episode) => {
+    switch (f.num) {
+      case 1: { const v = fieldVarintBool(f); if (v != null) item.status = v; break; }
+      case 2: { const v = fieldVarintNum(f); if (v != null) item.sort = v; break; }
+      case 3: { const v = fieldDouble(f); if (v != null) item.airdate = v; break; }
+      case 4: { const v = fieldVarintNum(f); if (v != null) item.duration = v; break; }
+      case 5: if (f.wire === 2) item.sites.push(parseEpisodeSite(f.bytes)); break;
+      case 6: if (f.wire === 2) item.rating.push(parseEpisodeRating(f.bytes)); break;
+      case 7: { const v = fieldString(f); if (v != null) item.image = v; break; }
+      case 8: { const v = fieldString(f); if (v != null) item.title = v; break; }
+      case 9: { const v = fieldString(f); if (v != null) item.overview = v; break; }
+    }
+  }, { status: false, sort: 0, airdate: 0, duration: 0, sites: [], rating: [], image: "", title: "", overview: "" });
+}
+
+export function parseEpisodes(data: Uint8Array): Episode[] {
+  const normalized = normalizeWireData(data);
+  const episodes: Episode[] = [];
+  for (const f of iterateFields(normalized)) {
+    if (f.num === 1 && f.wire === 2) episodes.push(parseEpisode(f.bytes));
+  }
+  return episodes;
+}
+
+/* ---------- Related ---------- */
+export function parseBangumiRelatedItem(data: Uint8Array): BangumiRelatedItem {
+  return parseItem(data, (f, item: BangumiRelatedItem) => {
+    switch (f.num) {
+      case 1: { const v = fieldVarintNum(f); if (v != null) item.id = v; break; }
+      case 2: { const v = fieldString(f); if (v != null) item.title = v; break; }
+      case 3: { const v = fieldString(f); if (v != null) item.name = v; break; }
+      case 4: { const v = fieldVarintNum(f); if (v != null) item.episode = v; break; }
+      case 5: { const v = fieldVarintNum(f); if (v != null) item.episodesTotal = v; break; }
+      case 6: { const v = fieldString(f); if (v != null) item.status = v; break; }
+      case 7: { const v = fieldDouble(f); if (v != null) item.date = v; break; }
+      case 8: { const v = fieldString(f); if (v != null) item.image = v; break; }
+      case 9: { const v = fieldString(f); if (v != null) item.tagline = v; break; }
+      case 10: { const v = fieldString(f); if (v != null) item.type = v; break; }
+    }
+  }, { id: 0, title: "", name: "", episode: 0, episodesTotal: 0, status: "", date: 0, image: "", tagline: "", type: "" });
+}
+
+export function parseBangumiRelated(data: Uint8Array): BangumiRelatedItem[] {
+  const normalized = normalizeWireData(data);
+  const out: BangumiRelatedItem[] = [];
+  for (const f of iterateFields(normalized)) {
+    if (f.num === 1 && f.wire === 2) out.push(parseBangumiRelatedItem(f.bytes));
+  }
+  return out;
+}
+
+/* ---------- Characters / Persons ---------- */
+function parseCharacterActor(data: Uint8Array): BangumiCharacterActor {
+  return parseItem(data, (f, item: BangumiCharacterActor) => {
+    switch (f.num) {
+      case 1: { const v = fieldVarintNum(f); if (v != null) item.id = v; break; }
+      case 2: { const v = fieldString(f); if (v != null) item.name = v; break; }
+      case 3: { const v = fieldString(f); if (v != null) item.image = v; break; }
+    }
+  }, { id: 0, name: "", image: "" });
+}
+
+export function parseCharacterCredit(data: Uint8Array): BangumiCharacterCredit {
+  return parseItem(data, (f, item: BangumiCharacterCredit) => {
+    switch (f.num) {
+      case 1: { const v = fieldVarintNum(f); if (v != null) item.id = v; break; }
+      case 2: { const v = fieldString(f); if (v != null) item.role = v; break; }
+      case 3: { const v = fieldString(f); if (v != null) item.name = v; break; }
+      case 4: { const v = fieldString(f); if (v != null) item.image = v; break; }
+      case 5: if (f.wire === 2) item.actors.push(parseCharacterActor(f.bytes)); break;
+    }
+  }, { id: 0, role: "", name: "", image: "", actors: [] });
+}
+
+export function parseBangumiCharacters(data: Uint8Array): BangumiCharacterCredit[] {
+  const normalized = normalizeWireData(data);
+  const out: BangumiCharacterCredit[] = [];
+  for (const f of iterateFields(normalized)) {
+    if (f.num === 1 && f.wire === 2) out.push(parseCharacterCredit(f.bytes));
+  }
+  return out;
+}
+
+export function parsePersonCredit(data: Uint8Array): BangumiPersonCredit {
+  return parseItem(data, (f, item: BangumiPersonCredit) => {
+    switch (f.num) {
+      case 1: { const v = fieldVarintNum(f); if (v != null) item.id = v; break; }
+      case 2: { const v = fieldString(f); if (v != null) item.name = v; break; }
+      case 3: { const v = fieldString(f); if (v != null) item.image = v; break; }
+      case 4: { const v = fieldString(f); if (v != null) item.jobs = v; break; }
+    }
+  }, { id: 0, name: "", image: "", jobs: "" });
+}
+
+export function parseBangumiPersons(data: Uint8Array): BangumiPersonCredit[] {
+  const normalized = normalizeWireData(data);
+  const out: BangumiPersonCredit[] = [];
+  for (const f of iterateFields(normalized)) {
+    if (f.num === 1 && f.wire === 2) out.push(parsePersonCredit(f.bytes));
+  }
+  return out;
+}
+
+/* ---------- VOD ---------- */
+function parsePlaybackSource(data: Uint8Array): PlaybackSource {
+  return parseItem(data, (f, item: PlaybackSource) => {
+    switch (f.num) {
+      case 1: { const v = fieldString(f); if (v != null) item.rawURL = v; break; }
+      case 2: { const v = fieldVarintNum(f); if (v != null) item.sort = v; break; }
+      case 3: { const v = fieldString(f); if (v != null) item.type = v; break; }
+      case 4: { const v = fieldString(f); if (v != null) item.caption = v; break; }
+    }
+  }, { rawURL: "", url: "", sort: 0, type: "", caption: "" });
+}
+
+export function parseVOD(data: Uint8Array): { sources: PlaybackSource[] } {
+  const normalized = normalizeWireData(data);
+  const sources: PlaybackSource[] = [];
+  for (const f of iterateFields(normalized)) {
+    if (f.num === 1 && f.wire === 2 && f.bytes && f.bytes.length > 0) sources.push(parsePlaybackSource(f.bytes));
+  }
+  return { sources };
+}
+
+/* ── Danmaku parsing (ported from anichsdk/danmaku.go) ── */
+
+import type { DanmakuItem, DanmakuPage } from "./types";
+
+/** Parse a single DanmakuItem protobuf message. */
+function parseDanmakuItem(data: Uint8Array): DanmakuItem {
+  const item: DanmakuItem = {
+    id: "", color: "", date: 0, text: "", t: "", time: 0, type: 0, from: "",
+  };
+  let offset = 0;
+  while (offset < data.length) {
+    const res = nextField(data, offset);
+    if (!res) break;
+    const f = res.field;
+    offset = res.next;
+    switch (f.num) {
+      case 1: { const v = fieldString(f); if (v !== null) item.id = v; break; }
+      case 2: { const v = fieldString(f); if (v !== null) item.color = v; break; }
+      case 3: { const v = fieldDouble(f); if (v !== null) item.date = v; break; }
+      case 4: { const v = fieldString(f); if (v !== null) item.text = v; break; }
+      case 5: { const v = fieldString(f); if (v !== null) item.t = v; break; }
+      case 6: { const v = fieldDouble(f); if (v !== null) item.time = v; break; }
+      case 7: { if (f.wire === 0) item.type = Number(f.varint); break; }
+      case 8: { const v = fieldString(f); if (v !== null) item.from = v; break; }
+    }
+  }
+  return item;
+}
+
+/** Parse a DanmakuPage protobuf message (list of items + skip cursor). */
+export function parseDanmakuPage(data: Uint8Array): DanmakuPage {
+  const normalized = normalizeWireData(data);
+  const page: DanmakuPage = { items: [], skip: 0 };
+  let offset = 0;
+  while (offset < normalized.length) {
+    const res = nextField(normalized, offset);
+    if (!res) break;
+    const f = res.field;
+    offset = res.next;
+    if (f.num === 1 && f.wire === 2) {
+      page.items.push(parseDanmakuItem(f.bytes));
+    } else if (f.num === 2 && f.wire === 0) {
+      page.skip = Number(f.varint);
+    }
+  }
+  return page;
+}
+
+/* ---------- Bilibili Danmaku (弹幕源：哔哩哔哩) ---------- */
+
+/** A single Bilibili danmaku item (DmSegMobileReply.elem, field subset). */
+export interface BilibiliDanmakuItem {
+  id: number;
+  /** 出现时间（毫秒） */
+  progress: number;
+  /** 1-3 滚动 / 4 底部 / 5 顶部 / 6-7 逆向滚动 */
+  mode: number;
+  fontSize: number;
+  /** RGB 十进制色值 */
+  color: number;
+  midHash: string;
+  content: string;
+  ctime: number;
+  weight: number;
+  pool: number;
+  idStr: string;
+}
+
+function parseBilibiliDanmakuItem(data: Uint8Array): BilibiliDanmakuItem {
+  return parseItem(data, (f, item: BilibiliDanmakuItem) => {
+    switch (f.num) {
+      case 1: { const v = fieldVarintNum(f); if (v != null) item.id = v; break; }
+      case 2: { const v = fieldVarintNum(f); if (v != null) item.progress = v; break; }
+      case 3: { const v = fieldVarintNum(f); if (v != null) item.mode = v; break; }
+      case 4: { const v = fieldVarintNum(f); if (v != null) item.fontSize = v; break; }
+      case 5: { const v = fieldVarintNum(f); if (v != null) item.color = v; break; }
+      case 6: { const v = fieldString(f); if (v !== null) item.midHash = v; break; }
+      case 7: { const v = fieldString(f); if (v !== null) item.content = v; break; }
+      case 8: { const v = fieldVarintNum(f); if (v != null) item.ctime = v; break; }
+      case 9: { const v = fieldVarintNum(f); if (v != null) item.weight = v; break; }
+      case 11: { const v = fieldVarintNum(f); if (v != null) item.pool = v; break; }
+      case 12: { const v = fieldString(f); if (v !== null) item.idStr = v; break; }
+    }
+  }, { id: 0, progress: 0, mode: 0, fontSize: 25, color: 0xffffff, midHash: "", content: "", ctime: 0, weight: 0, pool: 0, idStr: "" });
+}
+
+/** Parse a Bilibili DmSegMobileReply protobuf message (segment of danmaku). */
+export function parseBilibiliDanmakuSegment(data: Uint8Array): BilibiliDanmakuItem[] {
+  const normalized = normalizeWireData(data);
+  const items: BilibiliDanmakuItem[] = [];
+  let offset = 0;
+  while (offset < normalized.length) {
+    const res = nextField(normalized, offset);
+    if (!res) break;
+    const f = res.field;
+    offset = res.next;
+    if (f.num === 1 && f.wire === 2) {
+      items.push(parseBilibiliDanmakuItem(f.bytes));
+    }
+  }
+  return items;
+}

@@ -1,0 +1,26 @@
+<script setup lang="ts">
+import { cn } from "@/lib/utils";
+
+defineProps<{
+  delay?: number;
+}>();
+</script>
+
+<template>
+  <section
+    :style="{ animationDelay: `${delay ?? 0}s` }"
+    :class="cn('surface rounded-2xl p-4 sm:p-5 fade-up min-w-0 w-full overflow-hidden', $attrs.class as string)"
+  >
+    <slot />
+  </section>
+</template>
+
+<style scoped>
+.fade-up {
+  animation: fadeUp 0.4s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+</style>
