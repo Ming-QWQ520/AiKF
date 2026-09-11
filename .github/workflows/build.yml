@@ -73,12 +73,13 @@ jobs:
           if-no-files-found: error
 
   # ───────────────────────────────────────────────────────────────
-  # Tauri Windows portable build: produces just the .exe + supporting
-  # files (no MSI / NSIS installer), then zips them into a portable
-  # archive the user can extract and run directly.
+  # Tauri Windows build: produces the MSI installer, the NSIS setup
+  # .exe installer, and the raw .exe + supporting files which are
+  # zipped into a portable archive the user can extract and run
+  # directly.
   # ───────────────────────────────────────────────────────────────
   build-tauri-windows:
-    name: Build Tauri (Windows Portable)
+    name: Build Tauri (Windows MSI + NSIS + Portable)
     needs: build-frontend
     runs-on: windows-latest
     timeout-minutes: 60
@@ -114,11 +115,11 @@ jobs:
       - name: 📥 Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: 🏗️ Build Tauri app (no installer, portable exe only)
-        # --no-bundle skips MSI / NSIS installer generation entirely.
-        # The compiled .exe + any sidecar DLLs land directly under the
-        # release/ directory.
-        run: pnpm tauri build --no-bundle --target x86_64-pc-windows-msvc
+      - name: 🏗️ Build Tauri app (MSI + NSIS installers + portable exe)
+        # Full bundle: MSI (WiX) + NSIS setup.exe land under
+        # release/bundle/, while the raw .exe + any sidecar DLLs land
+        # directly under release/ for the portable zip.
+        run: pnpm tauri build --target x86_64-pc-windows-msvc
 
       - name: 📦 Create portable zip archive
         shell: pwsh
@@ -163,5 +164,21 @@ jobs:
         with:
           name: aikf-windows-portable
           path: aikf-windows-portable.zip
+          retention-days: 30
+          if-no-files-found: error
+
+      - name: 📤 Upload MSI installer artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: aikf-windows-msi
+          path: src-tauri/target/x86_64-pc-windows-msvc/release/bundle/msi/*.msi
+          retention-days: 30
+          if-no-files-found: error
+
+      - name: 📤 Upload NSIS setup artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: aikf-windows-nsis
+          path: src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/*-setup.exe
           retention-days: 30
           if-no-files-found: error
