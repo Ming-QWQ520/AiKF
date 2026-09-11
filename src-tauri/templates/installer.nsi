@@ -511,9 +511,15 @@ Function .onInit
 
   ${If} $INSTDIR == "${PLACEHOLDER_INSTALL_DIR}"
     ; Set default install location
-    ; Default to "D:\${PRODUCTNAME}" when the D: drive is available,
-    ; otherwise fall back to the standard per-mode location.
-    ${If} ${FileExists} "D:\"
+    ; AiKF: default to "D:\${PRODUCTNAME}" whenever a D: drive is present.
+    ; Drive detection is deliberately redundant (GetLogicalDrives bit test AND
+    ; a readable drive root) so a real hard-disk partition always matches.
+    ; The previous-install-location restore is applied ONLY in the no-D-drive
+    ; fallback below, so it can never override the D:\AiKF default.
+    System::Call 'kernel32::GetLogicalDrives() i .r0'
+    IntOp $0 $0 & 8 ; bit 3 (value 8) => D: drive letter present
+    ${If} $0 <> 0
+    ${AndIf} ${FileExists} "D:\*.*"
       StrCpy $INSTDIR "D:\${PRODUCTNAME}"
     ${Else}
       !if "${INSTALLMODE}" == "perMachine"
@@ -531,9 +537,8 @@ Function .onInit
       !else if "${INSTALLMODE}" == "currentUser"
         StrCpy $INSTDIR "$LOCALAPPDATA\${PRODUCTNAME}"
       !endif
+      Call RestorePreviousInstallLocation
     ${EndIf}
-
-    Call RestorePreviousInstallLocation
   ${EndIf}
 
 
