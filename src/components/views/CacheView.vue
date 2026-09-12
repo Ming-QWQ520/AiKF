@@ -6,13 +6,14 @@ import {
   Activity, Database, Cpu, Layers, X,
 } from "lucide-vue-next";
 import { useUIStore } from "@/stores/ui";
-import { useLibraryStore, STATUS_LABELS, STATUS_STYLES } from "@/stores/library";
+import { useLibraryStore, STATUS_I18N_KEYS, STATUS_STYLES } from "@/stores/library";
 import { useSettingsStore } from "@/stores/settings";
 import {
   useCacheStore, isTauriEnv, formatBytes, formatDuration, formatSpeed, sanitizeName,
   type CacheBangumi,
 } from "@/stores/cache";
 import { anich } from "@/lib/anich/api-client";
+import { useI18n } from "vue-i18n";
 import {
   loadServerDanmaku, loadBiliDanmaku, loadDandanDanmaku, biliCidOf, mergeDanmaku,
   type DanmakuSource,
@@ -24,6 +25,7 @@ const ui = useUIStore();
 const library = useLibraryStore();
 const settings = useSettingsStore();
 const cache = useCacheStore();
+const { t } = useI18n();
 
 onMounted(() => {
   cache.init();
@@ -131,7 +133,7 @@ function pickLine(id: number, key: string) {
 }
 function pickedLineName(id: number): string {
   const key = pickedLine.value[id];
-  if (!key) return "自动优选";
+  if (!key) return t("cache.autoPick");
   return lineOptions.value[id]?.find((o) => o.key === key)?.name ?? key;
 }
 
@@ -153,14 +155,14 @@ async function startDownload(entry: { id: number; title: string; image: string; 
         const vod = await anich.vod(id, sort);
         const want = pickedLine.value[id] ?? "";
         const src = pickSource(vod.sources ?? [], want);
-        if (!src) throw new Error(`第${sort}话无可缓存的源（该集无 m3u8/MP4 源）`);
+        if (!src) throw new Error(t("cache.errNoSource", { n: sort }));
         // 自选节点严格匹配：该话在所选线路下无可用源时明确报错（不静默回退）
         if (want && hostOf(src.url) !== want) {
-          throw new Error(`第${sort}话在所选线路「${pickedLineName(id)}」下无可用 m3u8/MP4 源`);
+          throw new Error(t("cache.errNoSourceOnLine", { n: sort, line: pickedLineName(id) }));
         }
         return {
           sort,
-          title: apiEpisodes.value[id]?.find((e) => e.sort === sort)?.title || `第${sort}话`,
+          title: apiEpisodes.value[id]?.find((e) => e.sort === sort)?.title || t("common.huaN", { n: sort }),
           url: src.url,
           lineName: src.caption || hostOf(src.url),
         };
@@ -186,7 +188,7 @@ async function startDownload(entry: { id: number; title: string; image: string; 
 }
 
 function hostOf(url: string): string {
-  try { return new URL(url).hostname; } catch { return "未知源"; }
+  try { return new URL(url).hostname; } catch { return t("common.unknownSource"); }
 }
 function isAdkwai(url: string): boolean { return url.includes("adkwai.com"); }
 // 判定逻辑必须与播放页（PlayerDialog sourceProtoLabel）保持一致：
@@ -253,7 +255,7 @@ async function cacheDanmakuFor(id: number, sorts: number[], title: string) {
           bangumiId: id,
           title,
           sort,
-          epTitle: ep?.title || `第${sort}话`,
+          epTitle: ep?.title || t("common.huaN", { n: sort }),
           json: JSON.stringify(items),
         });
       }
@@ -278,7 +280,7 @@ async function playLocal(id: number, sort: number, title: string, cover: string,
   playing.value = key;
   try {
     const url = await cache.playUrl(id, sort);
-    if (!url) throw new Error("缓存文件不存在");
+    if (!url) throw new Error(t("cache.errFileMissing"));
     ui.openLocalPlayer({ bangumiID: id, episode: sort, title, cover, episodeTitle: epTitle, localPath: url });
   } catch (e) {
     downloadError.value = { ...downloadError.value, [id]: e instanceof Error ? e.message : String(e) };
@@ -333,8 +335,8 @@ function liveSummary(id: number): { count: number; bytes: number; bytesTotal: nu
 function libProgress(entry: { id: number; totalEpisodes: number; currentEpisode: number; watchedEpisodes: number[] }) {
   const total = entry.totalEpisodes || 0;
   const cur = Math.min(entry.currentEpisode || entry.watchedEpisodes.length || 0, total || Infinity);
-  if (total > 0) return { label: `${cur} / ${total} 话`, pct: Math.min(100, Math.round((cur / total) * 100)) };
-  return { label: cur > 0 ? `${cur} 话` : "未开始", pct: 0 };
+  if (total > 0) return { label: t("common.episodesOf", { cur, total }), pct: Math.min(100, Math.round((cur / total) * 100)) };
+  return { label: cur > 0 ? t("common.episodesN", { n: cur }) : t("common.notStarted"), pct: 0 };
 }
 
 function fmtDate(ts: number): string {
@@ -369,7 +371,7 @@ const downloadingList = computed<DlTask[]>(() => {
     const bytesTotal = cur?.bytesTotal ?? 0;
     out.push({
       id,
-      title: idx?.title || lib?.title || agg.title || `番剧 ${id}`,
+      title: idx?.title || lib?.title || agg.title || t("cache.titleFallback", { id }),
       cover: idx?.cover || lib?.image || "",
       count: agg.count,
       sorts,
@@ -387,23 +389,23 @@ const downloadingList = computed<DlTask[]>(() => {
 const totalDlSpeed = computed(() => downloadingList.value.reduce((n, d) => n + d.speed, 0));
 const totalDlCount = computed(() => downloadingList.value.reduce((n, d) => n + d.count, 0));
 
-/** Steam 风格估计剩余时间：00 分 49 秒 */
+/** Steam 风格估计剩余时间 */
 function formatEta(sec: number): string {
   if (!sec || sec <= 0) return "—";
-  if (sec < 60) return `${sec} 秒`;
-  if (sec < 3600) return `${String(Math.floor(sec / 60)).padStart(2, "0")} 分 ${String(Math.round(sec % 60)).padStart(2, "0")} 秒`;
-  return `${Math.floor(sec / 3600)} 小时 ${Math.floor((sec % 3600) / 60)} 分`;
+  if (sec < 60) return t("cache.etaSec", { n: sec });
+  if (sec < 3600) return t("cache.etaMinSec", { m: Math.floor(sec / 60), s: Math.round(sec % 60) });
+  return t("cache.etaHourMin", { h: Math.floor(sec / 3600), m: Math.floor((sec % 3600) / 60) });
 }
 
-/** Steam 风格完成时间：今天 14:30 / 昨天 14:30 / 2026-09-06 14:30 */
+/** Steam 风格完成时间 */
 function fmtCompleted(ts: number): string {
   if (!ts) return "—";
-  const d = new Date(ts);
-  const hm = `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+  const d0 = new Date(ts);
+  const hm = `${String(d0.getHours()).padStart(2, "0")}:${String(d0.getMinutes()).padStart(2, "0")}`;
   const dayStart = (x: Date) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
-  const diffDays = Math.round((dayStart(new Date()) - dayStart(d)) / 86400000);
-  if (diffDays === 0) return `今天 ${hm}`;
-  if (diffDays === 1) return `昨天 ${hm}`;
+  const diffDays = Math.round((dayStart(new Date()) - dayStart(d0)) / 86400000);
+  if (diffDays === 0) return `${t("cache.today")} ${hm}`;
+  if (diffDays === 1) return `${t("cache.yesterday")} ${hm}`;
   return `${fmtDate(ts).slice(0, 10)} ${hm}`;
 }
 /** 最近一集完成时间（Steam 已完成列表右侧的「完成于：」） */
@@ -437,8 +439,8 @@ async function clearAllCompleted() {
             <HardDriveDownload class="h-5 w-5" />
           </span>
           <div>
-            <h2 class="text-lg font-bold sm:text-xl">本地缓存</h2>
-            <p class="text-xs text-muted-foreground sm:text-sm">离线缓存追番库中的番剧，无网也能看</p>
+            <h2 class="text-lg font-bold sm:text-xl">{{ $t('cache.title') }}</h2>
+            <p class="text-xs text-muted-foreground sm:text-sm">{{ $t('cache.subtitle') }}</p>
           </div>
         </div>
         <div class="flex items-center gap-2">
@@ -446,16 +448,16 @@ async function clearAllCompleted() {
             type="button"
             @click="cache.rescan()"
             class="state-layer flex items-center gap-1.5 rounded-lg border border-border px-3 py-2 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground"
-            title="重新扫描缓存目录并重建 JSON 索引"
+            :title="$t('cache.rebuildIndexTitle')"
           >
-            <RefreshCw class="h-3.5 w-3.5" /> 重建索引
+            <RefreshCw class="h-3.5 w-3.5" /> {{ $t('cache.rebuildIndex') }}
           </button>
           <button
             type="button"
             @click="cache.openDir()"
             class="state-layer flex items-center gap-1.5 rounded-lg bg-primary px-3.5 py-2 text-xs font-semibold text-primary-foreground transition-opacity hover:opacity-90"
           >
-            <FolderOpen class="h-3.5 w-3.5" /> 打开缓存目录
+            <FolderOpen class="h-3.5 w-3.5" /> {{ $t('cache.openDir') }}
           </button>
         </div>
       </div>
@@ -463,28 +465,28 @@ async function clearAllCompleted() {
       <!-- Steam 风格指标条：网络速度 / 下载队列 / 磁盘占用 / 线程（仿 Steam 顶栏「网络·峰值·磁盘使用量」） -->
       <div class="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
         <div class="rounded-xl bg-muted/60 px-3.5 py-2.5">
-          <p class="flex items-center gap-1 text-[10px] text-muted-foreground"><Activity class="h-3 w-3 text-emerald-500" /> 网络 · 总速度</p>
+          <p class="flex items-center gap-1 text-[10px] text-muted-foreground"><Activity class="h-3 w-3 text-emerald-500" /> {{ $t('cache.netSpeed') }}</p>
           <p class="mt-0.5 text-base font-bold tabular-nums text-foreground">
             <template v-if="totalDlSpeed > 0">{{ formatSpeed(totalDlSpeed) }}</template>
-            <template v-else><span class="text-sm font-medium text-muted-foreground">空闲</span></template>
+            <template v-else><span class="text-sm font-medium text-muted-foreground">{{ $t('cache.idle') }}</span></template>
           </p>
         </div>
         <div class="rounded-xl bg-muted/60 px-3.5 py-2.5">
-          <p class="flex items-center gap-1 text-[10px] text-muted-foreground"><Download class="h-3 w-3 text-primary" /> 队列 · 下载中</p>
+          <p class="flex items-center gap-1 text-[10px] text-muted-foreground"><Download class="h-3 w-3 text-primary" /> {{ $t('cache.queue') }}</p>
           <p class="mt-0.5 text-base font-bold tabular-nums text-foreground">
-            {{ downloadingList.length }} <span class="text-xs font-normal text-muted-foreground">部</span>
-            <span v-if="totalDlCount > 0" class="text-xs font-normal text-muted-foreground">· {{ totalDlCount }} 集</span>
+            {{ $t('common.countBu', { n: downloadingList.length }) }}
+            <span v-if="totalDlCount > 0" class="text-xs font-normal text-muted-foreground">· {{ $t('common.countEps', { n: totalDlCount }) }}</span>
           </p>
         </div>
         <div class="rounded-xl bg-muted/60 px-3.5 py-2.5">
-          <p class="flex items-center gap-1 text-[10px] text-muted-foreground"><Database class="h-3 w-3 text-sky-500" /> 磁盘占用</p>
+          <p class="flex items-center gap-1 text-[10px] text-muted-foreground"><Database class="h-3 w-3 text-sky-500" /> {{ $t('cache.diskUsage') }}</p>
           <p class="mt-0.5 text-base font-bold tabular-nums text-foreground">
             {{ formatBytes(cache.cachedBytes) }}
-            <span class="text-xs font-normal text-muted-foreground">· {{ cache.cachedCount }} 集</span>
+            <span class="text-xs font-normal text-muted-foreground">· {{ $t('common.countEps', { n: cache.cachedCount }) }}</span>
           </p>
         </div>
         <div class="rounded-xl bg-muted/60 px-3.5 py-2.5">
-          <p class="flex items-center gap-1 text-[10px] text-muted-foreground"><Cpu class="h-3 w-3 text-violet-500" /> m3u8 线程</p>
+          <p class="flex items-center gap-1 text-[10px] text-muted-foreground"><Cpu class="h-3 w-3 text-violet-500" /> {{ $t('cache.threads') }}</p>
           <p class="mt-0.5 flex items-baseline gap-1.5 text-base font-bold tabular-nums text-foreground">
             {{ settings.data.cacheThreads }}
             <span class="flex items-center gap-0.5 text-[10px] font-normal text-muted-foreground">
@@ -495,7 +497,7 @@ async function clearAllCompleted() {
         </div>
         <!-- 需求：并发下载 = 同时缓存的集数，默认 3，最高 12（m3u8/MP4 全部生效） -->
         <div class="rounded-xl bg-muted/60 px-3.5 py-2.5">
-          <p class="flex items-center gap-1 text-[10px] text-muted-foreground"><Layers class="h-3 w-3 text-amber-500" /> 并发集数</p>
+          <p class="flex items-center gap-1 text-[10px] text-muted-foreground"><Layers class="h-3 w-3 text-amber-500" /> {{ $t('cache.concurrency') }}</p>
           <p class="mt-0.5 flex items-baseline gap-1.5 text-base font-bold tabular-nums text-foreground">
             {{ settings.data.cacheMp4Threads }}
             <span class="flex items-center gap-0.5 text-[10px] font-normal text-muted-foreground">
@@ -506,7 +508,7 @@ async function clearAllCompleted() {
         </div>
       </div>
       <p v-if="!isTauriEnv" class="mt-3 rounded-lg bg-amber-500/10 px-3 py-2 text-[11px] text-amber-600 dark:text-amber-400">
-        当前运行在浏览器预览模式，本地缓存功能需要在桌面端应用中使用。
+        {{ $t('cache.browserHint') }}
       </p>
     </div>
 
@@ -514,11 +516,11 @@ async function clearAllCompleted() {
     <section v-if="downloadingList.length > 0">
       <div class="mb-3 flex items-center gap-3">
         <h3 class="flex flex-none items-baseline gap-1.5 text-[15px] font-bold text-foreground">
-          下载中 <span class="text-xs font-medium tabular-nums text-muted-foreground">({{ downloadingList.length }})</span>
+          {{ $t('cache.downloading') }} <span class="text-xs font-medium tabular-nums text-muted-foreground">({{ downloadingList.length }})</span>
         </h3>
         <span class="h-px min-w-6 flex-1 bg-foreground/10" />
         <span class="flex flex-none items-center gap-1.5 text-[11px] font-semibold tabular-nums text-emerald-500">
-          <Activity class="h-3.5 w-3.5" /> {{ formatSpeed(totalDlSpeed) || "连接中…" }}
+          <Activity class="h-3.5 w-3.5" /> {{ formatSpeed(totalDlSpeed) || $t('cache.connecting') }}
         </span>
       </div>
 
@@ -532,12 +534,12 @@ async function clearAllCompleted() {
             <div class="min-w-0 flex-1">
               <div class="flex flex-wrap items-center gap-x-2 gap-y-0.5">
                 <button type="button" class="line-clamp-1 max-w-full text-sm font-bold text-foreground hover:text-primary" @click="ui.openDetail(d.id, d.cover)">{{ d.title }}</button>
-                <span class="text-[11px] text-muted-foreground">正在下载 {{ d.count }} 集</span>
+                <span class="text-[11px] text-muted-foreground">{{ $t('cache.downloadingN', { n: d.count }) }}</span>
               </div>
               <!-- Steam 进度行：正在下载数据 ── 242.6 MB / 799.1 MB -->
               <div class="mt-2 flex items-center justify-between gap-2 text-[11px]">
                 <span class="truncate text-muted-foreground">
-                  正在下载数据<template v-if="d.currentSort"> · 第{{ d.currentSort }}话<template v-if="d.epTitle"> {{ d.epTitle }}</template></template>
+                  {{ $t('cache.downloadingData') }}<template v-if="d.currentSort"> · {{ $t('common.huaN', { n: d.currentSort }) }}<template v-if="d.epTitle"> {{ d.epTitle }}</template></template>
                 </span>
                 <span class="flex-none tabular-nums text-muted-foreground">
                   <span class="font-semibold text-foreground">{{ formatBytes(d.bytes) }}</span>
@@ -550,8 +552,8 @@ async function clearAllCompleted() {
                 <div class="h-full rounded-[3px] bg-gradient-to-r from-emerald-500 to-lime-400 transition-all duration-500" :style="{ width: d.pct + '%' }" />
               </div>
               <div class="mt-1.5 flex items-center justify-between gap-2 text-[10px] text-muted-foreground">
-                <span class="tabular-nums">估计剩余时间：{{ formatEta(d.etaSec) }}</span>
-                <span class="font-semibold tabular-nums text-emerald-500">{{ formatSpeed(d.speed) || "连接中…" }}</span>
+                <span class="tabular-nums">{{ $t('cache.eta', { t: formatEta(d.etaSec) }) }}</span>
+                <span class="font-semibold tabular-nums text-emerald-500">{{ formatSpeed(d.speed) || $t('cache.connecting') }}</span>
               </div>
             </div>
             <!-- Steam 方形取消键 -->
@@ -559,7 +561,7 @@ async function clearAllCompleted() {
               type="button"
               @click="cancelAll(d.id)"
               class="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-destructive text-white shadow-sm transition-opacity hover:opacity-85"
-              title="取消该番剧全部下载"
+              :title="$t('cache.cancelAllTitle')"
             >
               <X class="h-4 w-4" />
             </button>
@@ -586,16 +588,16 @@ async function clearAllCompleted() {
     <section>
       <div class="mb-3 flex items-center gap-3">
         <h3 class="flex flex-none items-baseline gap-1.5 text-[15px] font-bold text-foreground">
-          即将进行 <span class="text-xs font-medium tabular-nums text-muted-foreground">({{ libList.length }})</span>
+          {{ $t('cache.upcoming') }} <span class="text-xs font-medium tabular-nums text-muted-foreground">({{ libList.length }})</span>
         </h3>
         <span class="h-px min-w-6 flex-1 bg-foreground/10" />
-        <p class="flex-none text-[11px] text-muted-foreground">追番库 · 选择集数后开始下载 · m3u8 线程 1–32 · 并发 1–12 集</p>
+        <p class="flex-none text-[11px] text-muted-foreground">{{ $t('cache.upcomingHint') }}</p>
       </div>
 
       <div v-if="libList.length === 0" class="surface flex min-h-[200px] flex-col items-center justify-center gap-2 rounded-2xl p-8 text-center">
         <FolderClosed class="h-10 w-10 text-muted-foreground/30" />
-        <p class="text-sm font-medium text-foreground">追番库还是空的</p>
-        <p class="text-xs text-muted-foreground">先去发现页追番，再回到这里缓存剧集</p>
+        <p class="text-sm font-medium text-foreground">{{ $t('library.empty') }}</p>
+        <p class="text-xs text-muted-foreground">{{ $t('cache.libEmptyHint') }}</p>
       </div>
 
       <div v-else class="flex flex-col gap-2.5">
@@ -609,7 +611,7 @@ async function clearAllCompleted() {
             <button type="button" class="min-w-0 flex-1 text-left" @click="ui.openDetail(entry.id, entry.image)">
               <div class="flex items-center gap-2">
                 <h4 class="line-clamp-1 text-sm font-bold text-foreground hover:text-primary">{{ entry.title }}</h4>
-                <span :class="cn('shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold', STATUS_STYLES[entry.status].chip)">{{ STATUS_LABELS[entry.status] }}</span>
+                <span :class="cn('shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold', STATUS_STYLES[entry.status].chip)">{{ $t(STATUS_I18N_KEYS[entry.status]) }}</span>
               </div>
               <div class="mt-1.5 flex items-center gap-2">
                 <div class="h-1 w-28 overflow-hidden rounded-full bg-foreground/10 sm:w-40">
@@ -619,13 +621,13 @@ async function clearAllCompleted() {
               </div>
               <p v-if="liveSummary(entry.id).count > 0" class="mt-1 flex items-center gap-1.5 text-[10px] font-medium text-emerald-500">
                 <Loader2 class="h-3 w-3 animate-spin" />
-                正在缓存 {{ liveSummary(entry.id).count }} 集
-                · {{ formatBytes(liveSummary(entry.id).bytes) }}<template v-if="liveSummary(entry.id).bytesTotal > 0"> / 约 {{ formatBytes(liveSummary(entry.id).bytesTotal) }}</template>
+                {{ $t('cache.cachingN', { n: liveSummary(entry.id).count }) }}
+                · {{ formatBytes(liveSummary(entry.id).bytes) }}<template v-if="liveSummary(entry.id).bytesTotal > 0"> / {{ $t('cache.approx') }} {{ formatBytes(liveSummary(entry.id).bytesTotal) }}</template>
                 · {{ formatSpeed(liveSummary(entry.id).speed) || "…" }}
               </p>
               <p v-else class="mt-1 text-[10px] text-muted-foreground">
-                <template v-if="libCachedCount(entry.id) > 0">已缓存 {{ libCachedCount(entry.id) }} 集</template>
-                <template v-else>尚未缓存</template>
+                <template v-if="libCachedCount(entry.id) > 0">{{ $t('cache.cachedN', { n: libCachedCount(entry.id) }) }}</template>
+                <template v-else>{{ $t('cache.notCached') }}</template>
               </p>
             </button>
             <button
@@ -634,13 +636,13 @@ async function clearAllCompleted() {
               @click="cancelAll(entry.id)"
               class="state-layer shrink-0 rounded-lg border border-border px-2.5 py-1.5 text-[11px] font-medium text-destructive transition-colors hover:bg-destructive/10"
             >
-              取消全部
+              {{ $t('cache.cancelAll') }}
             </button>
             <button
               type="button"
               @click="toggleLibExpand(entry.id)"
               class="state-layer flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-foreground/5 hover:text-foreground"
-              :aria-label="expandedLib.has(entry.id) ? '收起' : '展开选集'"
+              :aria-label="expandedLib.has(entry.id) ? $t('common.collapse') : $t('cache.expandPick')"
             >
               <ChevronDown v-if="expandedLib.has(entry.id)" class="h-4 w-4" />
               <ChevronRight v-else class="h-4 w-4" />
@@ -650,7 +652,7 @@ async function clearAllCompleted() {
           <!-- 展开区：先选择，再下载 -->
           <div v-if="expandedLib.has(entry.id)" class="border-t border-border/60 px-3 pb-3.5 pt-3 sm:px-4">
             <div v-if="episodesLoading[entry.id]" class="flex items-center gap-2 py-4 text-xs text-muted-foreground">
-              <Loader2 class="h-3.5 w-3.5 animate-spin" /> 正在获取剧集列表…
+              <Loader2 class="h-3.5 w-3.5 animate-spin" /> {{ $t('cache.fetchingEps') }}
             </div>
             <template v-else>
               <div class="grid grid-cols-5 gap-1.5 sm:grid-cols-6 md:grid-cols-8 lg:grid-cols-10">
@@ -660,7 +662,7 @@ async function clearAllCompleted() {
                   type="button"
                   :disabled="cache.statusOf(entry.id, ep.sort).status === 'downloading'"
                   @click="toggleSelect(entry.id, ep.sort)"
-                  :title="`第${ep.sort}话 ${ep.title}${cache.statusOf(entry.id, ep.sort).status === 'failed' ? ' · ' + cache.statusOf(entry.id, ep.sort).errorMsg : ''}`"
+                  :title="`(${ep.sort}) ${ep.title}${cache.statusOf(entry.id, ep.sort).status === 'failed' ? ' · ' + cache.statusOf(entry.id, ep.sort).errorMsg : ''}`"
                   :class="cn(
                     'group relative flex h-[52px] flex-col items-center justify-center overflow-hidden rounded-xl border transition-all',
                     cache.statusOf(entry.id, ep.sort).status === 'done'
@@ -703,9 +705,9 @@ async function clearAllCompleted() {
                   <span v-else-if="cache.statusOf(entry.id, ep.sort).status === 'downloading'" class="mt-1.5 text-[9px] leading-none tabular-nums text-primary/80">
                     {{ cache.statusOf(entry.id, ep.sort).pct }}%
                   </span>
-                  <span v-else-if="cache.statusOf(entry.id, ep.sort).status === 'failed'" class="mt-1.5 text-[9px] leading-none text-destructive/80">失败</span>
-                  <span v-else-if="isSelected(entry.id, ep.sort)" class="mt-1.5 text-[9px] leading-none text-primary/80">已选</span>
-                  <span v-else class="mt-1.5 text-[9px] leading-none text-muted-foreground/50">未缓存</span>
+                  <span v-else-if="cache.statusOf(entry.id, ep.sort).status === 'failed'" class="mt-1.5 text-[9px] leading-none text-destructive/80">{{ $t('cache.failed') }}</span>
+                  <span v-else-if="isSelected(entry.id, ep.sort)" class="mt-1.5 text-[9px] leading-none text-primary/80">{{ $t('cache.selected') }}</span>
+                  <span v-else class="mt-1.5 text-[9px] leading-none text-muted-foreground/50">{{ $t('cache.uncached') }}</span>
                   <!-- 下载中：迷你进度条 -->
                   <span
                     v-if="cache.statusOf(entry.id, ep.sort).status === 'downloading'"
@@ -722,11 +724,11 @@ async function clearAllCompleted() {
               <!-- 操作条：先选择再下载 -->
               <div class="mt-3 flex flex-wrap items-center gap-2">
                 <span class="text-xs font-medium text-foreground">
-                  已选择 <span class="font-bold tabular-nums text-primary">{{ (selected[entry.id] ?? []).length }}</span> 集
+                  {{ $t('cache.selectedN', { n: (selected[entry.id] ?? []).length }) }}
                 </span>
                 <span class="text-[10px] text-muted-foreground">·</span>
-                <button type="button" @click="selectAllUncached(entry.id, (apiEpisodes[entry.id] ?? []).map((e) => e.sort))" class="text-[11px] font-medium text-primary hover:underline">全选未缓存</button>
-                <button type="button" @click="clearSelect(entry.id)" class="text-[11px] font-medium text-muted-foreground hover:text-foreground">清除选择</button>
+                <button type="button" @click="selectAllUncached(entry.id, (apiEpisodes[entry.id] ?? []).map((e) => e.sort))" class="text-[11px] font-medium text-primary hover:underline">{{ $t('cache.selectAllUncached') }}</button>
+                <button type="button" @click="clearSelect(entry.id)" class="text-[11px] font-medium text-muted-foreground hover:text-foreground">{{ $t('cache.clearSelection') }}</button>
 
                 <span class="mx-1 hidden h-4 w-px bg-border sm:block" />
 
@@ -736,10 +738,10 @@ async function clearAllCompleted() {
                     type="button"
                     @click.stop="toggleLineMenu(entry.id)"
                     class="flex items-center gap-1 rounded-md bg-foreground/[0.06] px-2 py-1 text-[11px] font-medium text-foreground transition-colors hover:bg-foreground/10"
-                    title="选择从哪条线路/节点下载"
+                    :title="$t('cache.node')"
                   >
                     <Network class="h-3 w-3 text-muted-foreground" />
-                    节点：{{ pickedLineName(entry.id) }}
+                    {{ $t('cache.node') }}：{{ pickedLineName(entry.id) }}
                     <ChevronDown :class="cn('h-3 w-3 text-muted-foreground transition-transform', lineMenuFor === entry.id && 'rotate-180')" />
                   </button>
                   <!-- 线路下拉（向上展开，避免超出卡片） -->
@@ -747,10 +749,10 @@ async function clearAllCompleted() {
                     v-if="lineMenuFor === entry.id"
                     class="absolute bottom-full left-0 z-30 mb-1.5 w-64 overflow-hidden rounded-xl border border-border bg-card shadow-xl shadow-black/20 dark:shadow-black/60"
                   >
-                    <div class="border-b border-border/60 px-3 py-2 text-[10px] font-semibold text-muted-foreground">选择下载节点（m3u8 / MP4）</div>
+                    <div class="border-b border-border/60 px-3 py-2 text-[10px] font-semibold text-muted-foreground">{{ $t('cache.pickNodeTitle') }}</div>
                     <div class="max-h-56 overflow-y-auto p-1">
                       <div v-if="lineOptionsLoading[entry.id]" class="flex items-center gap-2 px-2.5 py-3 text-[11px] text-muted-foreground">
-                        <Loader2 class="h-3.5 w-3.5 animate-spin" /> 正在获取线路列表…
+                        <Loader2 class="h-3.5 w-3.5 animate-spin" /> {{ $t('cache.fetchingLines') }}
                       </div>
                       <template v-else>
                         <button
@@ -759,8 +761,8 @@ async function clearAllCompleted() {
                           :class="cn('flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-[11px] transition-colors hover:bg-foreground/5', !(pickedLine[entry.id]) ? 'font-bold text-primary' : 'text-foreground')"
                         >
                           <Zap class="h-3.5 w-3.5 shrink-0" />
-                          <span class="min-w-0 flex-1">自动优选</span>
-                          <span class="shrink-0 text-[9px] text-muted-foreground">adkwai 优先</span>
+                          <span class="min-w-0 flex-1">{{ $t('cache.autoPick') }}</span>
+                          <span class="shrink-0 text-[9px] text-muted-foreground">{{ $t('cache.autoPickHint') }}</span>
                           <Check v-if="!pickedLine[entry.id]" class="h-3 w-3 shrink-0" />
                         </button>
                         <button
@@ -776,11 +778,11 @@ async function clearAllCompleted() {
                             <span class="block truncate text-[9px] font-normal leading-tight text-muted-foreground">{{ opt.host }}</span>
                           </span>
                           <span class="shrink-0 rounded px-1 py-0.5 text-[9px] font-semibold" :class="protoChipClass(opt.proto)">{{ opt.proto }}</span>
-                          <span v-if="opt.adkwai" class="shrink-0 rounded bg-emerald-500/15 px-1 py-0.5 text-[9px] font-semibold text-emerald-600 dark:text-emerald-400">优选</span>
+                          <span v-if="opt.adkwai" class="shrink-0 rounded bg-emerald-500/15 px-1 py-0.5 text-[9px] font-semibold text-emerald-600 dark:text-emerald-400">{{ $t('cache.preferred') }}</span>
                           <Check v-if="pickedLine[entry.id] === opt.key" class="h-3 w-3 shrink-0" />
                         </button>
                         <div v-if="(lineOptions[entry.id] ?? []).length === 0" class="px-2.5 py-3 text-[11px] text-muted-foreground">
-                          未获取到可下载的线路
+                          {{ $t('cache.noLines') }}
                         </div>
                       </template>
                     </div>
@@ -790,7 +792,7 @@ async function clearAllCompleted() {
                 <span class="mx-1 hidden h-4 w-px bg-border sm:block" />
 
                 <span class="flex items-center gap-1 text-[11px] text-muted-foreground">
-                  m3u8 线程
+                  {{ $t('cache.threads') }}
                   <button type="button" @click="settings.setCacheThreads(settings.data.cacheThreads - 1)" class="flex h-5 w-5 items-center justify-center rounded bg-foreground/10 text-xs font-bold hover:bg-foreground/20">−</button>
                   <span class="w-5 text-center font-bold tabular-nums text-foreground">{{ settings.data.cacheThreads }}</span>
                   <button type="button" @click="settings.setCacheThreads(settings.data.cacheThreads + 1)" class="flex h-5 w-5 items-center justify-center rounded bg-foreground/10 text-xs font-bold hover:bg-foreground/20">＋</button>
@@ -798,8 +800,8 @@ async function clearAllCompleted() {
                 </span>
 
                 <!-- 需求：并发下载 = 同时缓存的集数（默认 3，最高 12），全部线路类型生效 -->
-                <span class="flex items-center gap-1 text-[11px] text-muted-foreground" title="同时下载的集数（m3u8 / MP4 通用）">
-                  并发集数
+                <span class="flex items-center gap-1 text-[11px] text-muted-foreground" :title="$t('cache.concurrencyTitle')">
+                  {{ $t('cache.concurrency') }}
                   <button type="button" @click="settings.setCacheMp4Threads(settings.data.cacheMp4Threads - 1)" class="flex h-5 w-5 items-center justify-center rounded bg-foreground/10 text-xs font-bold hover:bg-foreground/20">−</button>
                   <span class="w-5 text-center font-bold tabular-nums text-foreground">{{ settings.data.cacheMp4Threads }}</span>
                   <button type="button" @click="settings.setCacheMp4Threads(settings.data.cacheMp4Threads + 1)" class="flex h-5 w-5 items-center justify-center rounded bg-foreground/10 text-xs font-bold hover:bg-foreground/20">＋</button>
@@ -813,7 +815,7 @@ async function clearAllCompleted() {
                     @click="cancelAll(entry.id)"
                     class="state-layer rounded-lg border border-destructive/50 px-3 py-1.5 text-xs font-medium text-destructive transition-colors hover:bg-destructive/10"
                   >
-                    取消下载
+                    {{ $t('cache.cancelDownload') }}
                   </button>
                   <button
                     type="button"
@@ -823,7 +825,7 @@ async function clearAllCompleted() {
                   >
                     <Loader2 v-if="resolving[entry.id]" class="h-3.5 w-3.5 animate-spin" />
                     <Download v-else class="h-3.5 w-3.5" />
-                    {{ resolving[entry.id] ? "正在解析播放源…" : "开始下载" }}
+                    {{ resolving[entry.id] ? $t('cache.resolving') : $t('cache.startDownload') }}
                   </button>
                 </div>
               </div>
@@ -840,16 +842,16 @@ async function clearAllCompleted() {
     <section>
       <div class="mb-3 flex items-center gap-3">
         <h3 class="flex flex-none items-baseline gap-1.5 text-[15px] font-bold text-foreground">
-          已完成 <span class="text-xs font-medium tabular-nums text-muted-foreground">({{ cachedList.length }})</span>
+          {{ $t('cache.completed') }} <span class="text-xs font-medium tabular-nums text-muted-foreground">({{ cachedList.length }})</span>
         </h3>
         <span class="h-px min-w-6 flex-1 bg-foreground/10" />
         <!-- Steam 已完成区右上角「清除全部」（二次确认后删除全部缓存） -->
         <template v-if="clearAllConfirm">
           <span class="flex flex-none items-center gap-2">
-            <span class="text-[11px] font-medium text-destructive">删除全部 {{ cachedList.length }} 部缓存（{{ formatBytes(cache.cachedBytes) }}）？</span>
-            <button type="button" @click="clearAllConfirm = false" class="rounded-md border border-border px-2.5 py-1 text-[11px] text-muted-foreground transition-colors hover:text-foreground">取消</button>
+            <span class="text-[11px] font-medium text-destructive">{{ $t('cache.clearAllConfirm', { n: cachedList.length, size: formatBytes(cache.cachedBytes) }) }}</span>
+            <button type="button" @click="clearAllConfirm = false" class="rounded-md border border-border px-2.5 py-1 text-[11px] text-muted-foreground transition-colors hover:text-foreground">{{ $t('common.cancel') }}</button>
             <button type="button" :disabled="clearingAll" @click="clearAllCompleted" class="flex items-center gap-1 rounded-md bg-destructive px-2.5 py-1 text-[11px] font-semibold text-white transition-opacity hover:opacity-90 disabled:opacity-50">
-              <Loader2 v-if="clearingAll" class="h-3 w-3 animate-spin" /> 确认清除
+              <Loader2 v-if="clearingAll" class="h-3 w-3 animate-spin" /> {{ $t('cache.confirmClear') }}
             </button>
           </span>
         </template>
@@ -860,13 +862,13 @@ async function clearAllCompleted() {
           @click="clearAllConfirm = true"
           class="state-layer flex-none rounded-md border border-border bg-muted/60 px-4 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
         >
-          清除全部
+          {{ $t('cache.clearAll') }}
         </button>
       </div>
 
       <div v-if="cachedList.length === 0" class="surface flex min-h-[160px] flex-col items-center justify-center gap-2 rounded-2xl p-8 text-center">
         <FolderOpen class="h-10 w-10 text-muted-foreground/30" />
-        <p class="text-sm text-muted-foreground">还没有已缓存的番剧 · 在上方「追番库」选择集数开始下载</p>
+        <p class="text-sm text-muted-foreground">{{ $t('cache.noMoreCache') }}</p>
       </div>
 
       <div v-else class="flex flex-col gap-2.5">
@@ -880,25 +882,25 @@ async function clearAllCompleted() {
               <h4 class="line-clamp-1 text-sm font-bold text-foreground hover:text-primary">{{ b.title }}</h4>
               <!-- Steam 已完成条目文案：已下载 N / M 集 · 体积 -->
               <p class="mt-1 text-[11px] tabular-nums text-muted-foreground">
-                已下载 <span class="font-semibold text-foreground">{{ cachedDone(b) }}</span> / {{ b.total_episodes || cachedDone(b) }} 集 · {{ formatBytes(cachedSize(b)) }}
-                <template v-if="b.episodes.some((e) => e.status === 'downloading')"> · <span class="font-medium text-emerald-500">正在缓存…</span></template>
+                {{ $t('cache.downloadedN', { n: cachedDone(b), m: b.total_episodes || cachedDone(b) }) }} · {{ formatBytes(cachedSize(b)) }}
+                <template v-if="b.episodes.some((e) => e.status === 'downloading')"> · <span class="font-medium text-emerald-500">{{ $t('cache.caching') }}</span></template>
               </p>
             </button>
             <!-- Steam 右侧「完成于：」时间列 -->
-            <span class="hidden flex-none text-[11px] tabular-nums text-muted-foreground lg:block">完成于：{{ fmtCompleted(lastCompletedAt(b)) }}</span>
+            <span class="hidden flex-none text-[11px] tabular-nums text-muted-foreground lg:block">{{ $t('cache.completedAt', { t: fmtCompleted(lastCompletedAt(b)) }) }}</span>
             <button
               type="button"
               @click.stop="cache.openDir(sanitizeName(b.title))"
               class="state-layer flex shrink-0 items-center gap-1.5 rounded-lg border border-border px-2.5 py-1.5 text-[11px] font-medium text-muted-foreground transition-colors hover:text-foreground"
-              title="在资源管理器中打开该番剧的缓存文件夹"
+              :title="$t('cache.openFolderTitle')"
             >
-              <FolderOpen class="h-3.5 w-3.5" /> <span class="hidden sm:inline">打开文件夹</span>
+              <FolderOpen class="h-3.5 w-3.5" /> <span class="hidden sm:inline">{{ $t('cache.openFolder') }}</span>
             </button>
             <button
               type="button"
               @click.stop="confirmDelete = `b:${b.id}`"
               class="state-layer flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
-              title="删除该番剧全部缓存"
+              :title="$t('cache.deleteAllTitle')"
             >
               <Trash2 class="h-3.5 w-3.5" />
             </button>
@@ -906,7 +908,7 @@ async function clearAllCompleted() {
               type="button"
               @click="toggleCachedExpand(b.id)"
               class="state-layer flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-foreground/5 hover:text-foreground"
-              :aria-label="expandedCached.has(b.id) ? '折叠' : '展开'"
+              :aria-label="expandedCached.has(b.id) ? $t('common.collapse') : $t('common.expand')"
             >
               <ChevronDown v-if="expandedCached.has(b.id)" class="h-4 w-4" />
               <ChevronRight v-else class="h-4 w-4" />
@@ -915,10 +917,10 @@ async function clearAllCompleted() {
 
           <!-- 删除整部确认 -->
           <div v-if="confirmDelete === `b:${b.id}`" class="flex items-center justify-between gap-2 border-t border-destructive/30 bg-destructive/10 px-4 py-2">
-            <p class="text-xs text-destructive">确定删除《{{ b.title }}》的全部 {{ cachedDone(b) }} 集缓存（{{ formatBytes(cachedSize(b)) }}）？</p>
+            <p class="text-xs text-destructive">{{ $t('cache.deleteConfirm', { t: b.title, n: cachedDone(b), size: formatBytes(cachedSize(b)) }) }}</p>
             <div class="flex shrink-0 items-center gap-2">
-              <button type="button" @click="confirmDelete = ''" class="rounded-lg border border-border px-3 py-1 text-[11px] text-muted-foreground hover:text-foreground">取消</button>
-              <button type="button" @click="removeBangumi(b.id)" class="rounded-lg bg-destructive px-3 py-1 text-[11px] font-semibold text-white hover:opacity-90">确认删除</button>
+              <button type="button" @click="confirmDelete = ''" class="rounded-lg border border-border px-3 py-1 text-[11px] text-muted-foreground hover:text-foreground">{{ $t('common.cancel') }}</button>
+              <button type="button" @click="removeBangumi(b.id)" class="rounded-lg bg-destructive px-3 py-1 text-[11px] font-semibold text-white hover:opacity-90">{{ $t('cache.deleteOne') }}</button>
             </div>
           </div>
 
@@ -936,7 +938,7 @@ async function clearAllCompleted() {
                 :disabled="playing === `${b.id}:${ep.sort}`"
                 @click="playLocal(b.id, ep.sort, b.title, b.cover, ep.title)"
                 class="state-layer flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground transition-opacity hover:opacity-90"
-                :aria-label="`播放第${ep.sort}话`"
+                :aria-label="$t('cache.playEpAria', { n: ep.sort })"
               >
                 <Loader2 v-if="playing === `${b.id}:${ep.sort}`" class="h-3.5 w-3.5 animate-spin" />
                 <Play v-else class="ml-0.5 h-3 w-3 fill-current" />
@@ -950,12 +952,12 @@ async function clearAllCompleted() {
 
               <!-- 标题 -->
               <div class="min-w-0 flex-1 basis-40">
-                <p class="line-clamp-1 text-xs font-semibold text-foreground">第{{ ep.sort }}话 {{ ep.title }}</p>
+                <p class="line-clamp-1 text-xs font-semibold text-foreground">{{ $t('common.huaNT', { n: ep.sort, t: ep.title }) }}</p>
                 <p v-if="ep.status === 'downloading'" class="mt-0.5 text-[10px] tabular-nums text-primary">
-                  {{ ep.segments_done }}/{{ ep.segments_total || "…" }} 分片 · {{ formatBytes(cache.statusOf(b.id, ep.sort).bytes) }}<template v-if="cache.statusOf(b.id, ep.sort).bytesTotal > 0"> / 约 {{ formatBytes(cache.statusOf(b.id, ep.sort).bytesTotal) }}</template> · {{ formatSpeed(cache.statusOf(b.id, ep.sort).speed) || "…" }}
+                  {{ $t('cache.segments', { a: ep.segments_done, b: ep.segments_total || "…" }) }} · {{ formatBytes(cache.statusOf(b.id, ep.sort).bytes) }}<template v-if="cache.statusOf(b.id, ep.sort).bytesTotal > 0"> / {{ formatBytes(cache.statusOf(b.id, ep.sort).bytesTotal) }}</template> · {{ formatSpeed(cache.statusOf(b.id, ep.sort).speed) || "…" }}
                 </p>
-                <p v-else-if="ep.status === 'failed'" class="mt-0.5 truncate text-[10px] text-destructive/90" :title="ep.error">{{ ep.error || "下载失败" }}</p>
-                <p v-else class="mt-0.5 text-[10px] text-muted-foreground">缓存于 {{ fmtDate(ep.cached_at) }}</p>
+                <p v-else-if="ep.status === 'failed'" class="mt-0.5 truncate text-[10px] text-destructive/90" :title="ep.error">{{ ep.error || $t('cache.downloadFailed') }}</p>
+                <p v-else class="mt-0.5 text-[10px] text-muted-foreground">{{ $t('cache.cachedAt', { t: fmtDate(ep.cached_at) }) }}</p>
               </div>
 
               <!-- 信息列（更多番剧缓存信息；含 m3u8/MP4 协议标注） -->
@@ -965,7 +967,7 @@ async function clearAllCompleted() {
                 <span v-if="ep.line_name" class="max-w-[120px] truncate rounded bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground" :title="ep.line_name">{{ ep.line_name }}</span>
                 <span v-if="ep.duration_sec" class="rounded bg-muted px-1.5 py-0.5 font-mono text-[10px] tabular-nums text-muted-foreground">{{ formatDuration(ep.duration_sec) }}</span>
                 <span v-if="ep.bytes" class="rounded bg-muted px-1.5 py-0.5 text-[10px] tabular-nums text-muted-foreground">{{ formatBytes(ep.bytes) }}</span>
-                <span v-if="ep.segments_total" class="rounded bg-muted px-1.5 py-0.5 text-[10px] tabular-nums text-muted-foreground">{{ ep.segments_done }}/{{ ep.segments_total }} 片</span>
+                <span v-if="ep.segments_total" class="rounded bg-muted px-1.5 py-0.5 text-[10px] tabular-nums text-muted-foreground">{{ $t('cache.segs', { a: ep.segments_done, b: ep.segments_total }) }}</span>
               </div>
 
               <!-- 删除单集 -->
@@ -975,13 +977,13 @@ async function clearAllCompleted() {
                   type="button"
                   @click="confirmDelete = `e:${b.id}:${ep.sort}`"
                   class="state-layer flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
-                  :aria-label="`删除第${ep.sort}话缓存`"
+                  :aria-label="$t('cache.deleteEpAria', { n: ep.sort })"
                 >
                   <Trash2 class="h-3.5 w-3.5" />
                 </button>
                 <span v-else class="flex shrink-0 items-center gap-1">
-                  <button type="button" @click="confirmDelete = ''" class="rounded-md border border-border px-2 py-1 text-[10px] text-muted-foreground hover:text-foreground">取消</button>
-                  <button type="button" @click="removeEpisode(b.id, ep.sort)" class="rounded-md bg-destructive px-2 py-1 text-[10px] font-semibold text-white hover:opacity-90">删除</button>
+                  <button type="button" @click="confirmDelete = ''" class="rounded-md border border-border px-2 py-1 text-[10px] text-muted-foreground hover:text-foreground">{{ $t('common.cancel') }}</button>
+                  <button type="button" @click="removeEpisode(b.id, ep.sort)" class="rounded-md bg-destructive px-2 py-1 text-[10px] font-semibold text-white hover:opacity-90">{{ $t('cache.deleteOne') }}</button>
                 </span>
               </template>
               <button
@@ -989,13 +991,13 @@ async function clearAllCompleted() {
                 type="button"
                 @click="cancelOne(b.id, ep.sort)"
                 class="state-layer flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
-                :aria-label="`取消第${ep.sort}话下载`"
+                :aria-label="$t('cache.cancelEpAria', { n: ep.sort })"
               >
                 <XCircle class="h-3.5 w-3.5" />
               </button>
             </div>
             <div v-if="downloadingAny" class="px-4 py-2 text-[10px] text-muted-foreground">
-              提示：下载完成后索引会自动刷新；关闭应用不会中断已开始的下载任务。
+              {{ $t('cache.tip') }}
             </div>
           </div>
         </div>

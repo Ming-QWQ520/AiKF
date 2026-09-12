@@ -4,6 +4,7 @@ import { Compass, CalendarDays, LayoutGrid, Bookmark, Search as SearchIcon, Chev
 import { useUIStore, type ViewKey } from "@/stores/ui";
 import { useLibraryStore } from "@/stores/library";
 import { useCacheStore } from "@/stores/cache";
+import { i18n } from "@/i18n";
 import { cn } from "@/lib/utils";
 import SearchBar from "./SearchBar.vue";
 import ThemeToggle from "./ThemeToggle.vue";
@@ -17,12 +18,12 @@ const libraryCount = computed(() => library.count);
 const libraryList = computed(() => library.list.slice(0, 8));
 const libraryExpanded = ref(true);
 
-const navItems: { key: ViewKey; label: string; icon: any }[] = [
-  { key: "discover", label: "发现", icon: Compass },
-  { key: "calendar", label: "时间表", icon: CalendarDays },
-  { key: "browse", label: "分类", icon: LayoutGrid },
-  { key: "search", label: "搜索", icon: SearchIcon },
-  { key: "cache", label: "本地缓存", icon: HardDriveDownload },
+const navItems: { key: ViewKey; labelKey: string; icon: any }[] = [
+  { key: "discover", labelKey: "nav.discover", icon: Compass },
+  { key: "calendar", labelKey: "nav.calendar", icon: CalendarDays },
+  { key: "browse", labelKey: "nav.browse", icon: LayoutGrid },
+  { key: "search", labelKey: "nav.search", icon: SearchIcon },
+  { key: "cache", labelKey: "nav.cache", icon: HardDriveDownload },
 ];
 
 // ── Responsive sidebar collapse ──
@@ -76,11 +77,12 @@ const watchedPct = (entry: { currentEpisode: number; watchedEpisodes: number[]; 
   return Math.min(100, Math.round((cur / entry.totalEpisodes) * 100));
 };
 const progressLabel = (entry: { currentEpisode: number; watchedEpisodes: number[]; totalEpisodes: number }): string => {
+  const t = i18n.global.t;
   const cur = currentEp(entry);
   const total = entry.totalEpisodes || 0;
-  if (total > 0) return `${cur} / ${total} 话`;
-  if (cur > 0) return `${cur} 话`;
-  return "未开始";
+  if (total > 0) return t("common.episodesOf", { cur, total });
+  if (cur > 0) return t("common.episodesN", { n: cur });
+  return t("common.notStarted");
 };
 </script>
 
@@ -131,12 +133,12 @@ const progressLabel = (entry: { currentEpisode: number; watchedEpisodes: number[
               )"
             >
               <component :is="item.icon" class="h-[18px] w-[18px] shrink-0" :stroke-width="ui.view === item.key ? 2.2 : 1.8" />
-              <span v-if="!effectiveCollapsed" class="flex-1 text-left">{{ item.label }}</span>
+              <span v-if="!effectiveCollapsed" class="flex-1 text-left">{{ $t(item.labelKey) }}</span>
               <!-- 激活指示条（窄侧栏模式下可见） -->
               <span v-if="ui.view === item.key && effectiveCollapsed" class="absolute left-0 h-5 w-[2.5px] rounded-full bg-primary" />
             </button>
           </template>
-          <span>{{ item.label }}</span>
+          <span>{{ $t(item.labelKey) }}</span>
         </NTooltip>
       </nav>
 
@@ -165,7 +167,7 @@ const progressLabel = (entry: { currentEpisode: number; watchedEpisodes: number[
                 >{{ libraryCount > 99 ? '99+' : libraryCount }}</span>
               </span>
               <template v-if="!effectiveCollapsed">
-                <span class="flex-1 text-sm font-medium">追番库</span>
+                <span class="flex-1 text-sm font-medium">{{ $t('nav.library') }}</span>
                 <span
                   v-if="libraryCount > 0"
                   @click.stop.prevent="libraryExpanded = !libraryExpanded"
@@ -177,7 +179,7 @@ const progressLabel = (entry: { currentEpisode: number; watchedEpisodes: number[
               </template>
             </button>
           </template>
-          <span>追番库 ({{ libraryCount }})</span>
+          <span>{{ $t('nav.libraryCounted', { n: libraryCount }) }}</span>
         </NTooltip>
 
         <!-- Library entries list -->
@@ -231,7 +233,7 @@ const progressLabel = (entry: { currentEpisode: number; watchedEpisodes: number[
           v-else-if="!effectiveCollapsed && libraryExpanded && libraryCount === 0"
           class="mt-2 py-4 text-center"
         >
-          <p class="text-[11px] text-muted-foreground">追番库为空</p>
+          <p class="text-[11px] text-muted-foreground">{{ $t('nav.libraryEmpty') }}</p>
         </div>
       </div>
 
@@ -251,10 +253,10 @@ const progressLabel = (entry: { currentEpisode: number; watchedEpisodes: number[
               )"
             >
               <component :is="SettingsIcon" class="h-[18px] w-[18px] shrink-0" :stroke-width="ui.view === 'settings' ? 2.2 : 1.8" />
-              <span v-if="!effectiveCollapsed" class="flex-1 text-left">设置</span>
+              <span v-if="!effectiveCollapsed" class="flex-1 text-left">{{ $t('nav.settings') }}</span>
             </button>
           </template>
-          <span>设置</span>
+          <span>{{ $t('nav.settings') }}</span>
         </NTooltip>
       </div>
     </aside>
@@ -269,13 +271,13 @@ const progressLabel = (entry: { currentEpisode: number; watchedEpisodes: number[
                 type="button"
                 @click="toggleSidebar"
                 class="hidden h-8 w-8 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-foreground/5 hover:text-foreground md:flex"
-                :aria-label="effectiveCollapsed ? '展开侧栏' : '收起侧栏'"
+                :aria-label="effectiveCollapsed ? $t('nav.expandSidebar') : $t('nav.collapseSidebar')"
               >
                 <PanelLeftOpen v-if="effectiveCollapsed" class="h-4 w-4" />
                 <PanelLeftClose v-else class="h-4 w-4" />
               </button>
             </template>
-            <span>{{ effectiveCollapsed ? '展开侧栏' : '收起侧栏' }}</span>
+            <span>{{ effectiveCollapsed ? $t('nav.expandSidebar') : $t('nav.collapseSidebar') }}</span>
           </NTooltip>
           <div class="md:hidden">
             <img src="/aikf-logo-128.png" alt="AiKF" class="h-7 w-7 rounded-lg" draggable="false" />
@@ -288,13 +290,13 @@ const progressLabel = (entry: { currentEpisode: number; watchedEpisodes: number[
               class="flex h-8 items-center gap-2 rounded-lg border border-border px-2.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-foreground/5 hover:text-foreground md:hidden"
             >
               <SearchIcon class="h-4 w-4" />
-              <span class="hidden sm:inline">搜索</span>
+              <span class="hidden sm:inline">{{ $t('nav.search') }}</span>
             </button>
             <NTooltip placement="bottom">
               <template #trigger>
                 <ThemeToggle />
               </template>
-              <span>切换深色 / 浅色模式</span>
+              <span>{{ $t('nav.toggleTheme') }}</span>
             </NTooltip>
           </div>
         </div>
@@ -311,7 +313,7 @@ const progressLabel = (entry: { currentEpisode: number; watchedEpisodes: number[
     <nav class="fixed inset-x-0 bottom-0 z-40 border-t border-border/70 bg-background/90 px-3 pb-[max(0.5rem,env(safe-area-inset-bottom))] pt-1.5 backdrop-blur-md md:hidden">
       <div class="mx-auto flex max-w-md items-center justify-around">
         <button
-          v-for="item in [...navItems, { key: 'library' as ViewKey, label: '追番库', icon: Bookmark }]"
+          v-for="item in [...navItems, { key: 'library' as ViewKey, labelKey: 'nav.library', icon: Bookmark }]"
           :key="item.key"
           :data-nav-key="item.key"
           type="button"
@@ -326,7 +328,7 @@ const progressLabel = (entry: { currentEpisode: number; watchedEpisodes: number[
           >
             <component :is="item.icon" class="h-5 w-5" :stroke-width="ui.view === item.key ? 2.2 : 1.8" />
           </span>
-          <span :class="ui.view === item.key ? 'text-primary' : 'text-muted-foreground'">{{ item.label }}</span>
+          <span :class="ui.view === item.key ? 'text-primary' : 'text-muted-foreground'">{{ $t(item.labelKey) }}</span>
         </button>
       </div>
     </nav>

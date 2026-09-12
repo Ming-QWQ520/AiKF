@@ -14,28 +14,28 @@ import { cn } from "@/lib/utils";
 const ui = useUIStore();
 const PAGE_SIZE = 24;
 
-const TYPE_OPTIONS: { value?: BangumiType; label: string }[] = [
-  { value: undefined, label: "全部" },
-  { value: "tv", label: "TV" },
-  { value: "movie", label: "剧场版" },
-  { value: "ova", label: "OVA" },
+const TYPE_OPTIONS: { value?: BangumiType; labelKey: string }[] = [
+  { value: undefined, labelKey: "common.all" },
+  { value: "tv", labelKey: "browse.typeTv" },
+  { value: "movie", labelKey: "browse.typeMovie" },
+  { value: "ova", labelKey: "browse.typeOva" },
 ];
-const LANG_OPTIONS: { value?: BangumiLang; label: string }[] = [
-  { value: undefined, label: "全部" },
-  { value: "ja", label: "日语" },
-  { value: "zh", label: "国语" },
-  { value: "en", label: "英语" },
-  { value: "ko", label: "韩语" },
-  { value: "other", label: "其他" },
+const LANG_OPTIONS: { value?: BangumiLang; labelKey: string }[] = [
+  { value: undefined, labelKey: "common.all" },
+  { value: "ja", labelKey: "common.langNames.ja" },
+  { value: "zh", labelKey: "common.langNames.zh" },
+  { value: "en", labelKey: "common.langNames.en" },
+  { value: "ko", labelKey: "common.langNames.ko" },
+  { value: "other", labelKey: "common.langNames.other" },
 ];
 const YEAR_OPTIONS = ["", "2026", "2025", "2024", "2023", "2022", "2021", "2020"];
-const YEAR_LABELS: Record<string, string> = { "": "全部", "2020": "2020及更早" };
+const YEAR_LABEL_KEYS: Record<string, string> = { "": "common.all", "2020": "browse.year2020" };
 
 // Sort options (client-side since API doesn't support sort param)
 const SORT_OPTIONS = [
-  { value: "default", label: "默认" },
-  { value: "latest", label: "最新" },
-  { value: "rating", label: "评分" },
+  { value: "default", labelKey: "browse.sortDefault" },
+  { value: "latest", labelKey: "browse.sortLatest" },
+  { value: "rating", labelKey: "browse.sortRating" },
 ] as const;
 type SortKey = typeof SORT_OPTIONS[number]["value"];
 const sortKey = ref<SortKey>("default");
@@ -103,61 +103,61 @@ watch(() => filters.value.skip, () => window.scrollTo({ top: 0, behavior: "smoot
             <LayoutGrid class="h-4.5 w-4.5" />
           </span>
           <div>
-            <h2 class="text-lg font-semibold sm:text-xl">番剧分类</h2>
+            <h2 class="text-lg font-semibold sm:text-xl">{{ $t('browse.title') }}</h2>
             <p class="text-xs text-muted-foreground sm:text-sm">
-              筛选你感兴趣的番剧
-              <template v-if="activeFilterCount > 0"> · 已应用 {{ activeFilterCount }} 个筛选</template>
+              {{ $t('browse.subtitle') }}
+              <template v-if="activeFilterCount > 0"> · {{ $t('browse.applied', { n: activeFilterCount }) }}</template>
             </p>
           </div>
         </div>
         <button v-if="activeFilterCount > 0" @click="clearAll" class="state-layer flex items-center gap-1 rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-muted-foreground hover:text-foreground">
-          <X class="h-3 w-3" /> 清除
+          <X class="h-3 w-3" /> {{ $t('browse.clear') }}
         </button>
       </div>
 
       <div class="mt-4 flex min-w-0 flex-col gap-3">
         <!-- 类型 -->
         <div class="flex min-w-0 items-start gap-3">
-          <span class="mt-1.5 w-16 shrink-0 text-xs font-medium text-muted-foreground">类型</span>
+          <span class="mt-1.5 w-16 shrink-0 text-xs font-medium text-muted-foreground">{{ $t('browse.type') }}</span>
           <div class="flex min-w-0 flex-wrap gap-1.5">
-            <button v-for="o in TYPE_OPTIONS" :key="o.label" @click="setFilter('type', o.value)" :class="cn('state-layer whitespace-nowrap rounded-full px-3 py-1.5 text-xs font-medium transition-colors', filters.type === o.value ? 'bg-foreground text-background' : 'bg-muted text-muted-foreground hover:bg-accent hover:text-foreground')">{{ o.label }}</button>
+            <button v-for="o in TYPE_OPTIONS" :key="o.labelKey" @click="setFilter('type', o.value)" :class="cn('state-layer whitespace-nowrap rounded-full px-3 py-1.5 text-xs font-medium transition-colors', filters.type === o.value ? 'bg-foreground text-background' : 'bg-muted text-muted-foreground hover:bg-accent hover:text-foreground')">{{ $t(o.labelKey) }}</button>
           </div>
         </div>
         <!-- 语言 -->
         <div class="flex min-w-0 items-start gap-3">
-          <span class="mt-1.5 w-16 shrink-0 text-xs font-medium text-muted-foreground">语言</span>
+          <span class="mt-1.5 w-16 shrink-0 text-xs font-medium text-muted-foreground">{{ $t('browse.lang') }}</span>
           <div class="flex min-w-0 flex-wrap gap-1.5">
-            <button v-for="o in LANG_OPTIONS" :key="o.label" @click="setFilter('lang', o.value)" :class="cn('state-layer whitespace-nowrap rounded-full px-3 py-1.5 text-xs font-medium transition-colors', filters.lang === o.value ? 'bg-foreground text-background' : 'bg-muted text-muted-foreground hover:bg-accent hover:text-foreground')">{{ o.label }}</button>
+            <button v-for="o in LANG_OPTIONS" :key="o.labelKey" @click="setFilter('lang', o.value)" :class="cn('state-layer whitespace-nowrap rounded-full px-3 py-1.5 text-xs font-medium transition-colors', filters.lang === o.value ? 'bg-foreground text-background' : 'bg-muted text-muted-foreground hover:bg-accent hover:text-foreground')">{{ $t(o.labelKey) }}</button>
           </div>
         </div>
         <!-- 年份 -->
         <div class="flex min-w-0 items-start gap-3">
-          <span class="mt-1.5 w-16 shrink-0 text-xs font-medium text-muted-foreground">年份</span>
+          <span class="mt-1.5 w-16 shrink-0 text-xs font-medium text-muted-foreground">{{ $t('browse.year') }}</span>
           <div class="flex min-w-0 flex-wrap gap-1.5">
-            <button v-for="y in YEAR_OPTIONS" :key="y || 'all'" @click="setFilter('year', y)" :class="cn('state-layer whitespace-nowrap rounded-full px-3 py-1.5 text-xs font-medium transition-colors', filters.year === y ? 'bg-foreground text-background' : 'bg-muted text-muted-foreground hover:bg-accent hover:text-foreground')">{{ YEAR_LABELS[y] ?? y }}</button>
+            <button v-for="y in YEAR_OPTIONS" :key="y || 'all'" @click="setFilter('year', y)" :class="cn('state-layer whitespace-nowrap rounded-full px-3 py-1.5 text-xs font-medium transition-colors', filters.year === y ? 'bg-foreground text-background' : 'bg-muted text-muted-foreground hover:bg-accent hover:text-foreground')">{{ YEAR_LABEL_KEYS[y] ? $t(YEAR_LABEL_KEYS[y]) : y }}</button>
           </div>
         </div>
         <!-- 类型标签 — flex-wrap so tags wrap to next line instead of overflowing -->
         <div class="flex min-w-0 items-start gap-3">
-          <span class="mt-1.5 w-16 shrink-0 text-xs font-medium text-muted-foreground">类型标签</span>
+          <span class="mt-1.5 w-16 shrink-0 text-xs font-medium text-muted-foreground">{{ $t('browse.genre') }}</span>
           <div class="flex min-w-0 flex-wrap gap-1.5">
-            <button @click="setFilter('genre', undefined)" :class="cn('state-layer whitespace-nowrap rounded-full px-3 py-1.5 text-xs font-medium transition-colors', !filters.genre ? 'bg-foreground text-background' : 'bg-muted text-muted-foreground hover:bg-accent hover:text-foreground')">全部</button>
+            <button @click="setFilter('genre', undefined)" :class="cn('state-layer whitespace-nowrap rounded-full px-3 py-1.5 text-xs font-medium transition-colors', !filters.genre ? 'bg-foreground text-background' : 'bg-muted text-muted-foreground hover:bg-accent hover:text-foreground')">{{ $t('common.all') }}</button>
             <button v-for="g in (genresData ?? [])" :key="g.name" @click="setFilter('genre', g.name)" :class="cn('state-layer whitespace-nowrap rounded-full px-3 py-1.5 text-xs font-medium transition-colors', filters.genre === g.name ? 'bg-foreground text-background' : 'bg-muted text-muted-foreground hover:bg-accent hover:text-foreground')">{{ g.name }} <span class="ml-1 text-[10px] opacity-60">{{ g.count }}</span></button>
           </div>
         </div>
         <!-- 标记 — flex-wrap so tags wrap to next line instead of overflowing -->
         <div class="flex min-w-0 items-start gap-3">
-          <span class="mt-1.5 w-16 shrink-0 text-xs font-medium text-muted-foreground">标记</span>
+          <span class="mt-1.5 w-16 shrink-0 text-xs font-medium text-muted-foreground">{{ $t('browse.mark') }}</span>
           <div class="flex min-w-0 flex-wrap gap-1.5">
-            <button @click="setFilter('mark', undefined)" :class="cn('state-layer whitespace-nowrap rounded-full px-3 py-1.5 text-xs font-medium transition-colors', !filters.mark ? 'bg-foreground text-background' : 'bg-muted text-muted-foreground hover:bg-accent hover:text-foreground')">全部</button>
+            <button @click="setFilter('mark', undefined)" :class="cn('state-layer whitespace-nowrap rounded-full px-3 py-1.5 text-xs font-medium transition-colors', !filters.mark ? 'bg-foreground text-background' : 'bg-muted text-muted-foreground hover:bg-accent hover:text-foreground')">{{ $t('common.all') }}</button>
             <button v-for="m in (marksData ?? [])" :key="m.name" @click="setFilter('mark', m.name)" :class="cn('state-layer whitespace-nowrap rounded-full px-3 py-1.5 text-xs font-medium transition-colors', filters.mark === m.name ? 'bg-foreground text-background' : 'bg-muted text-muted-foreground hover:bg-accent hover:text-foreground')">{{ m.name }} <span class="ml-1 text-[10px] opacity-60">{{ m.count }}</span></button>
           </div>
         </div>
         <!-- 排序 -->
         <div class="flex min-w-0 items-start gap-3">
-          <span class="mt-1.5 w-16 shrink-0 text-xs font-medium text-muted-foreground">排序</span>
+          <span class="mt-1.5 w-16 shrink-0 text-xs font-medium text-muted-foreground">{{ $t('browse.sort') }}</span>
           <div class="flex min-w-0 flex-wrap gap-1.5">
-            <button v-for="o in SORT_OPTIONS" :key="o.value" @click="sortKey = o.value" :class="cn('state-layer whitespace-nowrap rounded-full px-3 py-1.5 text-xs font-medium transition-colors', sortKey === o.value ? 'bg-foreground text-background' : 'bg-muted text-muted-foreground hover:bg-accent hover:text-foreground')">{{ o.label }}</button>
+            <button v-for="o in SORT_OPTIONS" :key="o.value" @click="sortKey = o.value" :class="cn('state-layer whitespace-nowrap rounded-full px-3 py-1.5 text-xs font-medium transition-colors', sortKey === o.value ? 'bg-foreground text-background' : 'bg-muted text-muted-foreground hover:bg-accent hover:text-foreground')">{{ $t(o.labelKey) }}</button>
           </div>
         </div>
       </div>
@@ -166,17 +166,17 @@ watch(() => filters.value.skip, () => window.scrollTo({ top: 0, behavior: "smoot
     <!-- Results -->
     <section class="flex min-w-0 flex-col gap-4">
       <div class="flex items-center justify-between">
-        <p class="text-sm text-muted-foreground">{{ isLoading ? "加载中…" : `共 ${items.length}${hasNext ? "+" : ""} 部结果` }}</p>
+        <p class="text-sm text-muted-foreground">{{ isLoading ? $t('common.loading') : $t('browse.resultCount', { n: items.length, suffix: hasNext ? '+' : '' }) }}</p>
         <div class="flex items-center gap-1.5">
           <button :disabled="!hasPrev" @click="ui.setBrowseFilters({ skip: Math.max(0, filters.skip - PAGE_SIZE) })" :class="cn('state-layer flex h-8 w-8 items-center justify-center rounded-lg border transition-colors', !hasPrev ? 'cursor-not-allowed border-border text-muted-foreground/30' : 'surface text-foreground hover:border-foreground/25')"><ChevronLeft class="h-4 w-4" /></button>
-          <span class="min-w-[3.5rem] text-center text-xs font-medium text-muted-foreground">第 {{ Math.floor(filters.skip / PAGE_SIZE) + 1 }} 页</span>
+          <span class="min-w-[3.5rem] text-center text-xs font-medium text-muted-foreground">{{ $t('common.pageN', { n: Math.floor(filters.skip / PAGE_SIZE) + 1 }) }}</span>
           <button :disabled="!hasNext" @click="ui.setBrowseFilters({ skip: filters.skip + PAGE_SIZE })" :class="cn('state-layer flex h-8 w-8 items-center justify-center rounded-lg border transition-colors', !hasNext ? 'cursor-not-allowed border-border text-muted-foreground/30' : 'surface text-foreground hover:border-foreground/25')"><ChevronRight class="h-4 w-4" /></button>
         </div>
       </div>
       <AnimeGridSkeleton v-if="isLoading" :count="PAGE_SIZE" />
       <!-- Card grid with rating + metadata (like screenshot) -->
       <div v-else-if="items.length === 0" class="surface flex min-h-[200px] items-center justify-center rounded-2xl p-10 text-center text-muted-foreground">
-        没有符合条件的番剧，试试调整筛选
+        {{ $t('browse.noResults') }}
       </div>
       <!-- Dynamic responsive grid. Column count is computed in JS based on
            the actual measured container width (via ResizeObserver). Container
@@ -197,8 +197,8 @@ watch(() => filters.value.skip, () => window.scrollTo({ top: 0, behavior: "smoot
           <p class="mt-1.5 line-clamp-1 text-xs font-medium text-foreground">{{ item.title }}</p>
           <p v-if="item.tagline" class="line-clamp-1 text-[10px] text-muted-foreground">{{ item.tagline }}</p>
           <div class="mt-0.5 flex items-center gap-2 text-[10px] text-muted-foreground">
-            <span v-if="item.episode" class="text-secondary">更新至{{ item.episode }}话</span>
-            <span v-if="item.episodesTotal">共{{ item.episodesTotal }}话</span>
+            <span v-if="item.episode" class="text-secondary">{{ $t('common.upToEp', { n: item.episode }) }}</span>
+            <span v-if="item.episodesTotal">{{ $t('common.totalEps', { n: item.episodesTotal }) }}</span>
           </div>
         </button>
       </div>

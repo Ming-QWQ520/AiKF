@@ -7,12 +7,13 @@ export type TrackStatus =
   | "onhold"
   | "dropped";
 
-export const STATUS_LABELS: Record<TrackStatus, string> = {
-  watching: "在看",
-  planned: "想看",
-  completed: "看过",
-  onhold: "搁置",
-  dropped: "弃番",
+/** 追番状态 → i18n key（显示文案经 $t()/t() 翻译，支持多语言） */
+export const STATUS_I18N_KEYS: Record<TrackStatus, string> = {
+  watching: "library.status.watching",
+  planned: "library.status.planned",
+  completed: "library.status.completed",
+  onhold: "library.status.onhold",
+  dropped: "library.status.dropped",
 };
 
 export const STATUS_ORDER: TrackStatus[] = [

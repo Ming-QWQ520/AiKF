@@ -1,9 +1,10 @@
-import { createApp } from "vue";
+import { createApp, watch } from "vue";
 import { createPinia } from "pinia";
 import { gsap } from "gsap";
 import naive from "naive-ui";
 import App from "./App.vue";
 import "./assets/globals.css";
+import { i18n, applyLocale } from "@/i18n";
 import { useLibraryStore } from "@/stores/library";
 import { useSettingsStore } from "@/stores/settings";
 import { registerGlobalUX } from "@/lib/global-ux";
@@ -31,10 +32,16 @@ app.use(pinia);
 // available inside the player & sidebar templates.
 app.use(naive);
 
+// vue-i18n — 多语言支持（默认中文，设置页可切换；持久化在 settings store）
+app.use(i18n);
+
 // Hydrate persisted library data before mounting.
 useLibraryStore().hydrate();
 // Load persisted settings (theme, playback, background) before mounting.
-useSettingsStore();
+const settingsStore = useSettingsStore();
+// 启动时应用持久化的界面语言（默认 zh-CN），并在设置变更时实时切换
+applyLocale(settingsStore.data.language);
+watch(() => settingsStore.data.language, (lang) => applyLocale(lang));
 
 // Global UX: block web shortcuts + right-click (always on, not configurable),
 // spacebar scroll, img draggable=false.

@@ -14,6 +14,7 @@ import { useUIStore } from "@/stores/ui";
 import { useLibraryStore } from "@/stores/library";
 import { useSettingsStore } from "@/stores/settings";
 import { useCacheStore, formatBytes } from "@/stores/cache";
+import { i18n } from "@/i18n";
 import { useAsync } from "@/composables/useAsync";
 import { cn } from "@/lib/utils";
 import ToggleSwitch from "@/components/ToggleSwitch.vue";
@@ -35,6 +36,7 @@ const ui = useUIStore();
 const library = useLibraryStore();
 const settings = useSettingsStore();
 const cacheStore = useCacheStore();
+const t = i18n.global.t;
 
 const open = computed(() => ui.player.open);
 const bangumiID = computed(() => ui.player.bangumiID);
@@ -160,13 +162,13 @@ function sourceProtoLabel(url: string): string {
   const k = classifySource(url);
   if (k === "hls") return "m3u8";
   if (k === "direct") return "MP4";
-  return "未知";
+  return t("common.unknown");
 }
 function sourceName(url: string): string {
   // 线路节点名称：原始主机名（不做美化重命名）
   try {
     return new URL(url).hostname;
-  } catch { return "未知源"; }
+  } catch { return t("common.unknownSource"); }
 }
 /** 是否 adkwai 线路（实测播放速度远优于其他低延迟线路，选线时优先）。 */
 function isAdkwaiSource(url: string): boolean {
@@ -242,8 +244,8 @@ async function pickFastestSource(srcs: { url: string }[], ek: string): Promise<n
   const pool = kwaiValid.length > 0 ? [...kwaiValid].sort((a, b) => a.ms! - b.ms!) : [...valid].sort((a, b) => a.ms! - b.ms!);
   pushLog(
     kwaiValid.length > 0
-      ? `选线：优选 adkwai（可用 ${kwaiValid.length} 条，取其中最低延迟 ${pool[0].ms}ms）`
-      : `选线：无可用 adkwai 线路，按延迟选最优 ${pool[0].ms}ms`
+      ? `选线：优选 adkwai（可用 ${kwaiValid.length} 条，取其中最低延迟 ${pool[0].ms}ms）` // i18n-skip: 控制台日志
+      : `选线：无可用 adkwai 线路，按延迟选最优 ${pool[0].ms}ms` // i18n-skip: 控制台日志
   );
   return pool[0].idx;
 }
@@ -491,8 +493,8 @@ function createArt(container: HTMLElement, url: string) {
         name: "aikf-episodes",
         position: "right",
         index: 20,
-        html: '<span class="aikf-text-btn">选集</span>',
-        tooltip: "选集",
+        html: `<span class="aikf-text-btn">${t("player.ctrlEpisodes")}</span>`,
+        tooltip: t("player.ctrlEpisodes"),
         click: () => {
           // 需求：面板展开时 → 转至面板选集页；面板收起时 → 弹出模态选集弹层
           // （再次点击可切换关闭）；其它弹层一律先收起
@@ -509,8 +511,8 @@ function createArt(container: HTMLElement, url: string) {
         name: "aikf-line",
         position: "right",
         index: 25,
-        html: '<span class="aikf-line-badge">线路 …</span>',
-        tooltip: "切换线路",
+        html: `<span class="aikf-line-badge">${t("player.ctrlLinePending")}</span>`,
+        tooltip: t("player.ctrlSwitchLine"),
         click: () => {
           settingsPanelOpen.value = false;
           linePanelOpen.value = !linePanelOpen.value;
@@ -526,8 +528,8 @@ function createArt(container: HTMLElement, url: string) {
       name: "aikf-danmaku",
       position: "right",
       index: 28,
-      html: '<span class="aikf-danmaku-btn">弹</span>',
-      tooltip: "弹幕设置",
+      html: '<span class="aikf-danmaku-btn">' + t("player.ctrlDanmaku") + '</span>',
+      tooltip: t("player.ctrlDanmakuTip"),
       click: () => {
         linePanelOpen.value = false;
         settingsPanelOpen.value = false;
@@ -540,7 +542,7 @@ function createArt(container: HTMLElement, url: string) {
         position: "right",
         index: 30,
         html: '<span class="aikf-gear-btn"><svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></span>',
-        tooltip: "设置",
+        tooltip: t("player.ctrlSettings"),
         click: () => {
           linePanelOpen.value = false;
           settingsPanelOpen.value = !settingsPanelOpen.value;
@@ -553,7 +555,7 @@ function createArt(container: HTMLElement, url: string) {
         position: "right",
         index: 35,
         html: '<span class="aikf-mini-btn"><svg viewBox="0 0 1024 1024" width="22" height="22" fill="currentColor"><path d="M844.8 219.648h-665.6c-6.144 0-10.24 4.608-10.24 10.752v563.2c0 5.632 4.096 10.24 10.24 10.24h256v92.16h-256a102.4 102.4 0 0 1-102.4-102.4v-563.2c0-56.832 45.568-102.4 102.4-102.4h665.6a102.4 102.4 0 0 1 102.4 102.4v204.8h-92.16v-204.8c0-6.144-4.608-10.752-10.24-10.752zM614.4 588.8c-28.672 0-51.2 22.528-51.2 51.2v204.8c0 28.16 22.528 51.2 51.2 51.2h281.6c28.16 0 51.2-23.04 51.2-51.2v-204.8c0-28.672-23.04-51.2-51.2-51.2H614.4z"/></svg></span>',
-        tooltip: "小窗播放",
+        tooltip: t("player.ctrlMini"),
         click: () => toggleMini(),
       },
     );
@@ -593,9 +595,9 @@ function createArt(container: HTMLElement, url: string) {
                       if (data.type === Hls.ErrorTypes.NETWORK_ERROR) hls.startLoad();
                       else if (data.type === Hls.ErrorTypes.MEDIA_ERROR) hls.recoverMediaError();
                       else if (localSrc) {
-                        videoError.value = `本地播放失败：${data.details || data.type}`;
+                        videoError.value = t("player.noticeLocalPlayFail", { d: data.details || data.type });
                       } else {
-                        videoError.value = `播放失败：${data.details || data.type}`;
+                        videoError.value = t("player.noticePlayFail", { d: data.details || data.type });
                         tryAutoAdvance(effectiveIdx.value);
                       }
                     }
@@ -680,7 +682,7 @@ function createArt(container: HTMLElement, url: string) {
       const step = e.deltaY > 0 ? -0.05 : 0.05;
       const v = Math.min(1, Math.max(0, Math.round((art.volume + step) * 100) / 100));
       art.volume = v;
-      art.notice.show = `音量 ${Math.round(v * 100)}%`;
+      art.notice.show = t("player.noticeVolume", { n: Math.round(v * 100) });
     };
     const onRootClick = (e: MouseEvent) => {
       const t = e.target as Element | null;
@@ -749,8 +751,8 @@ function createArt(container: HTMLElement, url: string) {
     // ── Auto-play next episode when current one ends ──
     art.on("video:ended", () => {
       if (!settings.data.autoNext) {
-        pushLog("video ended — 自动连播已关闭");
-        if (art) art.notice.show = "本集播放结束（自动连播已关闭）";
+        pushLog("video ended — auto-next disabled");
+        if (art) art.notice.show = t("player.noticeEndedAutoOff");
         return;
       }
       pushLog("video ended — auto-playing next episode");
@@ -785,7 +787,7 @@ function createArt(container: HTMLElement, url: string) {
       : String(err);
     const stack = err instanceof Error && err.stack ? `\n${err.stack.split("\n").slice(0, 4).join("\n")}` : "";
     pushLog(`Error details: ${msg}${stack}`);
-    videoError.value = `播放器初始化失败: ${msg}`;
+    videoError.value = t("player.noticeInitFail", { m: msg });
   }
 }
 
@@ -809,7 +811,7 @@ function tryAutoAdvance(currentIdx: number) {
   const next = sources.value.findIndex((_, i) => !triedSources.has(i));
   pushLog(`auto-advance: current=${currentIdx}, next=${next}`);
   if (next >= 0 && next !== currentIdx) sourceIdx.value = next;
-  else videoError.value = "所有播放源均无法播放，请稍后重试或更换剧集";
+  else videoError.value = t("player.noticeNoPlayableSource");
 }
 
 onBeforeUnmount(() => {
@@ -829,15 +831,15 @@ async function switchLocalEpisode(sort: number) {
   try {
     const url = await cacheStore.playUrl(bangumiID.value, sort);
     if (!url) {
-      if (art) art.notice.show = "该集尚未缓存完成";
+      if (art) art.notice.show = t("player.noticeNotCached");
       return;
     }
     const ep = cacheStore.episode(bangumiID.value, sort);
-    ui.setPlayerLocalEpisode(sort, ep?.title || `第${sort}集`, url);
+    ui.setPlayerLocalEpisode(sort, ep?.title || t("common.epN", { n: sort }), url);
     closePanels();
   } catch (e) {
     pushLog(`switchLocalEpisode failed: ${e}`);
-    if (art) art.notice.show = "切换失败：缓存文件不存在";
+    if (art) art.notice.show = t("player.noticeSwitchFail");
   }
 }
 
@@ -864,7 +866,7 @@ const videoResolution = ref<{ width: number; height: number; label: string } | n
 // ── 线路徽标（底栏 aikf-line 控件）：使用线路原始名称（不做美化重命名）──
 const lineBadgeText = computed(() => {
   const s = sources.value[effectiveIdx.value];
-  if (!s) return "线路 …";
+  if (!s) return t("player.ctrlLinePending");
   return rawLineName(s);
 });
 function updateLineBadge() {
@@ -895,7 +897,7 @@ async function probeLineResolutions() {
         if (m) {
           lineResolution.value = { ...lineResolution.value, [i]: resolutionLabel(Number(m[2])) };
         } else if (text.includes("#EXTINF")) {
-          lineResolution.value = { ...lineResolution.value, [i]: "未知" };
+          lineResolution.value = { ...lineResolution.value, [i]: t("common.unknown") };
         }
       } else {
         lineResolution.value = { ...lineResolution.value, [i]: "—" };
@@ -916,7 +918,7 @@ function lineResOf(i: number): string {
   if (lineResolution.value[i]) return lineResolution.value[i];
   if (i === effectiveIdx.value && videoResolution.value) return videoResolution.value.label;
   const s = sources.value[i];
-  if (s && classifySource(s.url) === "direct") return "直链";
+  if (s && classifySource(s.url) === "direct") return t("player.directLink");
   return lineProbing.value ? "…" : "—";
 }
 
@@ -945,7 +947,7 @@ const epGridItems = computed<EpGridItem[]>(() => {
       .sort((a, b) => a.sort - b.sort)
       .map((e) => ({
         key: `l${e.sort}`, sort: e.sort, title: e.title, img: ui.player.cover,
-        badge: e.status === "done" ? "已缓存" : "未缓存", badgeOk: e.status === "done", badgeBad: false,
+        badge: e.status === "done" ? t("cache.cached") : t("cache.uncached"), badgeOk: e.status === "done", badgeBad: false,
         dur: formatBytes(e.bytes), playing: e.sort === episode.value,
         playable: e.status === "done", date: "",
       }));
@@ -957,7 +959,7 @@ const epGridItems = computed<EpGridItem[]>(() => {
     const noRes = !e.status;
     return {
       key: `${e.sort}`, sort: e.sort, title: e.title, img: e.image || ui.player.cover,
-      badge: st === "done" ? "已缓存" : noRes ? "无资源" : "有资源",
+      badge: st === "done" ? t("cache.cached") : noRes ? t("detail.noResource") : t("detail.hasResource"),
       badgeOk: st === "done", badgeBad: st !== "done" && noRes,
       dur: fmtEpDuration(e.duration), playing: e.sort === episode.value,
       playable: st === "done" || !noRes, date: fmtEpDate(e.airdate),
@@ -967,7 +969,7 @@ const epGridItems = computed<EpGridItem[]>(() => {
 /** 点击选集网格卡片：本地模式切本地集（未缓存提示），网络模式切集（无资源提示） */
 function clickEpItem(it: EpGridItem) {
   if (!it.playable) {
-    if (art) art.notice.show = isLocal.value ? "该集尚未缓存完成" : "该集暂无可用播放资源";
+    if (art) art.notice.show = isLocal.value ? t("player.noticeNotCached") : t("player.noticeNoResourceEp");
     return;
   }
   if (isLocal.value) void switchLocalEpisode(it.sort);
@@ -1002,9 +1004,9 @@ function freshDanmakuStates(cid: string): DanmakuSourceState[] {
   // 注意：不含 local —— 「本地缓存」源仅在线本地播放模式（ensureDanmaku 的
   // isLocal 分支）中按需注入，避免在线播放时多出一行无意义的占位源
   return [
-    { key: "server", name: "服务端", detail: "", count: 0, items: [], loaded: false, loading: false, enabled: true, available: true, error: "" },
-    { key: "bili", name: "哔哩哔哩", detail: "", count: 0, items: [], loaded: false, loading: false, enabled: true, available: !!cid, error: "" },
-    { key: "dandan", name: "弹弹", detail: "", count: 0, items: [], loaded: false, loading: false, enabled: false, available: true, error: "" },
+    { key: "server", name: t("player.srcServer"), detail: "", count: 0, items: [], loaded: false, loading: false, enabled: true, available: true, error: "" },
+    { key: "bili", name: t("player.srcBili"), detail: "", count: 0, items: [], loaded: false, loading: false, enabled: true, available: !!cid, error: "" },
+    { key: "dandan", name: t("player.srcDandan"), detail: "", count: 0, items: [], loaded: false, loading: false, enabled: false, available: true, error: "" },
   ];
 }
 
@@ -1026,8 +1028,8 @@ function ensureDanmaku() {
       return hit ? { ...s, ...hit, loaded: true } : s;
     };
     danmakuSources.value = [
-      base({ key: "local", name: "本地缓存", detail: "", count: 0, items: [], loaded: false, loading: false, enabled: true, available: true, error: "" }),
-      base({ key: "server", name: "服务端", detail: "", count: 0, items: [], loaded: false, loading: false, enabled: true, available: true, error: "" }),
+      base({ key: "local", name: t("player.srcLocal"), detail: "", count: 0, items: [], loaded: false, loading: false, enabled: true, available: true, error: "" }),
+      base({ key: "server", name: t("player.srcServer"), detail: "", count: 0, items: [], loaded: false, loading: false, enabled: true, available: true, error: "" }),
     ];
     void loadDanmakuSrc("local", seq);
     void loadDanmakuSrc("server", seq);
@@ -1211,12 +1213,17 @@ const infoStarPct = computed(() => {
   return `${Math.max(0, Math.min(100, (s / 10) * 100))}%`;
 });
 const infoExpanded = ref(false);
-const INFO_LANG_LABELS: Record<string, string> = { ja: "日语", zh: "国语", en: "英语", ko: "韩语", other: "其他" };
-const infoLangLabel = (l?: string) => (l ? INFO_LANG_LABELS[l] ?? l : "");
+const INFO_LANG_KEYS: Record<string, string> = {
+  ja: "common.langNames.ja",
+  zh: "common.langNames.zh",
+  en: "common.langNames.en",
+  ko: "common.langNames.ko",
+  other: "common.langNames.other",
+};
+const infoLangLabel = (l?: string) => (l ? (INFO_LANG_KEYS[l] ? t(INFO_LANG_KEYS[l]) : l) : "");
 function fmtCnDate(ts?: number): string {
   if (!ts || ts <= 0) return "—";
-  const d = new Date(ts);
-  return `${d.getFullYear()}年${String(d.getMonth() + 1).padStart(2, "0")}月${String(d.getDate()).padStart(2, "0")}日`;
+  return i18n.global.d(ts, "long");
 }
 const { data: playerCommentsData, isLoading: commentsLoading } = useAsync(
   () => anich.comments(bangumiID.value!, 1, undefined),
@@ -1267,11 +1274,10 @@ function fmtEpDuration(sec?: number): string {
   const s = Math.floor(sec % 60);
   return `${h}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
 }
-/** 集数卡片日期（参考图样式「2015年04月09日」） */
+/** 集数卡片日期 */
 function fmtEpDate(ts?: number): string {
   if (!ts || ts <= 0) return "";
-  const d = new Date(ts);
-  return `${d.getFullYear()}年${String(d.getMonth() + 1).padStart(2, "0")}月${String(d.getDate()).padStart(2, "0")}日`;
+  return i18n.global.d(ts, "long");
 }
 /** 选集缩略图加载失败 → 隐藏破图（留底色占位） */
 function onEpImgError(e: Event) {
@@ -1303,24 +1309,24 @@ const retestLatency = async () => {
              此时 ArtPlayer 未创建，顶栏（含返回键）不存在，无返回键会困住用户） -->
         <div v-if="!isLocal && vodLoading" class="absolute inset-0 z-20 flex flex-col items-center justify-center gap-3 text-white/70">
           <Loader2 class="h-10 w-10 animate-spin text-primary" />
-          <p class="text-sm">正在加载播放源…</p>
-          <button @click="closePlayerBack" class="mt-1 rounded-full bg-white/10 px-4 py-1.5 text-xs text-white hover:bg-white/20">返回</button>
+          <p class="text-sm">{{ $t('player.loadSrc') }}</p>
+          <button @click="closePlayerBack" class="mt-1 rounded-full bg-white/10 px-4 py-1.5 text-xs text-white hover:bg-white/20">{{ $t('common.back') }}</button>
         </div>
         <div v-else-if="!isLocal && vodIsError" class="absolute inset-0 z-20 flex flex-col items-center justify-center gap-3 px-6 text-center text-white/70">
           <AlertCircle class="h-10 w-10 text-destructive" />
-          <p class="text-sm">播放源加载失败</p>
+          <p class="text-sm">{{ $t('player.loadFailed') }}</p>
           <div class="mt-1 flex items-center gap-2">
-            <button @click="vodRefetch()" class="rounded-full bg-primary px-4 py-1.5 text-xs font-semibold text-primary-foreground hover:opacity-90">重试</button>
-            <button @click="closePlayerBack" class="rounded-full bg-white/10 px-4 py-1.5 text-xs text-white hover:bg-white/20">返回</button>
+            <button @click="vodRefetch()" class="rounded-full bg-primary px-4 py-1.5 text-xs font-semibold text-primary-foreground hover:opacity-90">{{ $t('common.retry') }}</button>
+            <button @click="closePlayerBack" class="rounded-full bg-white/10 px-4 py-1.5 text-xs text-white hover:bg-white/20">{{ $t('common.back') }}</button>
           </div>
         </div>
         <div v-else-if="!isLocal && sources.length === 0" class="absolute inset-0 z-20 flex flex-col items-center justify-center gap-2 px-6 text-center text-white/60">
           <AlertCircle class="h-10 w-10" />
-          <p class="text-sm">暂无可用的播放源</p>
-          <p class="text-xs text-white/45">该集没有可播放的线路资源，可尝试其他集数</p>
+          <p class="text-sm">{{ $t('player.noSources') }}</p>
+          <p class="text-xs text-white/45">{{ $t('player.noSourcesHint') }}</p>
           <div class="mt-1 flex items-center gap-2">
-            <button @click="vodRefetch()" class="rounded-full bg-primary px-4 py-1.5 text-xs font-semibold text-primary-foreground hover:opacity-90">重试</button>
-            <button @click="closePlayerBack" class="rounded-full bg-white/10 px-4 py-1.5 text-xs text-white hover:bg-white/20">返回</button>
+            <button @click="vodRefetch()" class="rounded-full bg-primary px-4 py-1.5 text-xs font-semibold text-primary-foreground hover:opacity-90">{{ $t('common.retry') }}</button>
+            <button @click="closePlayerBack" class="rounded-full bg-white/10 px-4 py-1.5 text-xs text-white hover:bg-white/20">{{ $t('common.back') }}</button>
           </div>
         </div>
         <template v-else>
@@ -1338,8 +1344,8 @@ const retestLatency = async () => {
         <!-- 小窗播放中占位提示（视频已移至 ArtPlayer 原生悬浮窗） -->
         <div v-if="miniActive" class="absolute inset-0 z-30 flex flex-col items-center justify-center gap-3 text-white/45">
           <PictureInPicture2 class="h-8 w-8 opacity-50" />
-          <p class="text-xs">小窗播放中 · 视频已悬浮在窗口右下角</p>
-          <button type="button" class="rounded-full bg-white/10 px-4 py-1.5 text-xs text-white hover:bg-white/20" @click="toggleMini">恢复播放器</button>
+          <p class="text-xs">{{ $t('player.miniActive') }}</p>
+          <button type="button" class="rounded-full bg-white/10 px-4 py-1.5 text-xs text-white hover:bg-white/20" @click="toggleMini">{{ $t('player.restore') }}</button>
         </div>
 
         <!-- 锁定按键（需求：画面左侧中间；锁定时悬停只显示 解锁/返回/标题；
@@ -1349,8 +1355,8 @@ const retestLatency = async () => {
           type="button"
           :class="cn('aikf-lock-btn', !artControlsVisible && 'aikf-float-hidden')"
           @click="lockPlayer"
-          aria-label="锁定播放器控制"
-          title="锁定"
+          :aria-label="$t('player.lockAria')"
+          :title="$t('player.lock')"
         >
           <Lock class="h-4 w-4" />
         </button>
@@ -1362,8 +1368,8 @@ const retestLatency = async () => {
           type="button"
           :class="cn('aikf-edge-toggle', !artControlsVisible && 'aikf-float-hidden')"
           @click="toggleSide"
-          :aria-label="sideOpen ? '收起面板' : '展开面板'"
-          :title="sideOpen ? '收起面板' : '展开面板'"
+          :aria-label="sideOpen ? $t('player.panelCollapse') : $t('player.panelExpand')"
+          :title="sideOpen ? $t('player.panelCollapse') : $t('player.panelExpand')"
         >
           <ChevronRight v-if="sideOpen" class="h-4 w-4" />
           <ChevronLeft v-else class="h-4 w-4" />
@@ -1375,12 +1381,12 @@ const retestLatency = async () => {
         <template v-if="playerLocked">
           <div class="aikf-lock-shield" @mousemove="bumpLockChrome" @click.stop @dblclick.stop @contextmenu.prevent.capture @wheel.stop />
           <div class="aikf-lock-top" :class="{ 'aikf-lock-top-show': lockChrome }" @mousemove="bumpLockChrome">
-            <button type="button" class="aikf-top-btn" @click="closePlayerBack" aria-label="返回上一页" title="返回">
+            <button type="button" class="aikf-top-btn" @click="closePlayerBack" :aria-label="$t('common.back')" :title="$t('common.back')">
               <ArrowLeft class="h-4 w-4" />
             </button>
             <div class="aikf-top-titles">
-              <p class="aikf-top-title">{{ ui.player.title }}<span v-if="isLocal" class="aikf-local-tag">本地</span></p>
-              <p class="aikf-top-sub">第{{ episode }}集{{ currentEpisodeTitle ? ` ${currentEpisodeTitle}` : "" }}</p>
+              <p class="aikf-top-title">{{ ui.player.title }}<span v-if="isLocal" class="aikf-local-tag">{{ $t('player.localTag') }}</span></p>
+              <p class="aikf-top-sub">{{ $t('common.epN', { n: episode }) }}{{ currentEpisodeTitle ? ` ${currentEpisodeTitle}` : "" }}</p>
             </div>
           </div>
           <button
@@ -1389,8 +1395,8 @@ const retestLatency = async () => {
             :class="{ 'aikf-lock-visible': lockChrome }"
             @mousemove="bumpLockChrome"
             @click="unlockPlayer"
-            aria-label="解锁播放器控制"
-            title="解锁"
+            :aria-label="$t('player.unlockAria')"
+            :title="$t('player.unlock')"
           >
             <LockOpen class="h-4 w-4" />
           </button>
@@ -1406,15 +1412,15 @@ const retestLatency = async () => {
                 type="button"
                 class="aikf-top-btn"
                 @click="closePlayerBack"
-                aria-label="返回上一页"
-                title="返回"
+                :aria-label="$t('common.back')"
+                :title="$t('common.back')"
               >
                 <ArrowLeft class="h-4 w-4" />
               </button>
               <div class="aikf-top-titles" data-tauri-drag-region>
-                <p class="aikf-top-title" data-tauri-drag-region :title="ui.player.title">{{ ui.player.title }}<span v-if="isLocal" class="aikf-local-tag">本地</span></p>
+                <p class="aikf-top-title" data-tauri-drag-region :title="ui.player.title">{{ ui.player.title }}<span v-if="isLocal" class="aikf-local-tag">{{ $t('player.localTag') }}</span></p>
                 <p class="aikf-top-sub" data-tauri-drag-region>
-                  第{{ episode }}集{{ currentEpisodeTitle ? ` ${currentEpisodeTitle}` : "" }}<template v-if="videoResolution"> ({{ videoResolution.width }}x{{ videoResolution.height }})</template>
+                  {{ $t('common.epN', { n: episode }) }}{{ currentEpisodeTitle ? ` ${currentEpisodeTitle}` : "" }}<template v-if="videoResolution"> ({{ videoResolution.width }}x{{ videoResolution.height }})</template>
                 </p>
               </div>
             </div>
@@ -1422,14 +1428,14 @@ const retestLatency = async () => {
               <!-- 真全屏/网页全屏时隐藏窗口控制键；
                    面板开合键已移至视频右缘中部（红圈位置），顶栏不再重复放置 -->
               <template v-if="isTauri && !artFullscreen && !artFullscreenWeb && !sideOpen">
-                <button type="button" class="aikf-top-btn" @click="winMinimize" aria-label="最小化窗口" title="最小化">
+                <button type="button" class="aikf-top-btn" @click="winMinimize" :aria-label="$t('theme.minimize')" :title="$t('theme.minimize')">
                   <Minus class="h-4 w-4" />
                 </button>
-                <button type="button" class="aikf-top-btn" @click="winToggleMax" aria-label="最大化/还原" title="最大化/还原">
+                <button type="button" class="aikf-top-btn" @click="winToggleMax" :aria-label="$t('theme.maximize')" :title="$t('theme.maximize')">
                   <Square class="h-3.5 w-3.5" />
                 </button>
               </template>
-              <button v-if="!sideOpen" type="button" class="aikf-top-btn aikf-top-close" @click="closePlayerBack" aria-label="关闭" title="关闭">
+              <button v-if="!sideOpen" type="button" class="aikf-top-btn aikf-top-close" @click="closePlayerBack" :aria-label="$t('common.close')" :title="$t('common.close')">
                 <X class="h-4 w-4" />
               </button>
             </div>
@@ -1440,17 +1446,17 @@ const retestLatency = async () => {
           <div v-if="linePanelOpen" class="aikf-pop-shield" @click.stop="linePanelOpen = false">
           <div class="aikf-panel aikf-panel-line" @click.stop>
             <div class="aikf-panel-title aikf-panel-title-row">
-              <span>线路（{{ sources.length }}）</span>
+              <span>{{ $t('player.lineCount', { n: sources.length }) }}</span>
               <button
                 type="button"
                 :disabled="latencyTesting"
                 @click="retestLatency"
                 class="aikf-retest"
-                title="重新测速并选最优线路"
+                :title="$t('player.speedTestTitle')"
               >
                 <Loader2 v-if="latencyTesting" class="h-3 w-3 animate-spin" />
                 <Zap v-else class="h-3 w-3" />
-                测速
+                {{ $t('player.speedTest') }}
               </button>
             </div>
             <div class="aikf-panel-list">
@@ -1465,20 +1471,20 @@ const retestLatency = async () => {
                 <span class="aikf-line-texts">
                   <span class="aikf-line-title">
                     <span class="min-w-0 truncate">{{ rawLineName(s) }}</span>
-                    <span v-if="isAdkwaiSource(s.url)" class="aikf-pick-tag" title="实测播放速度最优线路">优选</span>
-                    <span v-if="i === effectiveIdx" class="aikf-cur-tag">当前</span>
+                    <span v-if="isAdkwaiSource(s.url)" class="aikf-pick-tag" :title="$t('player.speedTestTitle')">{{ $t('cache.preferred') }}</span>
+                    <span v-if="i === effectiveIdx" class="aikf-cur-tag">{{ $t('cache.current') }}</span>
                   </span>
                   <span class="aikf-line-host">{{ sourceName(s.url) }}</span>
                 </span>
                 <span class="aikf-line-meta">
-                  <span class="aikf-chip aikf-chip-proto" :title="`线路协议 ${sourceProtoLabel(s.url)}`">{{ sourceProtoLabel(s.url) }}</span>
+                  <span class="aikf-chip aikf-chip-proto" :title="$t('player.protoTip', { p: sourceProtoLabel(s.url) })">{{ sourceProtoLabel(s.url) }}</span>
                   <span class="aikf-chip">{{ lineResOf(i) }}</span>
                   <span
                     v-if="sourceLatencies[i] !== undefined"
                     class="aikf-chip"
                     :class="sourceLatencies[i] !== null ? 'aikf-chip-ok' : 'aikf-chip-bad'"
-                  >{{ sourceLatencies[i] !== null ? sourceLatencies[i] + 'ms' : '超时' }}</span>
-                  <span v-else class="aikf-chip aikf-chip-dim">未测速</span>
+                  >{{ sourceLatencies[i] !== null ? sourceLatencies[i] + 'ms' : $t('player.timeout') }}</span>
+                  <span v-else class="aikf-chip aikf-chip-dim">{{ $t('player.untested') }}</span>
                 </span>
               </button>
             </div>
@@ -1494,17 +1500,17 @@ const retestLatency = async () => {
                 type="button"
                 :class="cn('aikf-set-tab', settingsTab === 'common' && 'aikf-set-tab-active')"
                 @click="settingsTab = 'common'"
-              >常见设置</button>
+              >{{ $t('player.setCommon') }}</button>
               <button
                 type="button"
                 :class="cn('aikf-set-tab', settingsTab === 'buffer' && 'aikf-set-tab-active')"
                 @click="settingsTab = 'buffer'"
-              >视频缓冲设置</button>
+              >{{ $t('player.setBuffer') }}</button>
             </div>
 
             <div v-if="settingsTab === 'common'" class="aikf-set-body">
               <div class="aikf-set-row">
-                <p class="aikf-set-label">播放速度</p>
+                <p class="aikf-set-label">{{ $t('player.rate') }}</p>
                 <div class="aikf-seg">
                   <button
                     v-for="r in [0.5, 0.75, 1, 1.25, 1.5, 2]"
@@ -1516,10 +1522,10 @@ const retestLatency = async () => {
                 </div>
               </div>
               <div class="aikf-set-row">
-                <p class="aikf-set-label">画面比例</p>
+                <p class="aikf-set-label">{{ $t('player.ratio') }}</p>
                 <div class="aikf-seg">
                   <button
-                    v-for="o in ([{ v: 'default', t: '默认' }, { v: '4:3', t: '4:3' }, { v: '16:9', t: '16:9' }, { v: '2.35:1', t: '2.35:1' }] as const)"
+                    v-for="o in ([{ v: 'default', t: $t('player.ratioDefault') }, { v: '4:3', t: '4:3' }, { v: '16:9', t: '16:9' }, { v: '2.35:1', t: '2.35:1' }] as const)"
                     :key="`o${o.v}`"
                     type="button"
                     :class="cn('aikf-seg-btn', ratioRef === o.v && 'aikf-seg-on')"
@@ -1528,10 +1534,10 @@ const retestLatency = async () => {
                 </div>
               </div>
               <div class="aikf-set-row">
-                <p class="aikf-set-label">画面翻转</p>
+                <p class="aikf-set-label">{{ $t('player.flip') }}</p>
                 <div class="aikf-seg">
                   <button
-                    v-for="f in [{ v: 'normal', t: '正常' }, { v: 'horizontal', t: '水平' }, { v: 'vertical', t: '垂直' }]"
+                    v-for="f in [{ v: 'normal', t: $t('player.flipNormal') }, { v: 'horizontal', t: $t('player.flipH') }, { v: 'vertical', t: $t('player.flipV') }]"
                     :key="`f${f.v}`"
                     type="button"
                     :class="cn('aikf-seg-btn', flipRef === f.v && 'aikf-seg-on')"
@@ -1540,14 +1546,14 @@ const retestLatency = async () => {
                 </div>
               </div>
               <div class="aikf-set-row aikf-set-row-flex">
-                <p class="aikf-set-label">自动连播</p>
+                <p class="aikf-set-label">{{ $t('player.autoNext') }}</p>
                 <ToggleSwitch :on="settings.data.autoNext" @toggle="toggleAutoNext" />
               </div>
             </div>
 
             <div v-else class="aikf-set-body">
               <div class="aikf-set-row">
-                <p class="aikf-set-label">正片预缓冲</p>
+                <p class="aikf-set-label">{{ $t('player.preBuffer') }}</p>
                 <div class="aikf-seg">
                   <button
                     v-for="b in [60, 120, 300, 600]"
@@ -1557,10 +1563,10 @@ const retestLatency = async () => {
                     @click="settings.update('bufferSize', b as any)"
                   >{{ b }}s</button>
                 </div>
-                <p class="aikf-set-hint">播放时提前下载的时长：越长越抗卡顿，占用内存/网络越多。修改立即生效。</p>
+                <p class="aikf-set-hint">{{ $t('player.preBufferHint') }}</p>
               </div>
               <div class="aikf-set-row">
-                <p class="aikf-set-label">已播缓冲保留</p>
+                <p class="aikf-set-label">{{ $t('player.backBuffer') }}</p>
                 <div class="aikf-seg">
                   <button
                     v-for="b in [0, 30, 60]"
@@ -1570,7 +1576,7 @@ const retestLatency = async () => {
                     @click="settings.update('backBuffer', b as any)"
                   >{{ b }}s</button>
                 </div>
-                <p class="aikf-set-hint">已播放段落保留在缓冲中，便于回退拖动；0 最省资源。修改立即生效。</p>
+                <p class="aikf-set-hint">{{ $t('player.backBufferHint') }}</p>
               </div>
             </div>
           </div>
@@ -1580,17 +1586,17 @@ const retestLatency = async () => {
                透明遮罩：点击弹层外区域关闭 + .stop 拦截冒泡（不影响播放） -->
           <div v-if="danmakuPanelOpen" class="aikf-pop-shield" @click.stop="danmakuPanelOpen = false">
           <div class="aikf-panel aikf-panel-danmaku" @click.stop>
-            <div class="aikf-panel-title">弹幕设置</div>
+            <div class="aikf-panel-title">{{ $t('player.ctrlDanmakuTip') }}</div>
             <div class="aikf-set-body">
               <div class="aikf-set-row aikf-set-row-flex">
-                <p class="aikf-set-label">弹幕显示</p>
+                <p class="aikf-set-label">{{ $t('player.dmShow') }}</p>
                 <ToggleSwitch :on="settings.data.danmaku.enabled" @toggle="settings.updateDanmaku('enabled', !settings.data.danmaku.enabled)" />
               </div>
               <div class="aikf-set-row">
-                <p class="aikf-set-label">显示区域</p>
+                <p class="aikf-set-label">{{ $t('player.dmArea') }}</p>
                 <div class="aikf-seg">
                   <button
-                    v-for="a in ([{ v: 0.25, t: '1/4屏' }, { v: 0.5, t: '半屏' }, { v: 0.75, t: '3/4屏' }, { v: 1, t: '满屏' }] as const)"
+                    v-for="a in ([{ v: 0.25, t: $t('player.dmAreaQuarter') }, { v: 0.5, t: $t('player.dmAreaHalf') }, { v: 0.75, t: $t('player.dmAreaThreeQuarter') }, { v: 1, t: $t('player.dmAreaFull') }] as const)"
                     :key="`da${a.v}`"
                     type="button"
                     :class="cn('aikf-seg-btn', settings.data.danmaku.area === a.v && 'aikf-seg-on')"
@@ -1599,7 +1605,7 @@ const retestLatency = async () => {
                 </div>
               </div>
               <div class="aikf-set-row">
-                <p class="aikf-set-label">不透明度</p>
+                <p class="aikf-set-label">{{ $t('player.dmOpacity') }}</p>
                 <div class="aikf-seg">
                   <button
                     v-for="o in ([0.25, 0.5, 0.75, 1] as const)"
@@ -1611,10 +1617,10 @@ const retestLatency = async () => {
                 </div>
               </div>
               <div class="aikf-set-row">
-                <p class="aikf-set-label">字号</p>
+                <p class="aikf-set-label">{{ $t('player.dmFont') }}</p>
                 <div class="aikf-seg">
                   <button
-                    v-for="f in ([{ v: 18, t: '小' }, { v: 22, t: '标准' }, { v: 28, t: '大' }, { v: 36, t: '特大' }])"
+                    v-for="f in ([{ v: 18, t: $t('player.dmFontS') }, { v: 22, t: $t('player.dmFontM') }, { v: 28, t: $t('player.dmFontL') }, { v: 36, t: $t('player.dmFontXL') }])"
                     :key="`df${f.v}`"
                     type="button"
                     :class="cn('aikf-seg-btn', settings.data.danmaku.fontSize === f.v && 'aikf-seg-on')"
@@ -1623,17 +1629,17 @@ const retestLatency = async () => {
                 </div>
               </div>
               <div class="aikf-set-row">
-                <p class="aikf-set-label">弹幕速度</p>
+                <p class="aikf-set-label">{{ $t('player.dmSpeed') }}</p>
                 <div class="aikf-seg">
                   <button
-                    v-for="sp in ([{ v: 3, t: '慢' }, { v: 5, t: '标准' }, { v: 8, t: '快' }])"
+                    v-for="sp in ([{ v: 3, t: $t('player.dmSpeedSlow') }, { v: 5, t: $t('player.dmSpeedNormal') }, { v: 8, t: $t('player.dmSpeedFast') }])"
                     :key="`ds${sp.v}`"
                     type="button"
                     :class="cn('aikf-seg-btn', settings.data.danmaku.speed === sp.v && 'aikf-seg-on')"
                     @click="settings.updateDanmaku('speed', sp.v)"
                   >{{ sp.t }}</button>
                 </div>
-                <p class="aikf-set-hint">弹幕源可在右侧面板「简介 → 弹幕源」中启用/停用。</p>
+                <p class="aikf-set-hint">{{ $t('player.dmSrcHint') }}</p>
               </div>
             </div>
           </div>
@@ -1645,12 +1651,12 @@ const retestLatency = async () => {
           <div v-if="epPopupOpen" class="aikf-ep-shield" @click.stop="epPopupOpen = false">
             <div class="aikf-panel aikf-panel-ep" @click.stop>
               <div class="aikf-panel-title aikf-panel-title-row">
-                <span>选集<template v-if="currentEpisodeTitle"> · 第{{ episode }}集</template></span>
+                <span>{{ $t('player.ctrlEpisodes') }}<template v-if="currentEpisodeTitle"> · {{ $t('common.epN', { n: episode }) }}</template></span>
                 <div class="flex items-center gap-0.5">
-                  <button type="button" class="aikf-side-btn" @click="expandSideFromPopup" aria-label="展开右侧面板" title="在右侧面板中查看">
+                  <button type="button" class="aikf-side-btn" @click="expandSideFromPopup" :aria-label="$t('player.panelExpand')" :title="$t('player.viewInSide')">
                     <PanelRightOpen class="h-3.5 w-3.5" />
                   </button>
-                  <button type="button" class="aikf-side-btn" @click="epPopupOpen = false" aria-label="关闭选集" title="关闭">
+                  <button type="button" class="aikf-side-btn" @click="epPopupOpen = false" :aria-label="$t('player.closeEpisodes')" :title="$t('common.close')">
                     <X class="h-3.5 w-3.5" />
                   </button>
                 </div>
@@ -1662,30 +1668,30 @@ const retestLatency = async () => {
                     :key="`pp${ep.key}`"
                     type="button"
                     class="aikf-epcard text-left"
-                    :title="ep.title ? `第${ep.sort}集 ${ep.title}` : `第${ep.sort}集`"
+                    :title="ep.title ? $t('common.epNT', { n: ep.sort, t: ep.title }) : $t('common.epN', { n: ep.sort })"
                     @click="clickEpItem(ep)"
                   >
                     <span :class="cn('aikf-epcard-thumb', ep.playing && 'aikf-epcard-thumb-active', !ep.playable && 'opacity-55')">
                       <img
                         :src="ep.img"
-                        :alt="`第${ep.sort}集`"
+                        :alt="$t('common.epN', { n: ep.sort })"
                         loading="lazy"
                         draggable="false"
                         class="aikf-epcard-img"
                         @error="onEpImgError"
                       />
-                      <span v-if="ep.playing" class="aikf-epcard-playing">播放中</span>
+                      <span v-if="ep.playing" class="aikf-epcard-playing">{{ $t('player.playing') }}</span>
                       <span :class="cn('aikf-epcard-badge', ep.badgeOk && 'aikf-epcard-badge-ok', ep.badgeBad && 'aikf-epcard-badge-bad')">{{ ep.badge }}</span>
                       <span v-if="ep.dur" class="aikf-epcard-dur">{{ ep.dur }}</span>
                     </span>
                     <span :class="cn('aikf-epcard-title', ep.playing && 'text-primary')">
-                      第{{ ep.sort }}集 {{ ep.title }}
+                      {{ $t('common.epNT', { n: ep.sort, t: ep.title }) }}
                     </span>
                   </button>
                 </div>
                 <div v-else class="flex flex-col items-center justify-center gap-2 py-8 text-white/40">
                   <ListVideo class="h-7 w-7 opacity-40" />
-                  <p class="text-xs">暂无剧集</p>
+                  <p class="text-xs">{{ $t('player.noEpisodes') }}</p>
                 </div>
               </div>
             </div>
@@ -1707,41 +1713,41 @@ const retestLatency = async () => {
                 @click="sideTab = 'info'"
                 :class="cn('aikf-side-tab', sideTab === 'info' && 'aikf-side-tab-active')"
               >
-                <Info class="h-3 w-3" /> 简介
+                <Info class="h-3 w-3" /> {{ $t('player.tabInfo') }}
               </button>
               <button
                 type="button"
                 @click="sideTab = 'ep'"
                 :class="cn('aikf-side-tab', sideTab === 'ep' && 'aikf-side-tab-active')"
               >
-                <ListVideo class="h-3 w-3" /> 选集
+                <ListVideo class="h-3 w-3" /> {{ $t('player.ctrlEpisodes') }}
               </button>
               <button
                 type="button"
                 @click="sideTab = 'comments'"
                 :class="cn('aikf-side-tab', sideTab === 'comments' && 'aikf-side-tab-active')"
               >
-                <MessageSquare class="h-3 w-3" /> 评论
+                <MessageSquare class="h-3 w-3" /> {{ $t('detail.tabComments') }}
               </button>
               <button
                 type="button"
                 @click="sideTab = 'characters'"
                 :class="cn('aikf-side-tab', sideTab === 'characters' && 'aikf-side-tab-active')"
               >
-                <Users class="h-3 w-3" /> 角色
+                <Users class="h-3 w-3" /> {{ $t('detail.tabCharacters') }}
               </button>
             </div>
             <!-- 窗口控制键：内嵌面板头右侧（参考图 1/2 的 — □ × 位置） -->
             <div class="flex flex-none items-center gap-0">
               <template v-if="isTauri && !artFullscreen && !artFullscreenWeb">
-                <button type="button" class="aikf-side-btn" @click="winMinimize" aria-label="最小化窗口" title="最小化">
+                <button type="button" class="aikf-side-btn" @click="winMinimize" :aria-label="$t('theme.minimize')" :title="$t('theme.minimize')">
                   <Minus class="h-4 w-4" />
                 </button>
-                <button type="button" class="aikf-side-btn" @click="winToggleMax" aria-label="最大化/还原" title="最大化/还原">
+                <button type="button" class="aikf-side-btn" @click="winToggleMax" :aria-label="$t('theme.maximize')" :title="$t('theme.maximize')">
                   <Square class="h-3.5 w-3.5" />
                 </button>
               </template>
-              <button type="button" class="aikf-side-btn aikf-side-close" @click="closePlayerBack" aria-label="关闭播放器" title="关闭">
+              <button type="button" class="aikf-side-btn aikf-side-close" @click="closePlayerBack" :aria-label="$t('common.close')" :title="$t('common.close')">
                 <X class="h-4 w-4" />
               </button>
             </div>
@@ -1751,19 +1757,19 @@ const retestLatency = async () => {
           <div class="flex shrink-0 items-center justify-between gap-2 border-b border-white/5 px-3 py-2">
             <div class="min-w-0">
               <button type="button" @click="openDetailPage" class="group flex min-w-0 max-w-full items-center gap-1.5 text-left">
-                <span class="min-w-0 truncate text-xs font-bold text-white transition-colors group-hover:text-primary" :title="ui.player.title">{{ ui.player.title || "未知番剧" }}</span>
-                <span class="shrink-0 text-[10px] text-white/35 transition-colors group-hover:text-primary">详情 ›</span>
+                <span class="min-w-0 truncate text-xs font-bold text-white transition-colors group-hover:text-primary" :title="ui.player.title">{{ ui.player.title || $t('player.unknownBangumi') }}</span>
+                <span class="shrink-0 text-[10px] text-white/35 transition-colors group-hover:text-primary">{{ $t('player.detailMore') }}</span>
               </button>
               <p class="mt-0.5 truncate text-[10px] text-white/45">
-                第{{ episode }}集 {{ currentEpisodeTitle }}<template v-if="videoResolution"> · {{ videoResolution.label }}</template>
+                {{ $t('common.epN', { n: episode }) }} {{ currentEpisodeTitle }}<template v-if="videoResolution"> · {{ videoResolution.label }}</template>
               </p>
             </div>
             <button
               type="button"
               @click="toggleFav"
               :class="cn('aikf-side-btn shrink-0', isFav && 'text-primary')"
-              :aria-label="isFav ? '取消收藏' : '收藏'"
-              :title="isFav ? '取消收藏' : '收藏'"
+              :aria-label="isFav ? $t('player.unfav') : $t('player.fav')"
+              :title="isFav ? $t('player.unfav') : $t('player.fav')"
             >
               <Heart :class="cn('h-4 w-4', isFav && 'fill-current')" />
             </button>
@@ -1778,7 +1784,7 @@ const retestLatency = async () => {
                 <div class="h-3 w-1/2 rounded bg-white/5" />
                 <div class="h-20 rounded bg-white/5" />
               </div>
-              <div v-else-if="!playerDetail" class="py-12 text-center text-xs text-white/40">暂无简介资料</div>
+              <div v-else-if="!playerDetail" class="py-12 text-center text-xs text-white/40">{{ $t('player.noInfo') }}</div>
               <template v-else>
                 <!-- 评分 -->
                 <div v-if="infoBestRating" class="flex items-center gap-2">
@@ -1792,29 +1798,29 @@ const retestLatency = async () => {
                       </div>
                     </div>
                   </div>
-                  <span class="text-[10px] text-white/45">{{ infoBestRating.count ? `由${infoBestRating.count}人评` : "" }}{{ infoBestRating.score.toFixed(1) }}分</span>
+                  <span class="text-[10px] text-white/45">{{ infoBestRating.count ? $t('detail.ratedBy', { n: infoBestRating.count }) : "" }}{{ $t('detail.score', { s: infoBestRating.score.toFixed(1) }) }}</span>
                 </div>
                 <!-- 元信息 -->
                 <div class="mt-2.5 space-y-1 text-[11px] leading-relaxed text-white/65">
-                  <p><span class="text-white/35">时间: </span>{{ fmtCnDate(playerDetail.airdate) }}</p>
-                  <p><span class="text-white/35">状态: </span>全{{ playerDetail.episodesTotal || episodesList.length || "…" }}集<template v-if="playerDetail.status"> · {{ playerDetail.status }}</template></p>
-                  <p v-if="playerDetail.lang"><span class="text-white/35">语言: </span>{{ infoLangLabel(playerDetail.lang) }}</p>
-                  <p v-if="playerDetail.region?.length"><span class="text-white/35">地区: </span>{{ playerDetail.region.join(" · ") }}</p>
+                  <p><span class="text-white/35">{{ $t('detail.metaTime') }}: </span>{{ fmtCnDate(playerDetail.airdate) }}</p>
+                  <p><span class="text-white/35">{{ $t('detail.metaStatus') }}: </span>{{ $t('detail.totalEps', { n: playerDetail.episodesTotal || episodesList.length || "…" }) }}<template v-if="playerDetail.status"> · {{ playerDetail.status }}</template></p>
+                  <p v-if="playerDetail.lang"><span class="text-white/35">{{ $t('detail.metaLang') }}: </span>{{ infoLangLabel(playerDetail.lang) }}</p>
+                  <p v-if="playerDetail.region?.length"><span class="text-white/35">{{ $t('detail.metaRegion') }}: </span>{{ playerDetail.region.join(" · ") }}</p>
                 </div>
                 <!-- 简介（长文折叠除外，可展开/收起） -->
                 <p
                   class="mt-3 whitespace-pre-line text-[11px] leading-relaxed text-white/75"
                   :class="!infoExpanded && 'line-clamp-4'"
-                >{{ playerDetail.overview || "暂无简介" }}</p>
+                >{{ playerDetail.overview || $t('detail.noOverview') }}</p>
                 <button
                   v-if="(playerDetail.overview || '').length > 72"
                   type="button"
                   @click="infoExpanded = !infoExpanded"
                   class="mt-1 text-[10px] font-medium text-primary hover:underline"
-                >{{ infoExpanded ? "收起" : "展开" }}</button>
+                >{{ infoExpanded ? $t('common.collapse') : $t('common.expand') }}</button>
                 <!-- 分类 -->
                 <div v-if="playerDetail.genres?.length" class="mt-3">
-                  <p class="text-[10px] font-semibold text-white/40">分类</p>
+                  <p class="text-[10px] font-semibold text-white/40">{{ $t('detail.genres') }}</p>
                   <div class="mt-1.5 flex flex-wrap gap-1.5">
                     <span v-for="g in playerDetail.genres" :key="g" class="rounded-full border border-white/10 px-2 py-0.5 text-[10px] text-white/60">{{ g }}</span>
                   </div>
@@ -1825,8 +1831,8 @@ const retestLatency = async () => {
                   <div class="mt-3 border-t border-white/5 pt-2.5">
                     <button type="button" class="flex w-full items-center justify-between gap-2" @click="sideLineExpand = !sideLineExpand">
                       <p class="min-w-0 truncate text-xs font-bold text-white/90">
-                        <template v-if="sources.length">线路{{ effectiveIdx + 1 }} · {{ rawLineName(currentSource ?? sources[0]) }}</template>
-                        <template v-else>线路</template>
+                        <template v-if="sources.length">{{ $t('player.lineSection', { n: effectiveIdx + 1, name: rawLineName(currentSource ?? sources[0]) }) }}</template>
+                        <template v-else>{{ $t('player.lineSectionShort') }}</template>
                       </p>
                       <span class="flex flex-none items-center gap-0.5 text-[10px] tabular-nums text-white/35">
                         <template v-if="sources.length">{{ effectiveIdx + 1 }}/{{ sources.length }}</template>
@@ -1846,23 +1852,23 @@ const retestLatency = async () => {
                           <span class="aikf-line-texts">
                             <span class="aikf-line-title">
                               <span class="min-w-0 truncate">{{ rawLineName(s) }}</span>
-                              <span v-if="isAdkwaiSource(s.url)" class="aikf-pick-tag" title="实测播放速度最优线路">优选</span>
-                              <span v-if="i === effectiveIdx" class="aikf-cur-tag">当前</span>
+                              <span v-if="isAdkwaiSource(s.url)" class="aikf-pick-tag" :title="$t('player.speedTestTitle')">{{ $t('cache.preferred') }}</span>
+                              <span v-if="i === effectiveIdx" class="aikf-cur-tag">{{ $t('cache.current') }}</span>
                             </span>
                             <span class="aikf-line-host">{{ sourceName(s.url) }}</span>
                           </span>
                           <span class="aikf-line-meta">
-                            <span class="aikf-chip aikf-chip-proto" :title="`线路协议 ${sourceProtoLabel(s.url)}`">{{ sourceProtoLabel(s.url) }}</span>
+                            <span class="aikf-chip aikf-chip-proto" :title="$t('player.protoTip', { p: sourceProtoLabel(s.url) })">{{ sourceProtoLabel(s.url) }}</span>
                             <span class="aikf-chip">{{ lineResOf(i) }}</span>
                             <span
                               v-if="sourceLatencies[i] !== undefined"
                               class="aikf-chip"
                               :class="sourceLatencies[i] !== null ? 'aikf-chip-ok' : 'aikf-chip-bad'"
-                            >{{ sourceLatencies[i] !== null ? sourceLatencies[i] + 'ms' : '超时' }}</span>
-                            <span v-else class="aikf-chip aikf-chip-dim">未测速</span>
+                            >{{ sourceLatencies[i] !== null ? sourceLatencies[i] + 'ms' : $t('player.timeout') }}</span>
+                            <span v-else class="aikf-chip aikf-chip-dim">{{ $t('player.untested') }}</span>
                           </span>
                         </button>
-                        <div v-if="sources.length === 0" class="px-1 py-2 text-[10px] text-white/35">暂无可用线路</div>
+                        <div v-if="sources.length === 0" class="px-1 py-2 text-[10px] text-white/35">{{ $t('player.noLines') }}</div>
                       </div>
                     </div>
                   </div>
@@ -1871,14 +1877,14 @@ const retestLatency = async () => {
                   <div class="mt-2.5 border-t border-white/5 pt-2.5">
                     <div class="flex items-center justify-between gap-2">
                       <p class="min-w-0 text-xs font-bold text-white/90">
-                        {{ danmakuAvailableCount }}个弹幕源<template v-if="danmakuTotalCount > 0"> · 共{{ danmakuTotalCount }}条弹幕</template>
+                        {{ $t('player.dmSources', { n: danmakuAvailableCount }) }}<template v-if="danmakuTotalCount > 0"> · {{ $t('player.dmTotal', { n: danmakuTotalCount }) }}</template>
                       </p>
                       <button
                         type="button"
                         class="flex-none text-[10px] text-white/35 transition-colors hover:text-white/70"
-                        title="清空缓存并重新拉取本话弹幕源"
+                        :title="$t('player.refreshTitle')"
                         @click="refreshDanmaku"
-                      >刷新</button>
+                      >{{ $t('player.refresh') }}</button>
                     </div>
                     <div class="mt-1.5 space-y-0.5">
                       <button
@@ -1892,7 +1898,7 @@ const retestLatency = async () => {
                           s.loaded && s.enabled && 'aikf-dm-row-on',
                           (!s.available || s.loading) && 'cursor-default opacity-60'
                         )"
-                        :title="s.error || (s.loaded ? (s.enabled ? '点击停用该弹幕源' : '点击启用该弹幕源') : (s.available ? '点击加载该弹幕源' : ''))"
+                        :title="s.error || (s.loaded ? (s.enabled ? $t('player.dmDisableHint') : $t('player.dmEnableHint')) : (s.available ? $t('player.dmLoadHint') : ''))"
                       >
                         <MessageSquare :class="cn('h-3.5 w-3.5 flex-none', s.loaded && s.enabled ? 'text-primary' : 'text-white/35')" />
                         <span class="min-w-0 flex-1 text-left">
@@ -1900,20 +1906,20 @@ const retestLatency = async () => {
                             {{ s.name }}<template v-if="s.detail"> · {{ s.detail }}</template>
                           </span>
                           <span v-if="s.error" class="block truncate text-[9px] text-rose-300/80">{{ s.error }}</span>
-                          <span v-else-if="!s.available" class="block text-[9px] text-white/30">本话无此弹幕源</span>
-                          <span v-else-if="s.loading" class="block text-[9px] text-white/40">正在获取弹幕…</span>
+                          <span v-else-if="!s.available" class="block text-[9px] text-white/30">{{ $t('player.dmUnavailable') }}</span>
+                          <span v-else-if="s.loading" class="block text-[9px] text-white/40">{{ $t('player.dmLoading') }}</span>
                         </span>
                         <span class="flex flex-none items-center gap-1">
                           <Loader2 v-if="s.loading" class="h-3 w-3 animate-spin text-white/40" />
                           <span v-else-if="s.loaded" :class="cn('aikf-dm-count', s.enabled ? 'text-primary' : 'text-white/30')">
-                            {{ s.enabled ? s.count.toLocaleString() : '已停用' }}
+                            {{ s.enabled ? s.count.toLocaleString() : $t('player.dmDisabled') }}
                           </span>
-                          <span v-else-if="s.available" class="aikf-dm-count text-white/40">点击加载</span>
+                          <span v-else-if="s.available" class="aikf-dm-count text-white/40">{{ $t('player.dmLoad') }}</span>
                         </span>
                       </button>
                     </div>
                     <p v-if="!settings.data.danmaku.enabled" class="mt-2 rounded-lg bg-amber-500/10 px-2 py-1.5 text-[10px] leading-relaxed text-amber-500/90">
-                      弹幕显示已关闭 · 可在播放器底栏「弹」按键中开启
+                      {{ $t('player.dmOffNotice') }}
                     </p>
                   </div>
                 </template>
@@ -1925,9 +1931,9 @@ const retestLatency = async () => {
             <div v-else-if="sideTab === 'ep'" class="p-3">
               <div class="flex items-center justify-between gap-2 pb-2">
                 <p class="min-w-0 truncate text-xs font-bold text-white/90">
-                  选集<template v-if="currentEpisodeTitle"> · 第{{ episode }}集 {{ currentEpisodeTitle }}</template>
+                  {{ $t('player.ctrlEpisodes') }}<template v-if="currentEpisodeTitle"> · {{ $t('common.epN', { n: episode }) }} {{ currentEpisodeTitle }}</template>
                 </p>
-                <span class="flex-none text-[10px] tabular-nums text-white/35">{{ epGridItems.length }} 集</span>
+                <span class="flex-none text-[10px] tabular-nums text-white/35">{{ $t('common.countEps', { n: epGridItems.length }) }}</span>
               </div>
 
               <div v-if="epGridItems.length > 0" class="grid grid-cols-2 gap-2">
@@ -1936,31 +1942,31 @@ const retestLatency = async () => {
                   :key="ep.key"
                   type="button"
                   class="aikf-epcard text-left"
-                  :title="ep.title ? `第${ep.sort}集 ${ep.title}` : `第${ep.sort}集`"
+                  :title="ep.title ? $t('common.epNT', { n: ep.sort, t: ep.title }) : $t('common.epN', { n: ep.sort })"
                   @click="clickEpItem(ep)"
                 >
                   <span :class="cn('aikf-epcard-thumb', ep.playing && 'aikf-epcard-thumb-active', !ep.playable && 'opacity-55')">
                     <img
                       :src="ep.img"
-                      :alt="`第${ep.sort}集`"
+                      :alt="$t('common.epN', { n: ep.sort })"
                       loading="lazy"
                       draggable="false"
                       class="aikf-epcard-img"
                       @error="onEpImgError"
                     />
-                    <span v-if="ep.playing" class="aikf-epcard-playing">播放中</span>
+                    <span v-if="ep.playing" class="aikf-epcard-playing">{{ $t('player.playing') }}</span>
                     <span :class="cn('aikf-epcard-badge', ep.badgeOk && 'aikf-epcard-badge-ok', ep.badgeBad && 'aikf-epcard-badge-bad')">{{ ep.badge }}</span>
                     <span v-if="ep.dur" class="aikf-epcard-dur">{{ ep.dur }}</span>
                   </span>
                   <span :class="cn('aikf-epcard-title', ep.playing && 'text-primary')">
-                    第{{ ep.sort }}集 {{ ep.title }}
+                    {{ $t('common.epNT', { n: ep.sort, t: ep.title }) }}
                   </span>
                   <span v-if="ep.date" class="aikf-epcard-date">{{ ep.date }}</span>
                 </button>
               </div>
               <div v-else class="flex flex-col items-center justify-center gap-2 py-10 text-white/40">
                 <ListVideo class="h-8 w-8 opacity-40" />
-                <p class="text-xs">暂无剧集</p>
+                <p class="text-xs">{{ $t('player.noEpisodes') }}</p>
               </div>
             </div>
 
@@ -1969,19 +1975,19 @@ const retestLatency = async () => {
               <div v-if="commentsLoading" class="space-y-2.5">
                 <div v-for="i in 3" :key="i" class="h-16 rounded-lg bg-white/5" />
               </div>
-              <div v-else-if="playerComments.length === 0" class="py-12 text-center text-xs text-white/40">暂无评论</div>
+              <div v-else-if="playerComments.length === 0" class="py-12 text-center text-xs text-white/40">{{ $t('detail.noComments') }}</div>
               <template v-else>
                 <div v-for="c in playerComments.slice(0, 30)" :key="c.id" class="rounded-xl border border-white/5 bg-white/[0.03] p-2.5">
                   <div class="flex items-center gap-2">
                     <img v-if="c.user?.avatar" :src="c.user.avatar" alt="" class="h-6 w-6 rounded-full object-cover" draggable="false" />
                     <div v-else class="flex h-6 w-6 items-center justify-center rounded-full bg-primary/25 text-[10px] font-bold text-primary">{{ (c.user?.name || "?").charAt(0) }}</div>
-                    <span class="min-w-0 flex-1 truncate text-[11px] font-semibold text-white/85">{{ c.user?.name || "匿名" }}</span>
+                    <span class="min-w-0 flex-1 truncate text-[11px] font-semibold text-white/85">{{ c.user?.name || $t('detail.anonymous') }}</span>
                     <span class="shrink-0 text-[9px] text-white/30">{{ fmtCDate(c.date) }}</span>
                   </div>
                   <p class="mt-1.5 line-clamp-4 text-[11px] leading-relaxed text-white/65">{{ c.text }}</p>
                   <div class="mt-1.5 flex items-center gap-3 text-[9px] text-white/30">
                     <span v-if="c.likes_count">♥ {{ c.likes_count }}</span>
-                    <span v-if="c.replies_count">{{ c.replies_count }} 条回复</span>
+                    <span v-if="c.replies_count">{{ $t('detail.replies', { n: c.replies_count }) }}</span>
                     <span v-if="c.address">{{ c.address }}</span>
                   </div>
                 </div>
@@ -1993,7 +1999,7 @@ const retestLatency = async () => {
               <div v-if="charsLoading" class="grid grid-cols-3 gap-2.5">
                 <div v-for="i in 6" :key="i" class="aspect-square rounded-lg bg-white/5" />
               </div>
-              <div v-else-if="playerChars.length === 0" class="py-12 text-center text-xs text-white/40">暂无角色资料</div>
+              <div v-else-if="playerChars.length === 0" class="py-12 text-center text-xs text-white/40">{{ $t('detail.noCharacters') }}</div>
               <div v-else class="grid grid-cols-3 gap-2.5">
                 <div v-for="c in playerChars" :key="c.id" class="min-w-0 text-center">
                   <div class="aspect-square w-full overflow-hidden rounded-lg bg-white/5">

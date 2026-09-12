@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import { computed, ref, watch } from "vue";
+import { useI18n } from "vue-i18n";
 import { Play, Star, Heart, ChevronDown } from "lucide-vue-next";
 import { anich } from "@/lib/anich/api-client";
 import { useUIStore } from "@/stores/ui";
-import { useLibraryStore, STATUS_LABELS, STATUS_ORDER, STATUS_STYLES, type TrackStatus } from "@/stores/library";
+import { useLibraryStore, STATUS_I18N_KEYS, STATUS_ORDER, STATUS_STYLES, type TrackStatus } from "@/stores/library";
 import { useAsync } from "@/composables/useAsync";
 import { useResponsiveGrid } from "@/composables/useResponsiveGrid";
 import CoverImage from "@/components/CoverImage.vue";
@@ -11,6 +12,7 @@ import { cn } from "@/lib/utils";
 
 const ui = useUIStore();
 const library = useLibraryStore();
+const { t, d } = useI18n();
 
 const idRef = computed(() => ui.detailId);
 const { data: detail, isLoading: detailLoading } = useAsync(() => anich.detail(idRef.value!), { enabled: idRef, source: idRef });
@@ -30,27 +32,29 @@ const onCharImgError = (e: Event) => {
 // ── Tabs (reference app order: 详情 / 剧集 / 评论 / 角色 / 推荐) ──
 const activeTab = ref<"info" | "episodes" | "comments" | "characters" | "related">("info");
 const TABS = [
-  { key: "info", label: "详情" },
-  { key: "episodes", label: "剧集" },
-  { key: "comments", label: "评论" },
-  { key: "characters", label: "角色" },
-  { key: "related", label: "推荐" },
+  { key: "info", labelKey: "detail.tabInfo" },
+  { key: "episodes", labelKey: "detail.tabEpisodes" },
+  { key: "comments", labelKey: "detail.tabComments" },
+  { key: "characters", labelKey: "detail.tabCharacters" },
+  { key: "related", labelKey: "detail.tabRelated" },
 ] as const;
 
 // ── Hero helpers ──
-const LANG_LABELS: Record<string, string> = { ja: "日语", zh: "国语", en: "英语", ko: "韩语", other: "其他" };
-const langLabel = (l?: string) => (l ? LANG_LABELS[l] ?? l : "");
+const LANG_KEY: Record<string, string> = {
+  ja: "common.langNames.ja",
+  zh: "common.langNames.zh",
+  en: "common.langNames.en",
+  ko: "common.langNames.ko",
+  other: "common.langNames.other",
+};
+const langLabel = (l?: string) => (l ? (LANG_KEY[l] ? t(LANG_KEY[l]) : l) : "");
 const fmtCnDate = (ts?: number) => {
   if (!ts || ts <= 0) return "—";
-  const d = new Date(ts);
-  return `${d.getFullYear()}年${String(d.getMonth() + 1).padStart(2, "0")}月${String(d.getDate()).padStart(2, "0")}日`;
+  return d(ts, "long");
 };
 const fmtEpDate = (ts?: number) => {
   if (!ts || ts <= 0) return "";
-  const d = new Date(ts);
-  const base = `${d.getFullYear()}年${String(d.getMonth() + 1).padStart(2, "0")}月${String(d.getDate()).padStart(2, "0")}日`;
-  const t = `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}:${String(d.getSeconds()).padStart(2, "0")}`;
-  return `${base} ${t}`;
+  return d(ts, "longTime");
 };
 const fmtEpDuration = (sec?: number) => {
   if (!sec || sec <= 0) return "";
@@ -198,7 +202,7 @@ const closeStatusMenu = () => { statusMenuOpen.value = false; };
 </script>
 
 <template>
-  <div v-if="ui.detailId == null" class="surface mx-auto mt-20 max-w-md rounded-2xl p-10 text-center text-muted-foreground">未选择番剧</div>
+  <div v-if="ui.detailId == null" class="surface mx-auto mt-20 max-w-md rounded-2xl p-10 text-center text-muted-foreground">{{ $t('detail.none') }}</div>
   <div v-else class="relative min-w-0 w-full pb-24">
     <!-- ═══ Hero: blurred backdrop + poster + meta ═══
          修复：overflow-hidden 只作用于背景层（裁剪 scale-125 模糊图），
@@ -225,10 +229,10 @@ const closeStatusMenu = () => { statusMenuOpen.value = false; };
             <h1 class="text-xl font-extrabold tracking-tight text-foreground sm:text-2xl">{{ detail?.title }}</h1>
 
             <div class="mt-3 space-y-1 text-xs leading-relaxed text-foreground/85">
-              <p><span class="text-muted-foreground">时间: </span>{{ fmtCnDate(detail?.airdate) }}</p>
-              <p><span class="text-muted-foreground">状态: </span>全{{ detail?.episodesTotal || episodes?.length || "…" }}集<template v-if="detail?.status"> · {{ detail.status }}</template></p>
-              <p v-if="detail?.lang"><span class="text-muted-foreground">语言: </span>{{ langLabel(detail.lang) }}</p>
-              <p v-if="detail?.region?.length"><span class="text-muted-foreground">地区: </span>{{ detail.region.join(" · ") }}</p>
+              <p><span class="text-muted-foreground">{{ $t('detail.metaTime') }}: </span>{{ fmtCnDate(detail?.airdate) }}</p>
+              <p><span class="text-muted-foreground">{{ $t('detail.metaStatus') }}: </span>{{ $t('detail.totalEps', { n: detail?.episodesTotal || episodes?.length || '…' }) }}<template v-if="detail?.status"> · {{ detail.status }}</template></p>
+              <p v-if="detail?.lang"><span class="text-muted-foreground">{{ $t('detail.metaLang') }}: </span>{{ langLabel(detail.lang) }}</p>
+              <p v-if="detail?.region?.length"><span class="text-muted-foreground">{{ $t('detail.metaRegion') }}: </span>{{ detail.region.join(" · ") }}</p>
             </div>
 
             <!-- Rating: 5-star strip + score line -->
@@ -243,18 +247,18 @@ const closeStatusMenu = () => { statusMenuOpen.value = false; };
                   </div>
                 </div>
               </div>
-              <span class="text-xs text-muted-foreground">{{ bestRating.count ? `由${bestRating.count}人评` : "" }}{{ bestRating.score.toFixed(1) }}分</span>
+              <span class="text-xs text-muted-foreground">{{ bestRating.count ? $t('detail.ratedBy', { n: bestRating.count }) : "" }}{{ $t('detail.score', { s: bestRating.score.toFixed(1) }) }}</span>
             </div>
 
             <div class="mt-4 flex flex-wrap items-center gap-2.5">
               <button v-if="episodes && episodes.length > 0" @click="handlePlay(1)" class="flex items-center gap-2 rounded-lg bg-primary px-5 py-2 text-sm font-semibold text-primary-foreground transition-opacity hover:opacity-90">
-                <Play class="h-4 w-4 fill-current" /> 立即播放
+                <Play class="h-4 w-4 fill-current" /> {{ $t('detail.playNow') }}
               </button>
               <!-- 收藏：首次点击默认在看；再次点击弹出状态菜单/取消收藏 -->
               <div class="relative">
                 <button @click="toggleFav" :class="cn('flex items-center gap-1.5 rounded-lg border px-4 py-2 text-sm font-medium transition-colors', entry ? 'border-primary/40 bg-primary/10 text-primary hover:bg-primary/15' : 'border-border text-foreground hover:bg-foreground/5')">
                   <Heart :class="cn('h-4 w-4', entry && 'fill-primary text-primary')" />
-                  {{ entry ? `已收藏 · ${STATUS_LABELS[entry.status]}` : "收藏" }}
+                  {{ entry ? `${$t('detail.favorited')} · ${$t(STATUS_I18N_KEYS[entry.status])}` : $t('detail.fav') }}
                   <ChevronDown v-if="entry" :class="cn('h-3 w-3 transition-transform', statusMenuOpen && 'rotate-180')" />
                 </button>
                 <!-- 状态菜单 -->
@@ -267,12 +271,12 @@ const closeStatusMenu = () => { statusMenuOpen.value = false; };
                     :class="cn('flex w-full items-center gap-2 px-3 py-2 text-left text-xs transition-colors hover:bg-foreground/5', entry.status === s ? 'font-bold text-primary' : 'text-foreground')"
                   >
                     <span :class="cn('h-1.5 w-1.5 rounded-full', STATUS_STYLES[s].dot)" />
-                    {{ STATUS_LABELS[s] }}
+                    {{ $t(STATUS_I18N_KEYS[s]) }}
                     <span v-if="entry.status === s" class="ml-auto text-[10px]">✓</span>
                   </button>
                   <div class="my-1 h-px bg-border/60" />
                   <button type="button" @click="unfav" class="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-destructive transition-colors hover:bg-destructive/10">
-                    <Heart class="h-3 w-3" /> 取消收藏
+                    <Heart class="h-3 w-3" /> {{ $t('detail.unfav') }}
                   </button>
                 </div>
               </div>
@@ -294,7 +298,7 @@ const closeStatusMenu = () => { statusMenuOpen.value = false; };
             activeTab === t.key ? 'text-primary' : 'text-muted-foreground hover:text-foreground'
           )"
         >
-          {{ t.label }}
+          {{ t.labelKey ? $t(t.labelKey) : '' }}
           <span v-if="t.key === 'comments' && commentCount" class="text-[10px]"> {{ commentCount }}</span>
           <span v-if="activeTab === t.key" class="absolute inset-x-0 -bottom-px h-0.5 rounded-full bg-primary" />
         </button>
@@ -306,17 +310,17 @@ const closeStatusMenu = () => { statusMenuOpen.value = false; };
       <!-- ── 详情 ── -->
       <div v-if="activeTab === 'info'" class="space-y-7">
         <p v-if="detail?.overview" class="whitespace-pre-line text-sm leading-7 text-foreground/90">【{{ detail.overview }}】</p>
-        <p v-else-if="!detailLoading" class="text-sm text-muted-foreground">暂无简介</p>
+        <p v-else-if="!detailLoading" class="text-sm text-muted-foreground">{{ $t('detail.noOverview') }}</p>
 
         <div v-if="detail?.genres?.length">
-          <h4 class="mb-2.5 text-sm font-bold text-foreground">分类</h4>
+          <h4 class="mb-2.5 text-sm font-bold text-foreground">{{ $t('detail.genres') }}</h4>
           <div class="flex flex-wrap gap-2">
             <span v-for="g in detail.genres" :key="g" class="rounded-full border border-border px-3.5 py-1 text-xs text-foreground/85">{{ g }}</span>
           </div>
         </div>
 
         <div v-if="detail?.marks?.length">
-          <h4 class="mb-2.5 text-sm font-bold text-foreground">标签</h4>
+          <h4 class="mb-2.5 text-sm font-bold text-foreground">{{ $t('detail.tags') }}</h4>
           <div class="flex flex-wrap gap-2">
             <span v-for="m in detail.marks" :key="m.name" class="rounded-full bg-muted px-3 py-1 text-xs text-muted-foreground">
               {{ m.name }} <span class="ml-0.5 tabular-nums">{{ m.count }}</span>
@@ -327,7 +331,7 @@ const closeStatusMenu = () => { statusMenuOpen.value = false; };
 
       <!-- ── 剧集：缩略图卡片网格 ── -->
       <div v-else-if="activeTab === 'episodes'">
-        <div v-if="!episodes || episodes.length === 0" class="py-10 text-center text-sm text-muted-foreground">暂无剧集</div>
+        <div v-if="!episodes || episodes.length === 0" class="py-10 text-center text-sm text-muted-foreground">{{ $t('detail.noEpisodes') }}</div>
         <div v-else ref="epGridRef" class="w-full overflow-hidden" :style="{ ...epGridStyle, contain: 'layout', maxWidth: '100%' }">
           <button
             v-for="ep in episodes"
@@ -339,16 +343,16 @@ const closeStatusMenu = () => { statusMenuOpen.value = false; };
           >
             <div class="relative aspect-video w-full overflow-hidden bg-muted">
               <!-- 需求：集数 hover 只需图片有轻微变化即可（亮度微调，无缩放/无播放遮罩） -->
-              <CoverImage :src="ep.image || cover" :alt="ep.title || `第${ep.sort}集`" ratio="wide" rounded="rounded-none" class="transition-[filter] duration-200 group-hover:brightness-110" />
+              <CoverImage :src="ep.image || cover" :alt="ep.title || $t('common.epN', { n: ep.sort })" ratio="wide" rounded="rounded-none" class="transition-[filter] duration-200 group-hover:brightness-110" />
               <div class="pointer-events-none absolute inset-x-0 bottom-0 flex items-center justify-between gap-1 bg-gradient-to-t from-black/85 via-black/40 to-transparent px-1.5 pb-1 pt-5">
                 <span class="rounded bg-black/60 px-1 font-mono text-[10px] leading-4 tabular-nums text-white/95">{{ fmtEpDuration(ep.duration) || "--:--" }}</span>
                 <!-- 需求：无资源的集数要显示「无资源」角标（此前只标有资源，无资源集无任何标注） -->
-                <span v-if="ep.status" class="rounded bg-emerald-600/90 px-1 text-[9px] font-semibold leading-4 text-white">有资源</span>
-                <span v-else class="rounded bg-red-500/85 px-1 text-[9px] font-semibold leading-4 text-white">无资源</span>
+                <span v-if="ep.status" class="rounded bg-emerald-600/90 px-1 text-[9px] font-semibold leading-4 text-white">{{ $t('detail.hasResource') }}</span>
+                <span v-else class="rounded bg-red-500/85 px-1 text-[9px] font-semibold leading-4 text-white">{{ $t('detail.noResource') }}</span>
               </div>
             </div>
             <div class="px-1.5 pb-1 pt-1.5">
-              <p class="line-clamp-1 text-xs font-semibold text-foreground">第{{ ep.sort }}集 {{ ep.title }}</p>
+              <p class="line-clamp-1 text-xs font-semibold text-foreground">{{ $t('common.epNT', { n: ep.sort, t: ep.title }) }}</p>
               <p class="mt-0.5 text-[10px] tabular-nums text-muted-foreground">{{ fmtEpDate(ep.airdate) }}</p>
             </div>
           </button>
@@ -358,14 +362,14 @@ const closeStatusMenu = () => { statusMenuOpen.value = false; };
       <!-- ── 评论 ── -->
       <div v-else-if="activeTab === 'comments'">
         <div v-if="commentsLoading" class="space-y-3"><div v-for="i in 3" :key="i" class="h-20 rounded-lg shimmer" /></div>
-        <div v-else-if="comments.length === 0" class="py-10 text-center text-sm text-muted-foreground">暂无评论</div>
+        <div v-else-if="comments.length === 0" class="py-10 text-center text-sm text-muted-foreground">{{ $t('detail.noComments') }}</div>
         <div v-else class="space-y-4">
           <div v-for="c in comments" :key="c.id" class="surface rounded-xl p-4">
             <div class="flex items-center gap-2">
               <img v-if="c.user?.avatar" :src="c.user.avatar" alt="" class="h-7 w-7 rounded-full object-cover" draggable="false" />
               <div v-else class="flex h-7 w-7 items-center justify-center rounded-full bg-primary/20 text-xs font-bold text-primary">{{ (c.user?.name || "?").charAt(0) }}</div>
               <div class="flex-1">
-                <span class="text-sm font-semibold text-foreground">{{ c.user?.name || "匿名" }}</span>
+                <span class="text-sm font-semibold text-foreground">{{ c.user?.name || $t('detail.anonymous') }}</span>
                 <span v-if="c.user?.issp" class="ml-1 rounded bg-tertiary/30 px-1 text-[9px] text-tertiary-foreground">UP</span>
               </div>
               <span class="text-[10px] text-muted-foreground">{{ fmtCommentDate(c.date) }}</span>
@@ -374,22 +378,22 @@ const closeStatusMenu = () => { statusMenuOpen.value = false; };
             <div class="mt-2 flex items-center gap-4 text-[11px] text-muted-foreground">
               <span v-if="c.likes_count" class="flex items-center gap-1">♥ {{ c.likes_count }}</span>
               <button v-if="c.replies_count > 0" @click="toggleReplies(c.id)" class="flex items-center gap-1 hover:text-foreground">
-                {{ expandedReplies.has(c.id) ? "收起" : "展开" }} {{ c.replies_count }} 条回复
+                {{ (expandedReplies.has(c.id) ? $t('common.collapse') : $t('common.expand')) + ' ' + $t('detail.replies', { n: c.replies_count }) }}
                 <ChevronDown :class="cn('h-3 w-3 transition-transform', expandedReplies.has(c.id) && 'rotate-180')" />
               </button>
               <span v-if="c.address" class="text-muted-foreground/50">{{ c.address }}</span>
             </div>
             <div v-if="expandedReplies.has(c.id) && repliesCache[c.id]" class="mt-3 ml-9 space-y-3 border-l border-border/40 pl-4">
-              <div v-if="repliesLoading.has(c.id)" class="text-xs text-muted-foreground">加载中…</div>
+              <div v-if="repliesLoading.has(c.id)" class="text-xs text-muted-foreground">{{ $t('common.loading') }}</div>
               <div v-for="r in repliesCache[c.id]" :key="r.id" class="rounded-lg bg-muted p-2.5">
                 <div class="flex items-center gap-2">
                   <img v-if="r.user?.avatar" :src="r.user.avatar" alt="" class="h-5 w-5 rounded-full object-cover" />
-                  <span class="text-xs font-semibold text-foreground">{{ r.user?.name || "匿名" }}</span>
+                  <span class="text-xs font-semibold text-foreground">{{ r.user?.name || $t('detail.anonymous') }}</span>
                   <span class="text-[10px] text-muted-foreground">{{ fmtCommentDate(r.date) }}</span>
                 </div>
                 <p class="mt-1 text-xs leading-relaxed text-foreground/70">{{ r.text }}</p>
               </div>
-              <div v-if="repliesCache[c.id].length === 0" class="text-xs text-muted-foreground">暂无回复</div>
+              <div v-if="repliesCache[c.id].length === 0" class="text-xs text-muted-foreground">{{ $t('detail.noReplies') }}</div>
             </div>
           </div>
         </div>
@@ -397,7 +401,7 @@ const closeStatusMenu = () => { statusMenuOpen.value = false; };
 
       <!-- ── 角色 ── -->
       <div v-else-if="activeTab === 'characters'">
-        <div v-if="!characters || characters.length === 0" class="py-10 text-center text-sm text-muted-foreground">暂无角色资料</div>
+        <div v-if="!characters || characters.length === 0" class="py-10 text-center text-sm text-muted-foreground">{{ $t('detail.noCharacters') }}</div>
         <div v-else ref="charGridRef" class="w-full overflow-hidden" :style="{ ...charGridStyle, contain: 'layout', maxWidth: '100%' }">
           <div v-for="c in characters" :key="c.id" class="min-w-0 text-center">
             <!-- 无边框：仅上半身截图 + 名称 + CV -->
@@ -412,7 +416,7 @@ const closeStatusMenu = () => { statusMenuOpen.value = false; };
 
       <!-- ── 推荐 ── -->
       <div v-else-if="activeTab === 'related'">
-        <div v-if="!related || related.length === 0" class="py-10 text-center text-sm text-muted-foreground">暂无相关推荐</div>
+        <div v-if="!related || related.length === 0" class="py-10 text-center text-sm text-muted-foreground">{{ $t('detail.noRelated') }}</div>
         <div v-else ref="relatedGridRef" class="w-full overflow-hidden" :style="{ ...relatedGridStyle, contain: 'layout', maxWidth: '100%' }">
           <button v-for="item in related.slice(0, 12)" :key="item.id" @click="ui.openDetail(item.id, item.image)" class="group flex min-w-0 flex-col text-left">
             <CoverImage :src="item.image" :alt="item.title" ratio="portrait" rounded="rounded-lg" class="transition-transform group-hover:scale-[1.03]" />

@@ -10,6 +10,7 @@
  */
 
 import { invoke } from "@tauri-apps/api/core";
+import { i18n } from "@/i18n";
 import {
   parseBangumiCharacters,
   parseBangumiLatest,
@@ -96,7 +97,7 @@ async function rustFetch(url: string, accept: string): Promise<{ bytes: Uint8Arr
     // 浏览器预览模式无 Tauri invoke：给出可读提示而非底层 TypeError
     const msg = typeof e === "string" ? e : (e?.message || "invoke failed");
     throw new AnichAPIError(
-      isTauri() ? msg : "该功能需要桌面端（浏览器预览模式不可用）",
+      isTauri() ? msg : i18n.global.t("common.errDesktopRequired"),
       0, url, ""
     );
   }

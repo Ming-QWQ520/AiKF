@@ -22,6 +22,8 @@ export type DefaultSource = "auto" | "adkwai" | "anich";
 export type BufferSize = 60 | 120 | 300 | 600;
 export type BackBuffer = 0 | 30 | 60;
 export type ThemeMode = "light" | "dark" | "system";
+/** 界面语言（多语言支持：默认简体中文，设置页可切换） */
+export type Language = "zh-CN" | "en";
 
 /** 弹幕设置（显示区域为画面高度占比：0.25=1/4屏 0.5=半屏 0.75=3/4屏 1=满屏） */
 export interface DanmakuSettings {
@@ -55,6 +57,8 @@ export interface AppSettings {
   backBuffer: BackBuffer;
   autoNext: boolean;
   theme: ThemeMode;
+  /** 界面语言（zh-CN = 简体中文默认 / en = English） */
+  language: Language;
   /** m3u8 下载分片线程数（每集内部，1–32，默认 6） */
   cacheThreads: number;
   /** 并发下载集数（同时缓存几集，全部线路类型通用；1–12，默认 3）。存储键沿用 cacheMp4Threads */
@@ -75,6 +79,8 @@ const DEFAULTS: AppSettings = {
   backBuffer: 0,
   autoNext: true,
   theme: "dark",
+  // 需求：多语言支持默认使用中文
+  language: "zh-CN",
   cacheThreads: 6,
   // 需求：并发下载默认 3 集（最高可同时缓存三集），最高 12；全部线路类型生效
   cacheMp4Threads: 3,
@@ -120,6 +126,8 @@ function load(): AppSettings {
     merged.danmaku.opacity = Math.min(1, Math.max(0, Number.isFinite(Number(merged.danmaku.opacity)) ? Number(merged.danmaku.opacity) : 0.25));
     merged.danmaku.fontSize = Math.min(48, Math.max(12, Math.round(Number(merged.danmaku.fontSize) || 22)));
     merged.danmaku.speed = Math.min(10, Math.max(1, Number(merged.danmaku.speed) || 5));
+    // 界面语言钳制：仅接受支持的语言，否则回退默认中文
+    if (merged.language !== "zh-CN" && merged.language !== "en") merged.language = DEFAULTS.language;
     return merged;
   } catch {
     return { ...DEFAULTS };

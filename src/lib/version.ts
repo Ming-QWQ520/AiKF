@@ -10,4 +10,4 @@
 export const AIKF_VERSION = "0.1.0";
 
 /** One-line summary of what this build ships with. */
-export const AIKF_BUILD_TAG = "本地缓存重构 · JSON 索引 · 右侧选集面板 · 线路节点信息";
+export const AIKF_BUILD_TAG = "本地缓存重构 · JSON 索引 · 右侧选集面板 · 线路节点信息"; // i18n-skip: 仅控制台横幅使用，非界面文案

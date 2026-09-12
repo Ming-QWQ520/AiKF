@@ -13,6 +13,7 @@
  */
 
 import { invoke } from "@tauri-apps/api/core";
+import { i18n } from "@/i18n";
 import { getAllDanmaku, fetchExternalBytes, fetchExternalText } from "./anich/client";
 import { parseBilibiliDanmakuSegment } from "./anich/parsers";
 import type { DanmakuItem } from "./anich/types";
@@ -70,7 +71,7 @@ export async function loadServerDanmaku(bangumiID: number, episode: number): Pro
       color: d.color || "#ffffff",
     }))
     .filter(isValidDanmu);
-  return { key: "server", name: "服务端", detail: `${bangumiID}·第${episode}话`, count: items.length, items };
+  return { key: "server", name: i18n.global.t("player.srcServer"), detail: i18n.global.t("dm.detailEp", { id: bangumiID, n: episode }), count: items.length, items };
 }
 
 /* ─── 2. 哔哩哔哩（protobuf 分段代理） ──────────────────────────────── */
@@ -91,9 +92,9 @@ export function biliCidOf(sites: { site: string; id: string }[] | undefined): st
 }
 
 export async function loadBiliDanmaku(cid: string): Promise<DanmakuSource> {
-  if (!cid) throw new Error("本话没有哔哩哔哩弹幕源");
+  if (!cid) throw new Error(i18n.global.t("dm.errNoBili"));
   const oid = Number(cid);
-  if (!Number.isFinite(oid) || oid <= 0) throw new Error("哔哩哔哩 cid 无效");
+  if (!Number.isFinite(oid) || oid <= 0) throw new Error(i18n.global.t("dm.errBiliCid"));
 
   let lastErr: unknown = null;
   for (const host of BILI_DM_HOSTS) {
@@ -114,12 +115,12 @@ export async function loadBiliDanmaku(cid: string): Promise<DanmakuSource> {
         }
       }
       const valid = items.filter(isValidDanmu);
-      return { key: "bili", name: "哔哩哔哩", detail: `cid·${cid}`, count: valid.length, items: valid };
+      return { key: "bili", name: i18n.global.t("player.srcBili"), detail: i18n.global.t("dm.detailCid", { cid }), count: valid.length, items: valid };
     } catch (e) {
       lastErr = e;
     }
   }
-  throw lastErr instanceof Error ? lastErr : new Error("哔哩哔哩弹幕拉取失败");
+  throw lastErr instanceof Error ? lastErr : new Error(i18n.global.t("dm.errBiliFetch"));
 }
 
 /* ─── 3. 弹弹（dandanplay 代理，JSON） ──────────────────────────────── */
@@ -131,12 +132,12 @@ interface DandanEpisode { episodeId: number; episodeTitle: string; episodeNumber
 
 export async function loadDandanDanmaku(title: string, episode: number): Promise<DanmakuSource> {
   const kw = (title || "").trim();
-  if (!kw) throw new Error("缺少番剧标题，无法匹配弹弹弹幕");
+  if (!kw) throw new Error(i18n.global.t("dm.errDandanKeyword"));
   // 1) 搜索番剧（取第一个结果，与 AniCh 客户端行为一致）
   const searchTxt = await fetchExternalText(`${DANDAN_BASE}/api/v2/search/anime?keyword=${encodeURIComponent(kw)}`);
   const search = JSON.parse(searchTxt) as { animes?: DandanSearchAnime[] };
   const anime = search.animes?.[0];
-  if (!anime?.animeId) throw new Error("弹弹未匹配到该番剧");
+  if (!anime?.animeId) throw new Error(i18n.global.t("dm.errDandanNoMatch"));
   // 2) 拉取分集列表，按集数匹配
   const detailTxt = await fetchExternalText(`${DANDAN_BASE}/api/v2/bangumi/${anime.animeId}`);
   const detail = JSON.parse(detailTxt) as { bangumi?: { animeTitle?: string; episodes?: DandanEpisode[] } };
@@ -144,7 +145,7 @@ export async function loadDandanDanmaku(title: string, episode: number): Promise
   const target =
     eps.find((e) => String(e.episodeNumber) === String(episode)) ??
     eps[episode - 1];
-  if (!target?.episodeId) throw new Error("弹弹未找到对应话次");
+  if (!target?.episodeId) throw new Error(i18n.global.t("dm.errDandanNoEp"));
   // 3) 拉取弹幕
   const cmtTxt = await fetchExternalText(`${DANDAN_BASE}/api/v2/comment/${target.episodeId}?withRelated=false&chConvert=1`);
   const cmt = JSON.parse(cmtTxt) as { count?: number; comments?: { cid: number; p: string; m: string }[] };
@@ -165,8 +166,8 @@ export async function loadDandanDanmaku(title: string, episode: number): Promise
   const animeTitle = detail.bangumi?.animeTitle || anime.animeTitle;
   return {
     key: "dandan",
-    name: "弹弹",
-    detail: `${animeTitle} 第${episode}话·${target.episodeId}`,
+    name: i18n.global.t("player.srcDandan"),
+    detail: i18n.global.t("dm.detailDandan", { t: animeTitle, n: episode, eid: target.episodeId }),
     count: items.length,
     items,
   };
@@ -195,10 +196,10 @@ export function mergeDanmaku(sources: DanmakuSource[]): PluginDanmu[] {
 
 /** 读取缓存目录中该集的 danmaku.json（需求：本地缓存增加缓存弹幕） */
 export async function loadLocalDanmaku(bangumiId: number, sort: number): Promise<DanmakuSource> {
-  if (!isTauriEnv) throw new Error("本地弹幕仅桌面端可用");
+  if (!isTauriEnv) throw new Error(i18n.global.t("dm.errLocalDesktop"));
   const txt = await invoke<string | null>("cache_danmaku_load", { bangumiId, sort });
-  if (!txt) throw new Error("本地无缓存弹幕");
+  if (!txt) throw new Error(i18n.global.t("dm.errLocalEmpty"));
   const items = JSON.parse(txt) as PluginDanmu[];
   const valid = (Array.isArray(items) ? items : []).filter(isValidDanmu);
-  return { key: "local", name: "本地缓存", detail: "已随番剧缓存", count: valid.length, items: valid };
+  return { key: "local", name: i18n.global.t("player.srcLocal"), detail: i18n.global.t("dm.detailLocal"), count: valid.length, items: valid };
 }

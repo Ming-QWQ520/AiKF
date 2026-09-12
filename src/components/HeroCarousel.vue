@@ -124,7 +124,7 @@ const onMouseLeave = () => { paused.value = false; startTimer(); };
             @click="emit('open', item.id, item.image)"
             class="mt-4 flex items-center gap-2 rounded-xl bg-white px-5 py-2.5 text-sm font-semibold text-zinc-900 shadow-lg shadow-black/20 transition-all hover:bg-white/90 hover:shadow-black/30 active:scale-[0.98]"
           >
-            <Play class="h-4 w-4 fill-current" /> 立即观看
+            <Play class="h-4 w-4 fill-current" /> {{ $t('carousel.watchNow') }}
           </button>
         </div>
       </div>
@@ -134,14 +134,14 @@ const onMouseLeave = () => { paused.value = false; startTimer(); };
     <template v-if="slides.length > 1">
       <button
         @click="prev"
-        aria-label="上一张"
+        :aria-label="$t('carousel.prev')"
         class="absolute left-3 top-1/2 z-10 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full bg-black/45 text-white opacity-0 backdrop-blur-sm transition-all duration-200 hover:bg-black/70 group-hover/carousel:opacity-100"
       >
         <ChevronLeft class="h-5 w-5" />
       </button>
       <button
         @click="next"
-        aria-label="下一张"
+        :aria-label="$t('carousel.next')"
         class="absolute right-3 top-1/2 z-10 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full bg-black/45 text-white opacity-0 backdrop-blur-sm transition-all duration-200 hover:bg-black/70 group-hover/carousel:opacity-100"
       >
         <ChevronRight class="h-5 w-5" />
@@ -153,7 +153,7 @@ const onMouseLeave = () => { paused.value = false; startTimer(); };
           v-for="(s, i) in slides"
           :key="s.id"
           @click="goTo(i)"
-          :aria-label="`第${i + 1}张`"
+          :aria-label="$t('carousel.slide', { n: i + 1 })"
           :class="cn(
             'relative h-1 overflow-hidden rounded-full bg-white/30 transition-all duration-300',
             i === index ? 'w-10' : 'w-4 hover:bg-white/50'

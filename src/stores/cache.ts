@@ -2,6 +2,7 @@ import { defineStore } from "pinia";
 import { computed, ref } from "vue";
 import { convertFileSrc, invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
+import { i18n } from "@/i18n";
 
 /**
  * 本地缓存 store —— 与 Rust cache.rs 的 JSON 索引一一对应。
@@ -72,7 +73,7 @@ export const isTauriEnv =
 /** 本地番剧目录名与 Rust 端 sanitize 规则一致（仅用于展示兜底，实际路径由 Rust 提供） */
 export function sanitizeName(name: string): string {
   const cleaned = (name || "").replace(/[\\/:*?"<>|\u0000]/g, " ").trim();
-  return cleaned ? Array.from(cleaned).slice(0, 64).join("") : "未知";
+  return cleaned ? Array.from(cleaned).slice(0, 64).join("") : "未知"; // i18n-skip: 文件夹名兜底，非界面文案
 }
 
 export const useCacheStore = defineStore("cache", () => {
@@ -219,7 +220,7 @@ export const useCacheStore = defineStore("cache", () => {
     mp4Threads: number;
     episodes: { sort: number; title: string; url: string; lineName: string }[];
   }) {
-    if (!isTauriEnv) throw new Error("本地缓存仅桌面端可用");
+    if (!isTauriEnv) throw new Error(i18n.global.t("cache.errDesktopOnly"));
     await invoke("cache_download_start", {
       args: {
         bangumiId: payload.bangumiId,

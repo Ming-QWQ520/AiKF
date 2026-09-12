@@ -1,4 +1,5 @@
 /** Small display helpers shared across the UI. */
+import { i18n } from "@/i18n";
 
 export function formatDate(ts: number | undefined | null): string {
   if (!ts || ts <= 0) return "—";
@@ -17,25 +18,27 @@ export function formatRelative(ts: number | undefined | null): string {
   const day = 86400000;
   if (abs < day) {
     const h = Math.round(abs / 3600000);
-    return diff > 0 ? `${h}小时后` : `${h}小时前`;
+    return diff > 0 ? i18n.global.t("time.hoursLater", { n: h }) : i18n.global.t("time.hoursAgo", { n: h });
   }
   const d = Math.round(abs / day);
-  if (diff > 0) return d === 1 ? "明天" : `${d}天后`;
-  return d === 1 ? "昨天" : `${d}天前`;
+  if (diff > 0) return d === 1 ? i18n.global.t("time.tomorrow") : i18n.global.t("time.daysLater", { n: d });
+  return d === 1 ? i18n.global.t("time.yesterday") : i18n.global.t("time.daysAgo", { n: d });
 }
 
 export function formatDuration(sec: number): string {
   if (!sec || sec <= 0) return "";
   const m = Math.round(sec / 60);
-  if (m < 60) return `${m}分钟`;
+  if (m < 60) return i18n.global.t("time.minutes", { n: m });
   const h = Math.floor(m / 60);
   const r = m % 60;
-  return r ? `${h}小时${r}分` : `${h}小时`;
+  return r ? i18n.global.t("time.hoursMin", { h, m: r }) : i18n.global.t("time.hours", { h });
 }
 
-const WEEKDAYS = ["周日", "周一", "周二", "周三", "周四", "周五", "周六"];
+/** 星期显示（key 形式供 i18n 查询；sort 越界时按 dayN 带序号） */
+const WEEKDAY_KEYS = ["time.w0", "time.w1", "time.w2", "time.w3", "time.w4", "time.w5", "time.w6"];
 export function weekdayLabel(sort: number): string {
-  return WEEKDAYS[sort % 7] ?? `第${sort}天`;
+  const key = WEEKDAY_KEYS[sort % 7];
+  return key ? i18n.global.t(key) : i18n.global.t("time.dayN", { n: sort });
 }
 
 export function pickBestImage(image?: string): string {

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed } from "vue";
 import { Bookmark, Trash2, Play, CheckCircle2, Star, Library } from "lucide-vue-next";
-import { useLibraryStore, STATUS_LABELS, STATUS_ORDER, STATUS_STYLES, type TrackStatus } from "@/stores/library";
+import { useLibraryStore, STATUS_I18N_KEYS, STATUS_ORDER, STATUS_STYLES, type TrackStatus } from "@/stores/library";
 import { useUIStore } from "@/stores/ui";
 import SectionCard from "@/components/SectionCard.vue";
 import CoverImage from "@/components/CoverImage.vue";
@@ -41,21 +41,21 @@ const doClear = () => {
               <Bookmark class="h-4.5 w-4.5" />
             </span>
             <div>
-              <h2 class="text-lg font-semibold sm:text-xl">我的追番库</h2>
-              <p class="text-xs text-muted-foreground sm:text-sm">共 {{ all.length }} 部 · 数据保存在本地</p>
+              <h2 class="text-lg font-semibold sm:text-xl">{{ $t('library.title') }}</h2>
+              <p class="text-xs text-muted-foreground sm:text-sm">{{ $t('library.subtitle', { n: all.length }) }}</p>
             </div>
           </div>
           <button v-if="all.length > 0" @click="doClear" :class="cn('state-layer flex items-center gap-1 rounded-lg border px-3 py-1.5 text-xs font-medium', confirmClear ? 'border-destructive bg-destructive text-destructive-foreground' : 'border-border text-muted-foreground hover:border-destructive/40 hover:text-destructive')">
-            <Trash2 class="h-3 w-3" /> {{ confirmClear ? "确认清空" : "清空" }}
+            <Trash2 class="h-3 w-3" /> {{ confirmClear ? $t('library.confirmClear') : $t('library.clear') }}
           </button>
         </div>
         <div class="no-scrollbar flex gap-1.5 overflow-x-auto">
           <button @click="filter = 'all'" :class="cn('state-layer flex shrink-0 items-center gap-1.5 rounded-full px-3.5 py-1.5 text-xs font-medium transition-colors', filter === 'all' ? 'bg-foreground text-background' : 'bg-muted text-muted-foreground hover:text-foreground')">
-            全部 <span :class="filter === 'all' ? 'opacity-70' : 'opacity-60'" class="text-[10px]">{{ counts.all }}</span>
+            {{ $t('common.all') }} <span :class="filter === 'all' ? 'opacity-70' : 'opacity-60'" class="text-[10px]">{{ counts.all }}</span>
           </button>
           <button v-for="s in STATUS_ORDER" :key="s" @click="filter = s" :class="cn('state-layer flex shrink-0 items-center gap-1.5 rounded-full px-3.5 py-1.5 text-xs font-medium transition-colors', filter === s ? 'bg-foreground text-background' : 'bg-muted text-muted-foreground hover:text-foreground')">
             <span :class="cn('h-1.5 w-1.5 rounded-full', STATUS_STYLES[s].dot)" />
-            {{ STATUS_LABELS[s] }} <span :class="filter === s ? 'opacity-70' : 'opacity-60'" class="text-[10px]">{{ counts[s] ?? 0 }}</span>
+            {{ $t(STATUS_I18N_KEYS[s]) }} <span :class="filter === s ? 'opacity-70' : 'opacity-60'" class="text-[10px]">{{ counts[s] ?? 0 }}</span>
           </button>
         </div>
       </div>
@@ -64,8 +64,8 @@ const doClear = () => {
     <div v-if="list.length === 0" class="surface flex min-h-[320px] flex-col items-center justify-center gap-3 rounded-2xl p-10 text-center">
       <Library class="h-12 w-12 text-muted-foreground/30" />
       <div>
-        <p class="text-base font-semibold text-foreground">追番库还是空的</p>
-        <p class="mt-1 text-sm text-muted-foreground">去发现页找到喜欢的番剧，加入追番吧</p>
+        <p class="text-base font-semibold text-foreground">{{ $t('library.empty') }}</p>
+        <p class="mt-1 text-sm text-muted-foreground">{{ $t('library.emptyHint') }}</p>
       </div>
     </div>
 
@@ -83,8 +83,8 @@ const doClear = () => {
                   <p v-if="entry.tagline" class="mt-0.5 line-clamp-1 text-xs text-muted-foreground">{{ entry.tagline }}</p>
                 </button>
                 <div class="flex shrink-0 items-center gap-1">
-                  <span :class="cn('rounded-full px-2.5 py-1 text-[11px] font-semibold', STATUS_STYLES[entry.status].chip)">{{ STATUS_LABELS[entry.status] }}</span>
-                  <button @click="library.remove(entry.id)" class="state-layer rounded-full p-1.5 text-muted-foreground hover:text-destructive" aria-label="移除">
+                  <span :class="cn('rounded-full px-2.5 py-1 text-[11px] font-semibold', STATUS_STYLES[entry.status].chip)">{{ $t(STATUS_I18N_KEYS[entry.status]) }}</span>
+                  <button @click="library.remove(entry.id)" class="state-layer rounded-full p-1.5 text-muted-foreground hover:text-destructive" :aria-label="$t('library.remove')">
                     <Trash2 class="h-3.5 w-3.5" />
                   </button>
                 </div>
@@ -92,17 +92,17 @@ const doClear = () => {
 
               <div class="mt-2.5">
                 <div class="flex items-center justify-between text-xs">
-                  <span class="text-muted-foreground">观看进度</span>
+                  <span class="text-muted-foreground">{{ $t('library.progress') }}</span>
                   <span class="font-medium text-foreground tabular-nums">
                     <template v-if="entry.totalEpisodes > 0">
-                      {{ entry.currentEpisode || entry.watchedEpisodes.length }} / {{ entry.totalEpisodes }} 话
+                      {{ $t('common.episodesOf', { cur: entry.currentEpisode || entry.watchedEpisodes.length, total: entry.totalEpisodes }) }}
                       <span class="ml-1 text-muted-foreground">· {{ Math.min(100, Math.round(((entry.currentEpisode || entry.watchedEpisodes.length) / entry.totalEpisodes) * 100)) }}%</span>
                     </template>
                     <template v-else-if="entry.watchedEpisodes.length > 0">
-                      已看 {{ entry.watchedEpisodes.length }} 话
+                      {{ $t('library.watchedN', { n: entry.watchedEpisodes.length }) }}
                     </template>
                     <template v-else>
-                      未开始
+                      {{ $t('common.notStarted') }}
                     </template>
                   </span>
                 </div>
@@ -120,13 +120,13 @@ const doClear = () => {
 
               <div class="mt-3 flex flex-wrap items-center gap-2">
                 <button v-if="entry.currentEpisode > 0" @click="ui.openPlayer({ bangumiID: entry.id, episode: Math.max(1, entry.currentEpisode), title: entry.title, cover: entry.image })" class="state-layer flex items-center gap-1.5 rounded-lg bg-primary px-3.5 py-1.5 text-xs font-semibold text-primary-foreground transition-opacity hover:opacity-90">
-                  <Play class="h-3 w-3 fill-current" /> 继续观看 第{{ Math.max(1, entry.currentEpisode) }}话
+                  <Play class="h-3 w-3 fill-current" /> {{ $t('library.continueAt', { n: Math.max(1, entry.currentEpisode) }) }}
                 </button>
                 <button @click="library.toggleEpisode(entry.id, entry.currentEpisode + 1, entry.totalEpisodes)" class="state-layer flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-foreground hover:bg-foreground/5">
-                  <CheckCircle2 class="h-3 w-3" /> 标记下一话
+                  <CheckCircle2 class="h-3 w-3" /> {{ $t('library.markNext') }}
                 </button>
                 <div class="flex items-center gap-0.5">
-                  <button v-for="n in 10" :key="n" @click="library.setScore(entry.id, n)" class="state-layer p-0.5" :aria-label="`评分 ${n}`">
+                  <button v-for="n in 10" :key="n" @click="library.setScore(entry.id, n)" class="state-layer p-0.5" :aria-label="$t('library.rateN', { n })">
                     <Star :class="cn('h-3.5 w-3.5 transition-colors', n <= entry.score ? 'fill-tertiary text-tertiary' : 'text-muted-foreground/40')" />
                   </button>
                 </div>

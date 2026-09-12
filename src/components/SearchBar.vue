@@ -87,11 +87,11 @@ const submit = (q: string) => {
         @blur="onBlur"
         @keydown.enter="submit(value)"
         @keydown.escape="($event.target as HTMLInputElement)?.blur()"
-        placeholder="搜索番剧、动画…"
+        :placeholder="$t('searchBar.placeholder')"
         class="w-full bg-transparent text-sm text-foreground outline-none placeholder:text-muted-foreground/70"
       />
       <Loader2 v-if="isFetching" class="h-3.5 w-3.5 shrink-0 animate-spin text-muted-foreground" />
-      <button v-if="value && !isFetching" type="button" aria-label="清除" @click="value = ''" class="text-muted-foreground hover:text-foreground">
+      <button v-if="value && !isFetching" type="button" :aria-label="$t('searchBar.clear')" @click="value = ''" class="text-muted-foreground hover:text-foreground">
         <X class="h-3.5 w-3.5" />
       </button>
     </div>
@@ -103,16 +103,16 @@ const submit = (q: string) => {
         <div v-if="history.length > 0">
           <div class="mb-2 flex items-center justify-between">
             <span class="flex items-center gap-1.5 text-xs font-semibold text-muted-foreground">
-              <Clock class="h-3.5 w-3.5" /> 历史搜索
+              <Clock class="h-3.5 w-3.5" /> {{ $t('searchBar.history') }}
             </span>
             <button
               type="button"
               @mousedown.prevent
               @click="clearHistory"
               class="flex items-center gap-1 text-[11px] text-muted-foreground/70 transition-colors hover:text-foreground"
-              title="清空历史"
+              :title="$t('searchBar.clearAllTitle')"
             >
-              <Trash2 class="h-3 w-3" /> 清空
+              <Trash2 class="h-3 w-3" /> {{ $t('searchBar.clearAll') }}
             </button>
           </div>
           <div class="flex flex-wrap gap-1.5">
@@ -127,7 +127,7 @@ const submit = (q: string) => {
                 type="button"
                 @mousedown.prevent
                 @click.stop="removeHistory(h)"
-                aria-label="删除该历史"
+                :aria-label="$t('searchBar.removeItem')"
                 class="absolute -right-1 -top-1 hidden h-4 w-4 items-center justify-center rounded-full bg-foreground/70 text-background transition-colors hover:bg-destructive group-hover:flex"
               >
                 <X class="h-2.5 w-2.5" />
@@ -139,7 +139,7 @@ const submit = (q: string) => {
         <!-- 热门搜索 -->
         <div v-if="hotTerms.length > 0" :class="cn(history.length > 0 && 'mt-3 border-t border-border/60 pt-3')">
           <div class="mb-2 flex items-center gap-1.5 text-xs font-semibold text-muted-foreground">
-            <Flame class="h-3.5 w-3.5 text-primary" /> 热门搜索
+            <Flame class="h-3.5 w-3.5 text-primary" /> {{ $t('searchBar.hot') }}
           </div>
           <div class="grid grid-cols-2 gap-x-3">
             <button
@@ -158,7 +158,7 @@ const submit = (q: string) => {
         </div>
 
         <div v-if="history.length === 0 && hotTerms.length === 0 && hotFetching" class="py-4 text-center text-xs text-muted-foreground">
-          正在加载热门搜索…
+          {{ $t('searchBar.hotLoading') }}
         </div>
       </div>
     </Transition>
@@ -167,7 +167,7 @@ const submit = (q: string) => {
     <Transition name="dropdown">
       <div v-if="showResults" class="surface absolute z-50 mt-2 max-h-[60vh] w-full overflow-y-auto rounded-xl p-1.5 shadow-lg shadow-black/5 dark:shadow-black/40">
         <div v-if="results.length === 0 && !isFetching" class="px-3 py-6 text-center text-sm text-muted-foreground">
-          没有找到 “{{ debounced }}” 相关结果
+          {{ $t('searchBar.noResults', { q: debounced }) }}
         </div>
         <button
           v-for="item in results"
@@ -184,7 +184,7 @@ const submit = (q: string) => {
           </div>
         </button>
         <button v-if="debounced.length > 0" type="button" @mousedown.prevent @click="submit(value)" class="state-layer mt-1 w-full rounded-lg bg-primary/10 p-2 text-center text-xs font-medium text-primary hover:bg-primary/15">
-          查看全部 “{{ debounced }}” 的结果 →
+          {{ $t('searchBar.viewAll', { q: debounced }) }}
         </button>
       </div>
     </Transition>

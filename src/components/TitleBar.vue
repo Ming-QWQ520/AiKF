@@ -35,7 +35,7 @@ const close = async () => {
         v-if="isTauri"
         type="button"
         @click="minimize"
-        aria-label="最小化"
+        :aria-label="$t('theme.minimize')"
         class="flex h-8 w-10 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-foreground/5 hover:text-foreground"
       >
         <Minus class="h-4 w-4" />
@@ -44,7 +44,7 @@ const close = async () => {
         v-if="isTauri"
         type="button"
         @click="toggleMaximize"
-        aria-label="最大化/还原"
+        :aria-label="$t('theme.maximize')"
         class="flex h-8 w-10 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-foreground/5 hover:text-foreground"
       >
         <Square class="h-3.5 w-3.5" />
@@ -53,7 +53,7 @@ const close = async () => {
         v-if="isTauri"
         type="button"
         @click="close"
-        aria-label="关闭"
+        :aria-label="$t('common.close')"
         class="flex h-8 w-10 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-destructive hover:text-white"
       >
         <X class="h-4 w-4" />

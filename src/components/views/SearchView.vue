@@ -19,7 +19,7 @@ const { data, isLoading } = useAsync(() => anich.search(ui.searchQuery, 0), {
 });
 const items = computed(() => data.value?.items ?? []);
 
-const SUGGESTIONS = ["鬼灭之刃", "咒术回战", "间谍过家家", "葬送的芙莉莲", "进击的巨人", "海贼王", "名侦探柯南", "药屋少女"];
+const SUGGESTIONS = ["鬼灭之刃", "咒术回战", "间谍过家家", "葬送的芙莉莲", "进击的巨人", "海贼王", "名侦探柯南", "药屋少女"]; // i18n-skip: 作品名（专有名词）不翻译
 
 const submit = (val: string) => {
   const v = val.trim();
@@ -37,8 +37,8 @@ const submit = (val: string) => {
             <SearchIcon class="h-4.5 w-4.5" />
           </span>
           <div>
-            <h2 class="text-lg font-semibold sm:text-xl">搜索番剧</h2>
-            <p class="text-xs text-muted-foreground sm:text-sm">输入番剧名称或关键词</p>
+            <h2 class="text-lg font-semibold sm:text-xl">{{ $t('search.title') }}</h2>
+            <p class="text-xs text-muted-foreground sm:text-sm">{{ $t('search.subtitle') }}</p>
           </div>
         </div>
         <div :class="cn('flex items-center gap-2 rounded-xl border bg-card px-4 py-3 transition-all focus-within:border-primary/50 focus-within:ring-2 focus-within:ring-primary/15', 'border-border')">
@@ -47,24 +47,25 @@ const submit = (val: string) => {
             v-model="input"
             autofocus
             @keydown.enter="submit(input)"
-            placeholder="搜索番剧、动画…"
+            :placeholder="$t('search.placeholder')"
             class="w-full bg-transparent text-sm text-foreground outline-none placeholder:text-muted-foreground/70 sm:text-base"
           />
           <Loader2 v-if="isLoading" class="h-4 w-4 shrink-0 animate-spin text-muted-foreground" />
         </div>
         <div v-if="!ui.searchQuery" class="flex flex-wrap items-center gap-2">
           <span class="flex items-center gap-1 text-xs text-muted-foreground">
-            <TrendingUp class="h-3.5 w-3.5" /> 热门搜索
+            <TrendingUp class="h-3.5 w-3.5" /> {{ $t('searchBar.hot') }}
           </span>
+          <!-- i18n-skip: SUGGESTIONS 为作品名（专有名词），多语言下保持原样 -->
           <button v-for="s in SUGGESTIONS" :key="s" @click="input = s; submit(s)" class="state-layer rounded-full bg-muted px-3 py-1.5 text-xs font-medium text-muted-foreground hover:bg-accent hover:text-foreground">{{ s }}</button>
         </div>
       </div>
     </SectionCard>
 
     <section v-if="ui.searchQuery" class="flex flex-col gap-4">
-      <p class="text-sm text-muted-foreground">{{ isLoading ? "搜索中…" : `“${ui.searchQuery}” 的搜索结果 · ${items.length} 部` }}</p>
+      <p class="text-sm text-muted-foreground">{{ isLoading ? $t('search.searching') : $t('search.resultCount', { q: ui.searchQuery, n: items.length }) }}</p>
       <AnimeGridSkeleton v-if="isLoading" :count="12" />
-      <AnimeGrid v-else :items="items" :empty-hint="`没有找到 “${ui.searchQuery}” 相关的番剧`" @select="(id, cover) => ui.openDetail(id, cover)" />
+      <AnimeGrid v-else :items="items" :empty-hint="$t('search.empty', { q: ui.searchQuery })" @select="(id, cover) => ui.openDetail(id, cover)" />
     </section>
   </div>
 </template>

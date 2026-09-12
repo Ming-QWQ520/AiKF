@@ -62,7 +62,7 @@ const { containerRef: freshGridRef, style: freshGridStyle } = useResponsiveGrid(
     <div class="flex flex-col gap-4 lg:flex-row lg:gap-6">
       <HeroCarousel
         :slides="todaySlides"
-        badge="今日更新"
+        :badge="$t('discover.today')"
         :is-loading="latestLoading"
         class-name="flex-1"
         @open="(id, cover) => ui.openDetail(id, cover)"
@@ -75,7 +75,7 @@ const { containerRef: freshGridRef, style: freshGridStyle } = useResponsiveGrid(
         <div>
           <div class="mb-3 flex items-center gap-2">
             <Flame class="h-4 w-4 text-primary" />
-            <h4 class="text-sm font-semibold text-foreground">今日更新</h4>
+            <h4 class="text-sm font-semibold text-foreground">{{ $t('discover.today') }}</h4>
           </div>
           <div v-if="latestLoading" class="space-y-2">
             <div v-for="i in 3" :key="i" class="h-16 rounded-lg shimmer" />
@@ -89,7 +89,7 @@ const { containerRef: freshGridRef, style: freshGridStyle } = useResponsiveGrid(
               <CoverImage :src="item.image" :alt="item.title" ratio="portrait" class="h-12 w-9 shrink-0" rounded="rounded-md" />
               <div class="min-w-0 flex-1">
                 <p class="line-clamp-1 text-xs font-medium text-foreground">{{ item.title }}</p>
-                <p class="text-[10px] text-muted-foreground">第{{ item.episode }}话</p>
+                <p class="text-[10px] text-muted-foreground">{{ $t('discover.epN', { n: item.episode }) }}</p>
               </div>
             </button>
           </div>
@@ -101,7 +101,7 @@ const { containerRef: freshGridRef, style: freshGridStyle } = useResponsiveGrid(
     <div class="flex flex-col gap-4 lg:flex-row lg:gap-6">
       <HeroCarousel
         :slides="hotSlides"
-        badge="热播榜"
+        :badge="$t('discover.hot')"
         :is-loading="listLoading"
         class-name="flex-1"
         @open="(id, cover) => ui.openDetail(id, cover)"
@@ -114,7 +114,7 @@ const { containerRef: freshGridRef, style: freshGridStyle } = useResponsiveGrid(
         <div>
           <div class="mb-3 flex items-center gap-2">
             <TrendingUp class="h-4 w-4 text-primary" />
-            <h4 class="text-sm font-semibold text-foreground">热播榜</h4>
+            <h4 class="text-sm font-semibold text-foreground">{{ $t('discover.hot') }}</h4>
           </div>
           <div v-if="listLoading" class="space-y-2">
             <div v-for="i in 6" :key="i" class="h-9 rounded-lg shimmer" />
@@ -137,7 +137,7 @@ const { containerRef: freshGridRef, style: freshGridStyle } = useResponsiveGrid(
     <section>
       <div class="mb-4 flex items-center gap-2">
         <Clock class="h-5 w-5 text-primary" />
-        <h3 class="text-base font-semibold text-foreground">追番时间表</h3>
+        <h3 class="text-base font-semibold text-foreground">{{ $t('discover.schedule') }}</h3>
       </div>
       <!-- Day tabs -->
       <div class="mb-4 flex gap-1">
@@ -153,7 +153,7 @@ const { containerRef: freshGridRef, style: freshGridStyle } = useResponsiveGrid(
       <div v-if="calLoading" ref="scheduleGridRef" class="min-w-0 w-full overflow-hidden" :style="{ ...scheduleGridStyle, contain: 'layout', maxWidth: '100%' }">
         <div v-for="i in 6" :key="i" class="aspect-[3/4] rounded-xl shimmer" />
       </div>
-      <div v-else-if="activeDayList.length === 0" class="py-8 text-center text-sm text-muted-foreground">本日暂无放送</div>
+      <div v-else-if="activeDayList.length === 0" class="py-8 text-center text-sm text-muted-foreground">{{ $t('discover.noAiringToday') }}</div>
       <div v-else ref="scheduleGridRef" class="min-w-0 w-full overflow-hidden" :style="{ ...scheduleGridStyle, contain: 'layout', maxWidth: '100%' }">
         <button
           v-for="item in activeDayList.slice(0, 12)" :key="item.id"
@@ -162,7 +162,7 @@ const { containerRef: freshGridRef, style: freshGridStyle } = useResponsiveGrid(
         >
           <CoverImage :src="item.image" :alt="item.title" ratio="portrait" rounded="rounded-xl" class="transition-transform group-hover:scale-[1.02]" />
           <p class="mt-1.5 line-clamp-1 text-xs font-medium text-foreground">{{ item.title }}</p>
-          <p v-if="item.episodes[0]" class="text-[10px] text-muted-foreground">{{ item.episodes[0].future ? formatRelative(item.episodes[0].date) : `更新至${item.episodes[0].sort}话` }}</p>
+          <p v-if="item.episodes[0]" class="text-[10px] text-muted-foreground">{{ item.episodes[0].future ? formatRelative(item.episodes[0].date) : $t('common.upToEp', { n: item.episodes[0].sort }) }}</p>
         </button>
       </div>
     </section>
@@ -172,9 +172,9 @@ const { containerRef: freshGridRef, style: freshGridStyle } = useResponsiveGrid(
       <div class="mb-4 flex items-center justify-between">
         <div class="flex items-center gap-2">
           <Flame class="h-5 w-5 text-primary" />
-          <h3 class="text-base font-semibold text-foreground">新番速递</h3>
+          <h3 class="text-base font-semibold text-foreground">{{ $t('discover.fresh') }}</h3>
         </div>
-        <button @click="ui.setView('browse')" class="text-xs font-medium text-primary hover:underline">查看更多 →</button>
+        <button @click="ui.setView('browse')" class="text-xs font-medium text-primary hover:underline">{{ $t('discover.more') }}</button>
       </div>
       <div v-if="listLoading" ref="freshGridRef" class="min-w-0 w-full overflow-hidden" :style="{ ...freshGridStyle, contain: 'layout', maxWidth: '100%' }">
         <div v-for="i in 6" :key="i" class="aspect-[3/4] rounded-xl shimmer" />

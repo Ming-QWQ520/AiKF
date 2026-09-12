@@ -59,7 +59,7 @@ onMounted(() => {
       />
       <div class="absolute left-1.5 top-1.5 flex flex-col gap-1">
         <span v-if="typeof episode === 'number' && episode > 0" class="rounded-md bg-black/60 px-1.5 py-0.5 text-[10px] font-semibold text-white backdrop-blur-sm">
-          第{{ episode }}话
+          {{ $t('discover.epN', { n: episode }) }}
         </span>
       </div>
       <span v-if="inLibrary" class="absolute right-1.5 top-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-sm">
@@ -68,13 +68,13 @@ onMounted(() => {
         </svg>
       </span>
       <div class="absolute inset-x-0 bottom-0 flex translate-y-1.5 flex-col gap-1 p-2 opacity-0 transition-all duration-200 group-hover:translate-y-0 group-hover:opacity-100">
-        <span class="rounded-md bg-white/95 px-2.5 py-1 text-center text-[11px] font-semibold text-zinc-900 shadow-sm">查看详情</span>
+        <span class="rounded-md bg-white/95 px-2.5 py-1 text-center text-[11px] font-semibold text-zinc-900 shadow-sm">{{ $t('common.viewDetails') }}</span>
       </div>
     </div>
     <div class="mt-2 px-0.5">
       <h3 class="line-clamp-1 text-sm font-medium text-foreground" :title="title">{{ title }}</h3>
       <p v-if="latestName || tagline" class="mt-0.5 line-clamp-1 text-[11px] text-muted-foreground">{{ latestName || tagline }}</p>
-      <p v-if="episodesTotal" class="mt-0.5 text-[10px] text-muted-foreground/70">共{{ episodesTotal }}话</p>
+      <p v-if="episodesTotal" class="mt-0.5 text-[10px] text-muted-foreground/70">{{ $t('common.totalEps', { n: episodesTotal }) }}</p>
     </div>
   </button>
 </template>

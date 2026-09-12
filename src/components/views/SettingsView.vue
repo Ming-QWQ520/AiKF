@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from "vue";
+import { useI18n } from "vue-i18n";
 import {
   Settings as SettingsIcon,
   Palette,
@@ -15,10 +16,12 @@ import {
   Droplet,
   Focus,
   Maximize2,
+  Languages,
   Github,
   ExternalLink,
 } from "lucide-vue-next";
-import { useSettingsStore, type ThemeMode } from "@/stores/settings";
+import { useSettingsStore, type ThemeMode, type Language } from "@/stores/settings";
+import { LOCALE_OPTIONS } from "@/i18n";
 import { AIKF_VERSION } from "@/lib/version";
 import { cn } from "@/lib/utils";
 import ToggleSwitch from "@/components/ToggleSwitch.vue";
@@ -26,11 +29,12 @@ import ToggleSwitch from "@/components/ToggleSwitch.vue";
 const settings = useSettingsStore();
 const s = computed(() => settings.data);
 const bg = computed(() => settings.data.background);
+const { t } = useI18n();
 
-const themeOptions: { value: ThemeMode; label: string; icon: any }[] = [
-  { value: "light", label: "浅色", icon: Sun },
-  { value: "dark", label: "深色", icon: Moon },
-  { value: "system", label: "跟随系统", icon: Monitor },
+const themeOptions: { value: ThemeMode; labelKey: string; icon: any }[] = [
+  { value: "light", labelKey: "theme.light", icon: Sun },
+  { value: "dark", labelKey: "theme.dark", icon: Moon },
+  { value: "system", labelKey: "theme.system", icon: Monitor },
 ];
 
 // — Tauri runtime detection —
@@ -59,7 +63,7 @@ const pickFile = async () => {
     const { convertFileSrc } = await import("@tauri-apps/api/core");
     const selected = await open({
       multiple: false,
-      filters: [{ name: "图片", extensions: ["png", "jpg", "jpeg", "webp", "gif", "bmp", "avif"] }],
+      filters: [{ name: t("settings.imageFilter"), extensions: ["png", "jpg", "jpeg", "webp", "gif", "bmp", "avif"] }],
     });
     if (typeof selected === "string" && selected) {
       const fileUrl = convertFileSrc(selected);
@@ -129,20 +133,36 @@ const openExternalUrl = async (url: string) => {
         <SettingsIcon class="h-6 w-6" />
       </span>
       <div>
-        <h2 class="text-2xl font-bold tracking-tight text-foreground">设置</h2>
-        <p class="text-sm text-muted-foreground">个性化你的追番体验</p>
+        <h2 class="text-2xl font-bold tracking-tight text-foreground">{{ $t('settings.title') }}</h2>
+        <p class="text-sm text-muted-foreground">{{ $t('settings.subtitle') }}</p>
       </div>
     </div>
 
     <!-- ─── Appearance（主题三态与搜索栏右侧切换按键实时同步）─── -->
     <section class="surface mb-4 rounded-2xl p-5">
       <h3 class="mb-4 flex items-center gap-2 text-sm font-semibold text-foreground">
-        <Palette class="h-4 w-4 text-primary" /> 外观
+        <Palette class="h-4 w-4 text-primary" /> {{ $t('settings.appearance') }}
       </h3>
+
+      <!-- language -->
+      <div class="mb-4">
+        <p class="mb-2 text-xs font-medium text-muted-foreground">{{ $t('settings.language') }}</p>
+        <div class="grid grid-cols-2 gap-3">
+          <button
+            v-for="opt in LOCALE_OPTIONS" :key="opt.value"
+            @click="settings.update('language', opt.value as Language)"
+            :class="cn('flex items-center justify-center gap-2 rounded-xl px-3 py-3 transition-colors', s.language === opt.value ? 'bg-primary/10 ring-1 ring-primary/40' : 'bg-muted hover:bg-accent')"
+          >
+            <Languages class="h-4 w-4" :class="s.language === opt.value ? 'text-primary' : 'text-muted-foreground'" />
+            <span :class="cn('text-xs font-semibold', s.language === opt.value ? 'text-primary' : 'text-foreground')">{{ opt.label }}</span>
+          </button>
+        </div>
+        <p class="mt-1.5 text-[11px] text-muted-foreground">{{ $t('settings.languageHint') }}</p>
+      </div>
 
       <!-- theme mode -->
       <div class="mb-4">
-        <p class="mb-2 text-xs font-medium text-muted-foreground">主题（与顶栏搜索框右侧的切换按键同步）</p>
+        <p class="mb-2 text-xs font-medium text-muted-foreground">{{ $t('settings.themeHint') }}</p>
         <div class="grid grid-cols-3 gap-3">
           <button
             v-for="opt in themeOptions" :key="opt.value"
@@ -152,7 +172,7 @@ const openExternalUrl = async (url: string) => {
             <span :class="cn('flex h-10 w-10 items-center justify-center rounded-lg', s.theme === opt.value ? 'bg-primary text-primary-foreground' : 'text-muted-foreground')">
               <component :is="opt.icon" class="h-5 w-5" />
             </span>
-            <span :class="cn('text-xs font-semibold', s.theme === opt.value ? 'text-primary' : 'text-foreground')">{{ opt.label }}</span>
+            <span :class="cn('text-xs font-semibold', s.theme === opt.value ? 'text-primary' : 'text-foreground')">{{ $t(opt.labelKey) }}</span>
           </button>
         </div>
       </div>
@@ -161,9 +181,9 @@ const openExternalUrl = async (url: string) => {
     <!-- ─── Custom Background ─── -->
     <section class="surface mb-4 rounded-2xl p-5">
       <h3 class="mb-4 flex items-center gap-2 text-sm font-semibold text-foreground">
-        <ImageIcon class="h-4 w-4 text-primary" /> 自定义背景
+        <ImageIcon class="h-4 w-4 text-primary" /> {{ $t('settings.background') }}
       </h3>
-      <p class="mb-4 text-[11px] text-muted-foreground">设置一张图片作为窗口背景，覆盖整个窗口（包括标题栏后方）。</p>
+      <p class="mb-4 text-[11px] text-muted-foreground">{{ $t('settings.bgDesc') }}</p>
 
       <!-- enable toggle -->
       <div class="flex items-center justify-between rounded-2xl px-2 py-3 hover:bg-foreground/5">
@@ -172,8 +192,8 @@ const openExternalUrl = async (url: string) => {
             <component :is="bg.enabled ? Eye : EyeOff" class="h-4 w-4" />
           </span>
           <div>
-            <p class="text-sm font-medium text-foreground">启用自定义背景</p>
-            <p class="text-[11px] text-muted-foreground">开启后使用下方图片作为窗口背景</p>
+            <p class="text-sm font-medium text-foreground">{{ $t('settings.bgEnable') }}</p>
+            <p class="text-[11px] text-muted-foreground">{{ $t('settings.bgEnableHint') }}</p>
           </div>
         </div>
         <ToggleSwitch :on="bg.enabled" @toggle="settings.updateBackground('enabled', !bg.enabled)" />
@@ -183,7 +203,7 @@ const openExternalUrl = async (url: string) => {
       <div class="mt-3 rounded-xl bg-muted p-4">
         <!-- preview -->
         <div v-if="bg.url" class="mb-3 overflow-hidden rounded-lg ring-1 ring-border">
-          <img :src="bg.url" alt="背景预览" class="h-32 w-full object-cover" draggable="false" />
+          <img :src="bg.url" :alt="$t('settings.bgPreview')" class="h-32 w-full object-cover" draggable="false" />
         </div>
 
         <!-- picked file name display -->
@@ -195,7 +215,7 @@ const openExternalUrl = async (url: string) => {
           @click="pickFile"
           class="mb-2 flex w-full items-center justify-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground transition-opacity hover:opacity-90"
         >
-          <Upload class="h-4 w-4" /> 从本地选择图片
+          <Upload class="h-4 w-4" /> {{ $t('settings.pickImage') }}
         </button>
 
         <!-- url input (for remote URLs or pasted asset: URLs) -->
@@ -205,14 +225,14 @@ const openExternalUrl = async (url: string) => {
             @blur="applyUrl"
             @keydown.enter="applyUrl"
             type="text"
-            placeholder="或粘贴图片 URL…"
+            :placeholder="$t('settings.urlPlaceholder')"
             class="min-w-0 flex-1 rounded-lg bg-card px-3 py-2 text-xs text-foreground outline-none ring-1 ring-border placeholder:text-muted-foreground/60 focus:ring-2 focus:ring-primary/40"
           />
           <button
             @click="applyUrl"
             class="shrink-0 rounded-lg bg-foreground px-3 py-2 text-xs font-semibold text-background transition-opacity hover:opacity-90"
           >
-            应用
+            {{ $t('settings.apply') }}
           </button>
         </div>
 
@@ -222,7 +242,7 @@ const openExternalUrl = async (url: string) => {
           @click="clearBackground"
           class="mt-2 w-full rounded-lg bg-destructive/10 px-4 py-2 text-xs font-medium text-destructive transition-colors hover:bg-destructive/20"
         >
-          清除背景
+          {{ $t('settings.clearBg') }}
         </button>
       </div>
 
@@ -232,7 +252,7 @@ const openExternalUrl = async (url: string) => {
           <span class="flex h-8 w-8 items-center justify-center rounded-lg bg-foreground/5 text-muted-foreground"><Droplet class="h-4 w-4" /></span>
           <div class="flex-1">
             <div class="flex items-center justify-between">
-              <p class="text-sm font-medium text-foreground">不透明度</p>
+              <p class="text-sm font-medium text-foreground">{{ $t('settings.opacity') }}</p>
               <span class="text-xs font-mono text-muted-foreground">{{ bg.opacity }}%</span>
             </div>
           </div>
@@ -250,7 +270,7 @@ const openExternalUrl = async (url: string) => {
           <span class="flex h-8 w-8 items-center justify-center rounded-lg bg-foreground/5 text-muted-foreground"><Focus class="h-4 w-4" /></span>
           <div class="flex-1">
             <div class="flex items-center justify-between">
-              <p class="text-sm font-medium text-foreground">模糊</p>
+              <p class="text-sm font-medium text-foreground">{{ $t('settings.blur') }}</p>
               <span class="text-xs font-mono text-muted-foreground">{{ bg.blur }}px</span>
             </div>
           </div>
@@ -268,7 +288,7 @@ const openExternalUrl = async (url: string) => {
           <span class="flex h-8 w-8 items-center justify-center rounded-lg bg-foreground/5 text-muted-foreground"><Maximize2 class="h-4 w-4" /></span>
           <div class="flex-1">
             <div class="flex items-center justify-between">
-              <p class="text-sm font-medium text-foreground">缩放</p>
+              <p class="text-sm font-medium text-foreground">{{ $t('settings.scale') }}</p>
               <span class="text-xs font-mono text-muted-foreground">{{ bg.scale }}%</span>
             </div>
           </div>
@@ -284,27 +304,27 @@ const openExternalUrl = async (url: string) => {
     <!-- ─── About ─── -->
     <section class="surface mb-4 rounded-2xl p-5">
       <h3 class="mb-4 flex items-center gap-2 text-sm font-semibold text-foreground">
-        <Zap class="h-4 w-4 text-primary" /> 关于
+        <Zap class="h-4 w-4 text-primary" /> {{ $t('settings.about') }}
       </h3>
       <div class="space-y-2.5 px-2 text-sm">
         <div class="flex items-center justify-between">
-          <span class="text-muted-foreground">应用名称</span>
-          <span class="font-medium text-foreground">AiKF · 爱看番</span>
+          <span class="text-muted-foreground">{{ $t('settings.appName') }}</span>
+          <span class="font-medium text-foreground">{{ $t('settings.appValue') }}</span>
         </div>
         <div class="flex items-center justify-between">
-          <span class="text-muted-foreground">版本</span>
+          <span class="text-muted-foreground">{{ $t('settings.version') }}</span>
           <span class="font-medium text-foreground">{{ AIKF_VERSION }}</span>
         </div>
         <div class="flex items-center justify-between">
-          <span class="text-muted-foreground">数据源</span>
+          <span class="text-muted-foreground">{{ $t('settings.dataSource') }}</span>
           <span class="font-medium text-foreground">Anich</span>
         </div>
         <div class="flex items-center justify-between">
-          <span class="text-muted-foreground">技术栈</span>
+          <span class="text-muted-foreground">{{ $t('settings.techStack') }}</span>
           <span class="font-medium text-foreground">Tauri 2 + Vue 3</span>
         </div>
         <div class="flex items-center justify-between">
-          <span class="text-muted-foreground">开源协议</span>
+          <span class="text-muted-foreground">{{ $t('settings.license') }}</span>
           <span class="font-medium text-foreground">AGPL-3.0</span>
         </div>
       </div>
@@ -320,7 +340,7 @@ const openExternalUrl = async (url: string) => {
             <Github class="h-4 w-4" />
           </span>
           <div class="min-w-0 flex-1">
-            <p class="text-xs font-semibold text-foreground">项目仓库</p>
+            <p class="text-xs font-semibold text-foreground">{{ $t('settings.repo') }}</p>
             <p class="truncate text-[10px] text-muted-foreground">GitHub</p>
           </div>
           <ExternalLink class="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
@@ -337,8 +357,8 @@ const openExternalUrl = async (url: string) => {
             </svg>
           </span>
           <div class="min-w-0 flex-1">
-            <p class="text-xs font-semibold text-foreground">开发者抖音</p>
-            <p class="truncate text-[10px] text-muted-foreground">@开发者</p>
+            <p class="text-xs font-semibold text-foreground">{{ $t('settings.douyin') }}</p>
+            <p class="truncate text-[10px] text-muted-foreground">{{ $t('settings.douyinHandle') }}</p>
           </div>
           <ExternalLink class="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
         </button>
@@ -351,7 +371,7 @@ const openExternalUrl = async (url: string) => {
         @click="settings.reset()"
         class="state-layer flex items-center gap-2 rounded-lg border border-border px-5 py-2.5 text-sm font-medium text-muted-foreground transition-colors hover:border-destructive/40 hover:bg-destructive/5 hover:text-destructive"
       >
-        <RotateCcw class="h-4 w-4" /> 恢复默认设置
+        <RotateCcw class="h-4 w-4" /> {{ $t('settings.reset') }}
       </button>
     </div>
   </div>

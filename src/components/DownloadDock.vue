@@ -4,6 +4,7 @@ import { ChevronDown, ChevronUp, Loader2, XCircle } from "lucide-vue-next";
 import { useCacheStore, formatBytes, formatSpeed } from "@/stores/cache";
 import { useLibraryStore } from "@/stores/library";
 import { useUIStore } from "@/stores/ui";
+import { i18n } from "@/i18n";
 import CoverImage from "@/components/CoverImage.vue";
 
 /**
@@ -44,7 +45,7 @@ const items = computed<DockItem[]>(() => {
     const fromIdx = cache.byId(id);
     // 封面/标题优先取缓存索引，兑底取追番库条目，最后用进度事件携带的标题
     const lib = library.list.find((e) => e.id === id);
-    const title = fromIdx?.title || lib?.title || agg.title || `番剧 ${id}`;
+    const title = fromIdx?.title || lib?.title || agg.title || i18n.global.t("cache.titleFallback", { id });
     const cover = fromIdx?.cover || lib?.image || "";
     const sorts = [...agg.sorts].sort((a, b) => a - b);
     // 当前话 = 已有实际数据（分片/字节）的第一集，否则取最小集数
@@ -97,17 +98,17 @@ const totalPct = computed(() =>
     >
       <Loader2 class="h-3.5 w-3.5 shrink-0 animate-spin text-primary" />
       <span class="shrink-0 text-xs font-semibold text-foreground">
-        下载中 <span class="tabular-nums">{{ items.length }}</span> 部
+        {{ $t('dock.downloadingN', { n: items.length }) }}
       </span>
       <span class="shrink-0 text-[11px] font-semibold tabular-nums text-emerald-500">
-        {{ formatSpeed(totalSpeed) || "连接中…" }}
+        {{ formatSpeed(totalSpeed) || $t('cache.connecting') }}
       </span>
       <span class="ml-auto hidden shrink-0 text-[10px] tabular-nums text-muted-foreground sm:inline">
         {{ formatBytes(totalBytes) }}<template v-if="totalBytesTotal > 0"> / {{ formatBytes(totalBytesTotal) }}</template>
       </span>
       <span
         class="flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-foreground/10 hover:text-foreground"
-        :title="expanded ? '收起下载列表' : '展开下载列表'"
+        :title="expanded ? $t('dock.collapse') : $t('dock.expand')"
       >
         <ChevronDown v-if="expanded" class="h-3.5 w-3.5" />
         <ChevronUp v-else class="h-3.5 w-3.5" />
@@ -120,7 +121,7 @@ const totalPct = computed(() =>
         v-for="d in items"
         :key="`dock${d.id}`"
         class="group flex cursor-pointer items-center gap-3 rounded-xl px-1.5 py-2 transition-colors hover:bg-foreground/[0.04]"
-        title="查看本地缓存"
+        :title="$t('dock.viewCache')"
         @click="ui.setView('cache')"
       >
         <CoverImage :src="d.cover" :alt="d.title" ratio="portrait" class="h-[52px] w-9 shrink-0" rounded="rounded-md" />
@@ -128,13 +129,13 @@ const totalPct = computed(() =>
           <div class="flex items-center justify-between gap-2">
             <p class="line-clamp-1 text-xs font-bold text-foreground" :title="d.title">{{ d.title }}</p>
             <p class="flex flex-none items-center gap-1.5 text-[10px] tabular-nums text-muted-foreground">
-              <span class="font-semibold text-emerald-500">{{ formatSpeed(d.speed) || "连接中…" }}</span>
+              <span class="font-semibold text-emerald-500">{{ formatSpeed(d.speed) || $t('cache.connecting') }}</span>
               <span class="hidden sm:inline">{{ formatBytes(d.bytes) }}<template v-if="d.bytesTotal > 0"> / {{ formatBytes(d.bytesTotal) }}</template></span>
             </p>
           </div>
           <p class="mt-0.5 line-clamp-1 text-[10px] tabular-nums text-muted-foreground">
-            第{{ d.currentSort }}话<template v-if="d.epTitle"> {{ d.epTitle }}</template>
-            · {{ d.count }} 集下载中<template v-if="d.pct > 0"> · {{ d.pct }}%</template>
+            {{ $t('common.huaN', { n: d.currentSort }) }}<template v-if="d.epTitle"> {{ d.epTitle }}</template>
+            · {{ $t('dock.countN', { n: d.count }) }}<template v-if="d.pct > 0"> · {{ d.pct }}%</template>
           </p>
           <!-- Steam 风格整行进度条（绿色） -->
           <div class="mt-1.5 h-1.5 overflow-hidden rounded-[3px] bg-emerald-500/15">
@@ -144,7 +145,7 @@ const totalPct = computed(() =>
         <button
           type="button"
           class="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
-          title="取消该番剧全部下载"
+          :title="$t('cache.cancelAllTitle')"
           @click.stop="cache.cancelDownload(d.id)"
         >
           <XCircle class="h-4 w-4" />

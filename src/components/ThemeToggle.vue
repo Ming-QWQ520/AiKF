@@ -22,7 +22,7 @@ const onToggle = () => {
 <template>
   <button
     type="button"
-    aria-label="切换主题"
+    :aria-label="$t('theme.toggle')"
     @click="onToggle"
     class="state-layer relative flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-foreground/5 hover:text-foreground"
   >

@@ -37,8 +37,8 @@ const { containerRef: calGridRef, style: calGridStyle } = useResponsiveGrid({
             <CalendarDays class="h-4.5 w-4.5" />
           </span>
           <div>
-            <h2 class="text-lg font-semibold sm:text-xl">每周放送时间表</h2>
-            <p class="text-xs text-muted-foreground sm:text-sm">按星期查看当季番剧更新安排</p>
+            <h2 class="text-lg font-semibold sm:text-xl">{{ $t('calendar.title') }}</h2>
+            <p class="text-xs text-muted-foreground sm:text-sm">{{ $t('calendar.subtitle') }}</p>
           </div>
         </div>
         <div class="no-scrollbar -mx-1 flex gap-1.5 overflow-x-auto px-1">
@@ -49,7 +49,7 @@ const { containerRef: calGridRef, style: calGridStyle } = useResponsiveGrid({
           >
             <span>{{ weekdayLabel(d) }}</span>
             <span :class="cn('text-[10px]', activeDay === d ? 'text-background/70' : 'text-muted-foreground/70')">
-              {{ days.find((x) => x.sort % 7 === d)?.list.length ?? 0 }} 部
+              {{ $t('calendar.count', { n: days.find((x) => x.sort % 7 === d)?.list.length ?? 0 }) }}
             </span>
           </button>
         </div>
@@ -76,14 +76,14 @@ const { containerRef: calGridRef, style: calGridStyle } = useResponsiveGrid({
             </div>
             <p v-if="item.episodes[0]" class="mt-1.5 flex items-center gap-1.5 text-[11px] text-muted-foreground">
               <span :class="cn('inline-block h-1.5 w-1.5 rounded-full', item.episodes[0].future ? 'bg-tertiary' : 'bg-emerald-500')" />
-              {{ item.episodes[0].future ? formatRelative(item.episodes[0].date) : "已更新" }} ·
+              {{ item.episodes[0].future ? formatRelative(item.episodes[0].date) : $t('calendar.updated') }} ·
               <span class="line-clamp-1">{{ item.episodes[0].name }}</span>
             </p>
           </div>
         </button>
       </div>
       <div v-else class="surface flex min-h-[200px] items-center justify-center rounded-2xl p-10 text-sm text-muted-foreground">
-        本日暂无放送安排
+        {{ $t('calendar.none') }}
       </div>
     </section>
   </div>
