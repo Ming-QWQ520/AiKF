@@ -115,7 +115,7 @@ async fn bgm_oauth_start(app: tauri::AppHandle) -> Result<OauthStartResult, Stri
         let _ = tokio::time::timeout(Duration::from_secs(600), async {
             if let Ok((mut stream, _)) = listener.accept().await {
                 let mut buf = vec![0u8; 8192];
-                let n = stream.read(&mut buf).unwrap_or(0);
+                let n = stream.read(&mut buf).await.unwrap_or(0);
                 let req = String::from_utf8_lossy(&buf[..n]).to_string();
                 // 请求行形如 "GET /callback?code=xxx&state=yyy HTTP/1.1"
                 let line = req.lines().next().unwrap_or("");
