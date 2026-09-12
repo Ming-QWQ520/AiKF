@@ -295,8 +295,13 @@ watch(
       sourceIdx.value = pickPreferred(sources.value);
       const best = await pickFastestSource(sources.value, ek);
       if (ek === epKey.value && !userPickedSource.value && best !== sourceIdx.value) {
-        // 需求：如果当前正在播放，测速后不切换路线（避免中断观看）
-        const startedPlaying = !!(art && art.playing && art.currentTime > 1);
+        // 需求：如果当前正在播放，测速后不切换路线（避免中断观看）。
+        // 修复：旧判定 art.currentTime > 1 过苛 —— 起播 1 秒内测速完成时
+        // 被误判为「未开播」→ 自动切线 → 视频重载从 0 重播（用户实测
+        // 「播 1 秒重回开头」）。现在只要视频已处于播放状态（含缓冲中，
+        // paused=false 即 playing）或已有播放进度，就不再自动切线；
+        // 仅在尚未起播（加载中/失败重试中）时才切换。
+        const startedPlaying = !!(art && (art.playing || art.currentTime > 0));
         if (startedPlaying) {
           pushLog("自动测速完成：已开始播放，保持当前线路不切换");
         } else {
@@ -740,7 +745,12 @@ function createArt(container: HTMLElement, url: string) {
     });
 
     art.on("video:play", () => {
-      if (bangumiID.value) library.markEpisode(bangumiID.value, episode.value);
+      if (bangumiID.value) {
+        // 顺带补全追番库条目的总集数（旧数据 totalEpisodes=0 时进度无法显示）。
+        // episodes 与 vod 并行加载，video:play 时通常已就绪；未就绪时传
+        // undefined，store 侧保持原值不受影响。
+        library.markEpisode(bangumiID.value, episode.value, episodesList.value.length || undefined);
+      }
     });
 
     art.on("video:error", () => {

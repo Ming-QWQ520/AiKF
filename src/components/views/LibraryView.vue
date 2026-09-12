@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { ref, computed } from "vue";
+import { ref, computed, onMounted } from "vue";
 import { Bookmark, Trash2, Play, CheckCircle2, Star, Library } from "lucide-vue-next";
 import { useLibraryStore, STATUS_I18N_KEYS, STATUS_ORDER, STATUS_STYLES, type TrackStatus } from "@/stores/library";
 import { useUIStore } from "@/stores/ui";
+import { anich } from "@/lib/anich/api-client";
 import SectionCard from "@/components/SectionCard.vue";
 import CoverImage from "@/components/CoverImage.vue";
 import { cn } from "@/lib/utils";
@@ -12,6 +13,26 @@ const ui = useUIStore();
 
 const filter = ref<TrackStatus | "all">("all");
 const confirmClear = ref(false);
+
+// ── 旧数据自动修复：历史条目可能缺失 totalEpisodes（=0），导致追番库无法
+// 显示「已看 X / 总 Y 话 · Z%」，且主卡片进度条被误拉满。进入本页时后台
+// 逐个拉取集数列表补全（请求经 withCache + in-flight 去重，失败静默）。
+onMounted(async () => {
+  const broken = library.list.filter((e) => (e.totalEpisodes ?? 0) <= 0);
+  if (broken.length === 0) return;
+  await Promise.allSettled(
+    broken.map(async (e) => {
+      try {
+        const eps = await anich.episodes(e.id);
+        if (Array.isArray(eps) && eps.length > 0) {
+          library.syncMeta(e.id, { totalEpisodes: eps.length });
+        }
+      } catch {
+        /* 拉取失败不影响页面，下次进入重试 */
+      }
+    })
+  );
+});
 
 const all = computed(() => library.list);
 const list = computed(() => (filter.value === "all" ? all.value : all.value.filter((e) => e.status === filter.value)));
@@ -112,7 +133,7 @@ const doClear = () => {
                     :style="{
                       width: `${entry.totalEpisodes > 0
                         ? Math.min(100, Math.round(((entry.currentEpisode || entry.watchedEpisodes.length) / entry.totalEpisodes) * 100))
-                        : (entry.watchedEpisodes.length > 0 ? 100 : 0)}%`
+                        : 0}%`
                     }"
                   />
                 </div>
