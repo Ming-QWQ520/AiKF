@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onBeforeUnmount, nextTick, watch } from "vue";
-import { Compass, CalendarDays, LayoutGrid, Bookmark, Search as SearchIcon, ChevronDown, Settings as SettingsIcon, PanelLeftClose, PanelLeftOpen, HardDriveDownload } from "lucide-vue-next";
+import { Compass, CalendarDays, LayoutGrid, Bookmark, Search as SearchIcon, ChevronDown, CircleUserRound, PanelLeftClose, PanelLeftOpen, HardDriveDownload } from "lucide-vue-next";
 import { useUIStore, type ViewKey } from "@/stores/ui";
 import { useLibraryStore } from "@/stores/library";
 import { useCacheStore } from "@/stores/cache";
+import { useBangumi } from "@/lib/bangumi/useBangumi";
 import { i18n } from "@/i18n";
 import { cn } from "@/lib/utils";
 import SearchBar from "./SearchBar.vue";
@@ -14,6 +15,24 @@ import { NTooltip } from "naive-ui";
 const ui = useUIStore();
 const library = useLibraryStore();
 const cacheStore = useCacheStore();
+// ── 我的（Bangumi 账号态）：侧栏底部展示头像/用户名/ID ──
+const bgmCtx = useBangumi();
+onMounted(() => {
+  // 启动即拉取用户信息（未登录静默），侧栏头像/昵称无需等进入设置页
+  bgmCtx.fetchMe();
+});
+/** 主标签：登录后 = 用户名；未登录 = 我的 */
+const meLabel = computed(() =>
+  bgmCtx.loggedIn.value
+    ? bgmCtx.user.value?.nickname || bgmCtx.user.value?.username || i18n.global.t("nav.me")
+    : i18n.global.t("nav.me")
+);
+/** 副标签：登录后 = Bangumi ID；未登录 = 未登录 */
+const meSubLabel = computed(() =>
+  bgmCtx.loggedIn.value
+    ? i18n.global.t("nav.bgmId", { id: bgmCtx.user.value?.id ?? "—" })
+    : i18n.global.t("nav.meNotLoggedIn")
+);
 const libraryCount = computed(() => library.count);
 const libraryList = computed(() => library.list.slice(0, 8));
 const libraryExpanded = ref(true);
@@ -237,7 +256,7 @@ const progressLabel = (entry: { currentEpisode: number; watchedEpisodes: number[
         </div>
       </div>
 
-      <!-- ── 设置 ── -->
+      <!-- ── 我的（原设置入口；登录后头像 + 用户名 + Bangumi ID）── -->
       <div class="w-full shrink-0 border-t border-border/70 pt-2" :class="effectiveCollapsed && 'flex justify-center border-t-0'">
         <NTooltip placement="right" :disabled="!effectiveCollapsed">
           <template #trigger>
@@ -252,11 +271,27 @@ const progressLabel = (entry: { currentEpisode: number; watchedEpisodes: number[
                   : 'text-muted-foreground hover:bg-foreground/5 hover:text-foreground'
               )"
             >
-              <component :is="SettingsIcon" class="h-[18px] w-[18px] shrink-0" :stroke-width="ui.view === 'settings' ? 2.2 : 1.8" />
-              <span v-if="!effectiveCollapsed" class="flex-1 text-left">{{ $t('nav.settings') }}</span>
+              <!-- 登录后：Bangumi 账号头像；未登录：人形图标 -->
+              <img
+                v-if="bgmCtx.loggedIn.value && bgmCtx.user.value?.avatar?.medium"
+                :src="bgmCtx.user.value.avatar.medium"
+                alt=""
+                class="h-6 w-6 shrink-0 rounded-full object-cover ring-1 ring-border"
+                draggable="false"
+              />
+              <component
+                v-else
+                :is="CircleUserRound"
+                class="h-[18px] w-[18px] shrink-0"
+                :stroke-width="ui.view === 'settings' ? 2.2 : 1.8"
+              />
+              <span v-if="!effectiveCollapsed" class="flex min-w-0 flex-1 flex-col leading-tight">
+                <span class="truncate text-left">{{ meLabel }}</span>
+                <span class="truncate text-left text-[9px] font-normal tabular-nums text-muted-foreground">{{ meSubLabel }}</span>
+              </span>
             </button>
           </template>
-          <span>{{ $t('nav.settings') }}</span>
+          <span>{{ meLabel }}</span>
         </NTooltip>
       </div>
     </aside>
@@ -313,7 +348,11 @@ const progressLabel = (entry: { currentEpisode: number; watchedEpisodes: number[
     <nav class="fixed inset-x-0 bottom-0 z-40 border-t border-border/70 bg-background/90 px-3 pb-[max(0.5rem,env(safe-area-inset-bottom))] pt-1.5 backdrop-blur-md md:hidden">
       <div class="mx-auto flex max-w-md items-center justify-around">
         <button
-          v-for="item in [...navItems, { key: 'library' as ViewKey, labelKey: 'nav.library', icon: Bookmark }]"
+          v-for="item in [
+            ...navItems,
+            { key: 'library' as ViewKey, labelKey: 'nav.library', icon: Bookmark },
+            { key: 'settings' as ViewKey, labelKey: 'nav.me', icon: CircleUserRound },
+          ]"
           :key="item.key"
           :data-nav-key="item.key"
           type="button"

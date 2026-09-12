@@ -1,9 +1,8 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, watch } from "vue";
+import { ref, computed, onMounted } from "vue";
 import { Bookmark, Trash2, Play, CheckCircle2, Star, Library, CloudCog, CloudUpload, CloudDownload, Loader2 } from "lucide-vue-next";
 import { useLibraryStore, STATUS_I18N_KEYS, STATUS_ORDER, STATUS_STYLES, type TrackStatus } from "@/stores/library";
 import { useUIStore } from "@/stores/ui";
-import { useSettingsStore } from "@/stores/settings";
 import { anich } from "@/lib/anich/api-client";
 import { useBangumi } from "@/lib/bangumi/useBangumi";
 import SectionCard from "@/components/SectionCard.vue";
@@ -12,7 +11,6 @@ import { cn } from "@/lib/utils";
 
 const library = useLibraryStore();
 const ui = useUIStore();
-const settings = useSettingsStore();
 
 const filter = ref<TrackStatus | "all">("all");
 const confirmClear = ref(false);
@@ -60,19 +58,8 @@ const doClear = () => {
     confirmClear.value = true;
   }
 };
-
-// ── 自动云同步：登录 + 开关开启时，追番库变更后 10s 防抖推送 ──
-let autoSyncTimer: ReturnType<typeof setTimeout> | undefined;
-watch(
-  () => library.list.map((e) => [e.id, e.status, e.currentEpisode, e.watchedEpisodes.length].join(":")).join("|"),
-  () => {
-    if (!bgm.loggedIn.value || !settings.data.bgmAutoSync) return;
-    if (autoSyncTimer) clearTimeout(autoSyncTimer);
-    autoSyncTimer = setTimeout(() => {
-      if (bgm.loggedIn.value && settings.data.bgmAutoSync) bgm.push();
-    }, 10_000);
-  }
-);
+// 注：自动云同步已改为全局监听（auto-sync.ts，每次修改默认开启自动推送），
+// 此处不再做 10s 防抖全量推送（旧逻辑会把整库批量写入云端）
 </script>
 
 <template>
@@ -117,7 +104,7 @@ watch(
             <p class="min-w-0 flex-1 truncate text-[11px] text-muted-foreground">
               {{ $t('library.bgm.loggedIn', { name: bgm.user.value?.nickname || 'Bangumi' }) }}
               <span v-if="bgm.lastSyncAt.value"> · {{ $t('library.bgm.lastSync', { time: new Date(bgm.lastSyncAt.value).toLocaleString() }) }}</span>
-              <span v-if="settings.data.bgmAutoSync" class="ml-1 text-emerald-500">· {{ $t('library.bgm.autoOn') }}</span>
+              <span v-if="bgm.loggedIn.value" class="ml-1 text-emerald-500">· {{ $t('library.bgm.autoOn') }}</span>
             </p>
             <span v-if="bgm.busy.value === 'push' || bgm.busy.value === 'pull'" class="flex shrink-0 items-center gap-1.5 text-[11px] text-muted-foreground">
               <Loader2 class="h-3 w-3 animate-spin" /> {{ $t('library.bgm.syncing') }}

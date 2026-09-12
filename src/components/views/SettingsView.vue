@@ -2,7 +2,7 @@
 import { computed, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import {
-  Settings as SettingsIcon,
+  CircleUserRound,
   Palette,
   Sun,
   Moon,
@@ -173,26 +173,20 @@ const bgmResultText = computed(() => {
 
 <template>
   <div class="mx-auto max-w-3xl">
-    <!-- Header -->
-    <div class="mb-6 flex items-center gap-3">
-      <span class="flex h-12 w-12 items-center justify-center rounded-xl bg-muted text-muted-foreground ring-1 ring-border">
-        <SettingsIcon class="h-6 w-6" />
-      </span>
-      <div>
-        <h2 class="text-2xl font-bold tracking-tight text-foreground">{{ $t('settings.title') }}</h2>
-        <p class="text-sm text-muted-foreground">{{ $t('settings.subtitle') }}</p>
-      </div>
-    </div>
-
-    <!-- ─── Bangumi 账号（云同步追番库）─── -->
+    <!-- ─── 个人资料（我的：未登录 → 登录入口 / 已登录 → 头像+昵称+ID）─── -->
     <section class="surface mb-4 rounded-2xl p-5">
-      <h3 class="mb-4 flex items-center gap-2 text-sm font-semibold text-foreground">
-        <CloudCog class="h-4 w-4 text-primary" /> {{ $t('settings.bgm.title') }}
-      </h3>
-
       <!-- 未登录 -->
       <template v-if="!bgmCtx.loggedIn.value">
-        <p class="mb-4 text-[11px] text-muted-foreground">{{ $t('settings.bgm.loginHint') }}</p>
+        <div class="mb-4 flex items-center gap-4">
+          <span class="flex h-16 w-16 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground ring-1 ring-border">
+            <CircleUserRound class="h-8 w-8" />
+          </span>
+          <div class="min-w-0 flex-1">
+            <h2 class="text-xl font-bold tracking-tight text-foreground">{{ $t('settings.title') }}</h2>
+            <p class="mt-0.5 text-xs text-muted-foreground">{{ $t('nav.meNotLoggedIn') }} · {{ $t('settings.profile.hint') }}</p>
+          </div>
+        </div>
+        <p class="mb-3 text-[11px] leading-relaxed text-muted-foreground">{{ $t('settings.bgm.loginHint') }}</p>
         <div class="flex flex-wrap items-center gap-3">
           <button
             @click="doBgmLogin"
@@ -227,67 +221,72 @@ const bgmResultText = computed(() => {
         </div>
       </template>
 
-      <!-- 已登录 -->
+      <!-- 已登录：大头像 + 昵称 + Bangumi ID + 签名 -->
       <template v-else>
-        <div class="mb-4 flex items-center gap-3">
+        <div class="flex items-center gap-4">
           <img
             v-if="bgmCtx.user.value?.avatar?.large"
             :src="bgmCtx.user.value.avatar.large"
-            class="h-11 w-11 rounded-full object-cover ring-1 ring-border"
+            class="h-16 w-16 shrink-0 rounded-full object-cover ring-1 ring-border"
             draggable="false"
           />
+          <span v-else class="flex h-16 w-16 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground ring-1 ring-border">
+            <CircleUserRound class="h-8 w-8" />
+          </span>
           <div class="min-w-0 flex-1">
-            <p class="text-sm font-medium text-foreground">{{ bgmCtx.user.value?.nickname || bgmCtx.user.value?.username || $t('settings.bgm.user') }}</p>
-            <p class="text-[11px] text-muted-foreground">Bangumi · ID {{ bgmCtx.session.value?.user?.id ?? '—' }}</p>
+            <h2 class="truncate text-xl font-bold tracking-tight text-foreground">{{ bgmCtx.user.value?.nickname || bgmCtx.user.value?.username || $t('settings.bgm.user') }}</h2>
+            <p class="mt-0.5 truncate text-xs tabular-nums text-muted-foreground">
+              {{ $t('settings.profile.id', { id: bgmCtx.session.value?.user?.id ?? '—' }) }}
+              <template v-if="bgmCtx.user.value?.username"> · @{{ bgmCtx.user.value.username }}</template>
+            </p>
           </div>
           <button
             @click="bgmCtx.logout()"
-            class="state-layer flex items-center gap-1.5 rounded-lg border border-border px-3 py-2 text-xs text-muted-foreground transition-colors hover:border-destructive/40 hover:text-destructive"
+            class="state-layer flex shrink-0 items-center gap-1.5 rounded-lg border border-border px-3 py-2 text-xs text-muted-foreground transition-colors hover:border-destructive/40 hover:text-destructive"
           >
             <LogOut class="h-3.5 w-3.5" /> {{ $t('settings.bgm.logout') }}
           </button>
         </div>
-
-        <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
-          <button
-            @click="bgmCtx.push()"
-            :disabled="bgmBusy"
-            class="state-layer flex items-center gap-2.5 rounded-xl bg-muted px-4 py-3 text-left transition-colors hover:bg-accent disabled:opacity-50"
-          >
-            <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-sky-500/15 text-sky-500">
-              <Loader2 v-if="bgmCtx.busy.value === 'push'" class="h-4 w-4 animate-spin" />
-              <CloudUpload v-else class="h-4 w-4" />
-            </span>
-            <div class="min-w-0 flex-1">
-              <p class="text-xs font-semibold text-foreground">{{ $t('settings.bgm.push') }}</p>
-              <p class="truncate text-[10px] text-muted-foreground">{{ $t('settings.bgm.pushHint') }}</p>
-            </div>
-          </button>
-          <button
-            @click="bgmCtx.pull()"
-            :disabled="bgmBusy"
-            class="state-layer flex items-center gap-2.5 rounded-xl bg-muted px-4 py-3 text-left transition-colors hover:bg-accent disabled:opacity-50"
-          >
-            <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-emerald-500/15 text-emerald-500">
-              <Loader2 v-if="bgmCtx.busy.value === 'pull'" class="h-4 w-4 animate-spin" />
-              <CloudDownload v-else class="h-4 w-4" />
-            </span>
-            <div class="min-w-0 flex-1">
-              <p class="text-xs font-semibold text-foreground">{{ $t('settings.bgm.pull') }}</p>
-              <p class="truncate text-[10px] text-muted-foreground">{{ $t('settings.bgm.pullHint') }}</p>
-            </div>
-          </button>
-        </div>
-
-        <!-- 自动同步开关 -->
-        <div class="mt-3 flex items-center justify-between rounded-xl bg-muted/50 px-4 py-3">
-          <div>
-            <p class="text-sm font-medium text-foreground">{{ $t('settings.bgm.autoSync') }}</p>
-            <p class="text-[11px] text-muted-foreground">{{ $t('settings.bgm.autoSyncHint') }}</p>
-          </div>
-          <ToggleSwitch :on="s.bgmAutoSync" @toggle="settings.update('bgmAutoSync', !s.bgmAutoSync)" />
-        </div>
+        <p v-if="bgmCtx.user.value?.sign" class="mt-3 line-clamp-2 text-xs leading-relaxed text-muted-foreground">{{ bgmCtx.user.value.sign }}</p>
       </template>
+    </section>
+
+    <!-- ─── 云同步（已登录显示；每次修改自动同步，无需手动）─── -->
+    <section v-if="bgmCtx.loggedIn.value" class="surface mb-4 rounded-2xl p-5">
+      <h3 class="mb-4 flex items-center gap-2 text-sm font-semibold text-foreground">
+        <CloudCog class="h-4 w-4 text-primary" /> {{ $t('settings.bgm.title') }}
+      </h3>
+
+      <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <button
+          @click="bgmCtx.push()"
+          :disabled="bgmBusy"
+          class="state-layer flex items-center gap-2.5 rounded-xl bg-muted px-4 py-3 text-left transition-colors hover:bg-accent disabled:opacity-50"
+        >
+          <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-sky-500/15 text-sky-500">
+            <Loader2 v-if="bgmCtx.busy.value === 'push'" class="h-4 w-4 animate-spin" />
+            <CloudUpload v-else class="h-4 w-4" />
+          </span>
+          <div class="min-w-0 flex-1">
+            <p class="text-xs font-semibold text-foreground">{{ $t('settings.bgm.push') }}</p>
+            <p class="truncate text-[10px] text-muted-foreground">{{ $t('settings.bgm.pushHint') }}</p>
+          </div>
+        </button>
+        <button
+          @click="bgmCtx.pull()"
+          :disabled="bgmBusy"
+          class="state-layer flex items-center gap-2.5 rounded-xl bg-muted px-4 py-3 text-left transition-colors hover:bg-accent disabled:opacity-50"
+        >
+          <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-emerald-500/15 text-emerald-500">
+            <Loader2 v-if="bgmCtx.busy.value === 'pull'" class="h-4 w-4 animate-spin" />
+            <CloudDownload v-else class="h-4 w-4" />
+          </span>
+          <div class="min-w-0 flex-1">
+            <p class="text-xs font-semibold text-foreground">{{ $t('settings.bgm.pull') }}</p>
+            <p class="truncate text-[10px] text-muted-foreground">{{ $t('settings.bgm.pullHint') }}</p>
+          </div>
+        </button>
+      </div>
 
       <!-- 进度 / 结果 / 错误 -->
       <p v-if="bgmCtx.progress.value" class="mt-3 text-[11px] text-muted-foreground">

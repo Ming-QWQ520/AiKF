@@ -67,10 +67,6 @@ export interface AppSettings {
   background: BackgroundSettings;
   /** 弹幕默认值 v2 迁移标记（1/4 屏 + 25% 透明度），仅用于一次性覆盖旧默认 */
   dmDefaultsV2?: boolean;
-  /** Bangumi 云同步：本地追番库变更后自动推送到 Bangumi 收藏（默认开） */
-  bgmAutoSync: boolean;
-  /** bgmAutoSync 默认开启的一次性迁移标记（登录即自动同步需求） */
-  bgmAutoSyncV2?: boolean;
 }
 
 const STORAGE_KEY = "aikf-settings";
@@ -97,8 +93,8 @@ const DEFAULTS: AppSettings = {
     blur: 0,
     scale: 100,
   },
-  // 需求：登录 Bangumi 后自动同步，无需手动推送（默认开启）
-  bgmAutoSync: true,
+  // 注：Bangumi 自动云同步已改为无开关、默认开启（auto-sync.ts 监听库变更），
+  // 不再是用户可配置项 —— 旧设置里持久化的 bgmAutoSync 键会被静默忽略。
 };
 
 function load(): AppSettings {
@@ -117,11 +113,8 @@ function load(): AppSettings {
       danmaku: { ...DEFAULTS.danmaku, ...(parsed.danmaku ?? {}) },
       dmDefaultsV2: true,
     };
-    // 需求：云同步改为默认自动 —— 老用户一次性开启（之后仍可在设置中关闭）
-    if (!merged.bgmAutoSyncV2) {
-      merged.bgmAutoSync = true;
-      merged.bgmAutoSyncV2 = true;
-    }
+    // 注：云同步策略变更 —— 自动同步现为无开关常开行为（见 auto-sync.ts），
+    // 旧版 bgmAutoSync/bgmAutoSyncV2 迁移逻辑移除，持久化的旧键被静默忽略
     // m3u8 下载分片线程数钳制：1–32，默认 6
     const t = Number(merged.cacheThreads);
     if (!Number.isFinite(t)) merged.cacheThreads = DEFAULTS.cacheThreads;

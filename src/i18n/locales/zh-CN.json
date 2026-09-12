@@ -44,10 +44,12 @@
     "library": "追番库",
     "libraryCounted": "追番库 ({n})",
     "libraryEmpty": "追番库为空",
-    "settings": "设置",
     "expandSidebar": "展开侧栏",
     "collapseSidebar": "收起侧栏",
-    "toggleTheme": "切换深色 / 浅色模式"
+    "toggleTheme": "切换深色 / 浅色模式",
+    "me": "我的",
+    "meNotLoggedIn": "未登录",
+    "bgmId": "ID {id}"
   },
   "theme": {
     "light": "浅色",
@@ -152,7 +154,13 @@
     "replies": "{n} 条回复",
     "noReplies": "暂无回复",
     "noCharacters": "暂无角色资料",
-    "noRelated": "暂无相关推荐"
+    "noRelated": "暂无相关推荐",
+    "rematch": "重新匹配",
+    "rematchTitle": "重新匹配 AniCh 资源",
+    "rematchHint": "自动匹配可能张冠李戴：输入关键词搜索，点击正确条目即可重绑（观看记录 / 状态 / 评分 / Bangumi 关联全部保留）",
+    "rematchPlaceholder": "输入关键词搜索…",
+    "rematchSearch": "搜索",
+    "rematchEmpty": "未找到相关条目，可换个关键词再试"
   },
   "library": {
     "title": "我的追番库",
@@ -179,7 +187,7 @@
       "goLogin": "去登录",
       "loggedIn": "已连接：{name}",
       "lastSync": "上次同步 {time}",
-      "autoOn": "自动同步已开启",
+      "autoOn": "修改后自动同步至 Bangumi",
       "syncing": "同步中…",
       "push": "同步到云端",
       "pull": "从云端恢复"
@@ -372,8 +380,8 @@
     "srcLocal": "本地缓存"
   },
   "settings": {
-    "title": "设置",
-    "subtitle": "个性化你的追番体验",
+    "title": "我的",
+    "subtitle": "账号 · 外观 · 播放偏好",
     "appearance": "外观",
     "themeHint": "主题（与顶栏搜索框右侧的切换按键同步）",
     "language": "语言",
@@ -420,11 +428,13 @@
       "pushHint": "本地追番库 → Bangumi 收藏",
       "pull": "从云端恢复",
       "pullHint": "Bangumi 收藏 → 本地追番库",
-      "autoSync": "自动云同步",
-      "autoSyncHint": "追番库变更后自动推送到 Bangumi（约 10 秒延迟），登录成功后也会自动同步一次",
       "progress": "进度 {d}/{t}",
       "pushResult": "已同步 {p} 条 · 跳过 {s}（Bangumi 未收录）· 失败 {f}",
       "pullResult": "已导入 {p} 条 · 跳过 {s}（无对应片源）· 失败 {f}"
+    },
+    "profile": {
+      "hint": "登录 Bangumi 账号后可云同步收藏与观看进度",
+      "id": "Bangumi ID {id}"
     }
   },
   "time": {

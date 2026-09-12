@@ -1,7 +1,7 @@
 /** Bangumi 账号状态 + 同步动作的共享 composable（Settings / Library 共用）。 */
 import { computed, ref } from "vue";
 import * as bgm from "./client";
-import { pushAll, pullAll, type SyncProgress, type SyncResult, type PullResult } from "./sync";
+import { pushAll, pullAll, setPushMuted, type SyncProgress, type SyncResult, type PullResult } from "./sync";
 
 const session = ref<bgm.BgmSession | null>(bgm.loadSession());
 const user = computed(() => session.value?.user ?? null);
@@ -37,8 +37,9 @@ async function login(manualCode?: string) {
   } finally {
     busy.value = "idle";
   }
-  // 需求：授权登录成功后自动把本地追番库同步到 Bangumi（无需手动推送）
-  if (session.value) void push();
+  // 需求变更（2026-09-12）：移除登录时的全量自动推送 —— 旧逻辑会把误匹配
+  // 条目一次性推入用户真实收藏；现在改为「每次修改自动同步」（auto-sync.ts），
+  // 只推用户主动变更的条目，云端不再被批量写入。
 }
 
 async function logout() {
@@ -66,12 +67,16 @@ async function pull() {
   busy.value = "pull";
   lastError.value = "";
   progress.value = { done: 0, total: 0 };
+  // 拉取期间静音自动同步：pullAll 会批量 addOrUpdate 触发变更监听，
+  // 不静音的话刚拉下来的收藏会被原样推回云端（无意义且消耗 API 配额）
+  setPushMuted(true);
   try {
     lastResult.value = await pullAll((p) => (progress.value = p));
     setLastSync();
   } catch (e: any) {
     lastError.value = String(e?.message || e);
   } finally {
+    setPushMuted(false);
     busy.value = "idle";
     progress.value = null;
   }

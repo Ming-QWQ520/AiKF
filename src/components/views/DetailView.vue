@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
-import { Play, Star, Heart, ChevronDown, Info } from "lucide-vue-next";
+import { Play, Star, Heart, ChevronDown, Info, RefreshCw, Search as SearchIcon, X, Loader2 } from "lucide-vue-next";
 import { anich } from "@/lib/anich/api-client";
 import { anichSearchFirst } from "@/lib/bangumi/sync";
 import { useUIStore } from "@/stores/ui";
@@ -238,6 +238,51 @@ const unfav = () => {
   statusMenuOpen.value = false;
 };
 const closeStatusMenu = () => { statusMenuOpen.value = false; };
+
+// ── 重新匹配 AniCh 资源（修复误匹配 / 补匹配 bgmOnly 条目）──
+// 自动匹配可能张冠李戴（同名不同季、译名差异），提供手动搜索重绑：
+// 观看记录/状态/评分/Bangumi 关联全部保留，仅替换 AniCh 资源指向。
+const rematchOpen = ref(false);
+const rematchKeyword = ref("");
+const rematchLoading = ref(false);
+const rematchResults = ref<any[] | null>(null);
+
+const openRematch = () => {
+  rematchKeyword.value = entry.value?.title || detail.value?.title || "";
+  rematchResults.value = null;
+  statusMenuOpen.value = false;
+  rematchOpen.value = true;
+};
+const closeRematch = () => { rematchOpen.value = false; };
+
+const doRematchSearch = async () => {
+  const kw = rematchKeyword.value.trim();
+  if (!kw || rematchLoading.value) return;
+  rematchLoading.value = true;
+  try {
+    const res = await anich.search(kw, 0);
+    rematchResults.value = res.items ?? [];
+  } catch {
+    rematchResults.value = [];
+  } finally {
+    rematchLoading.value = false;
+  }
+};
+
+const applyRematch = (hit: any) => {
+  if (ui.detailId == null || !hit?.id) return;
+  const oldId = ui.detailId;
+  library.rebindEntry(oldId, {
+    id: hit.id,
+    title: hit.title,
+    image: hit.image,
+    tagline: hit.tagline,
+    totalEpisodes: hit.episodes_total ?? 0,
+  });
+  // 跟随切换到新条目（触发详情/剧集重新加载）
+  if (ui.detailId === oldId) ui.detailId = hit.id;
+  rematchOpen.value = false;
+};
 </script>
 
 <template>
@@ -314,6 +359,9 @@ const closeStatusMenu = () => { statusMenuOpen.value = false; };
                     <span v-if="entry.status === s" class="ml-auto text-[10px]">✓</span>
                   </button>
                   <div class="my-1 h-px bg-border/60" />
+                  <button type="button" @click="openRematch" class="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-foreground transition-colors hover:bg-foreground/5">
+                    <RefreshCw class="h-3 w-3" /> {{ $t('detail.rematch') }}
+                  </button>
                   <button type="button" @click="unfav" class="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-destructive transition-colors hover:bg-destructive/10">
                     <Heart class="h-3 w-3" /> {{ $t('detail.unfav') }}
                   </button>
@@ -325,11 +373,17 @@ const closeStatusMenu = () => { statusMenuOpen.value = false; };
       </div>
     </section>
 
-    <!-- bgmOnly 未匹配提示：番剧已在库中，但 AniCh 暂无对应资源 -->
+    <!-- bgmOnly 未匹配提示：番剧已在库中，但 AniCh 暂无对应资源（可手动重新匹配） -->
     <div v-if="bgmOnlyUnmatched" class="mx-auto max-w-[1200px] px-4 pt-4 sm:px-6">
-      <div class="flex items-start gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-xs leading-relaxed text-amber-700 dark:text-amber-400">
-        <Info class="mt-0.5 h-4 w-4 shrink-0" />
-        <span>{{ $t('detail.bgmOnlyNoMatch') }}</span>
+      <div class="flex flex-wrap items-center gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-xs leading-relaxed text-amber-700 dark:text-amber-400">
+        <Info class="h-4 w-4 shrink-0" />
+        <span class="min-w-0 flex-1">{{ $t('detail.bgmOnlyNoMatch') }}</span>
+        <button
+          @click="openRematch"
+          class="state-layer flex shrink-0 items-center gap-1.5 rounded-lg border border-amber-500/40 px-2.5 py-1.5 text-[11px] font-medium text-amber-700 transition-colors hover:bg-amber-500/15 dark:text-amber-400"
+        >
+          <RefreshCw class="h-3 w-3" /> {{ $t('detail.rematch') }}
+        </button>
       </div>
     </div>
 
@@ -476,5 +530,61 @@ const closeStatusMenu = () => { statusMenuOpen.value = false; };
 
     <!-- 状态菜单遮罩：点击空白处关闭 -->
     <div v-if="statusMenuOpen" class="fixed inset-0 z-20" @click="closeStatusMenu" />
+
+    <!-- ── 重新匹配弹窗：搜索 AniCh 并手动选择正确条目 ── -->
+    <div v-if="rematchOpen" class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm" @click.self="closeRematch">
+      <div class="flex max-h-[80vh] w-full max-w-lg flex-col overflow-hidden rounded-2xl border border-border bg-card shadow-2xl shadow-black/30">
+        <div class="flex shrink-0 items-center justify-between gap-2 border-b border-border/70 px-4 py-3">
+          <h3 class="text-sm font-semibold text-foreground">{{ $t('detail.rematchTitle') }}</h3>
+          <button @click="closeRematch" class="rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-foreground/5 hover:text-foreground">
+            <X class="h-4 w-4" />
+          </button>
+        </div>
+        <div class="shrink-0 px-4 py-3">
+          <p class="mb-2.5 text-[11px] leading-relaxed text-muted-foreground">{{ $t('detail.rematchHint') }}</p>
+          <div class="flex gap-2">
+            <input
+              v-model="rematchKeyword"
+              @keydown.enter="doRematchSearch"
+              :placeholder="$t('detail.rematchPlaceholder')"
+              class="min-w-0 flex-1 rounded-lg border border-border bg-background px-3 py-2 text-xs text-foreground outline-none focus:border-primary/50"
+            />
+            <button
+              @click="doRematchSearch"
+              :disabled="rematchLoading || !rematchKeyword.trim()"
+              class="state-layer flex shrink-0 items-center gap-1.5 rounded-lg bg-primary px-3.5 py-2 text-xs font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50"
+            >
+              <Loader2 v-if="rematchLoading" class="h-3.5 w-3.5 animate-spin" />
+              <SearchIcon v-else class="h-3.5 w-3.5" />
+              {{ $t('detail.rematchSearch') }}
+            </button>
+          </div>
+        </div>
+        <div class="min-h-0 flex-1 overflow-y-auto px-4 pb-4">
+          <div v-if="rematchLoading" class="space-y-2 pt-1">
+            <div v-for="i in 4" :key="i" class="h-14 rounded-xl shimmer" />
+          </div>
+          <div v-else-if="rematchResults && rematchResults.length === 0" class="py-10 text-center text-xs text-muted-foreground">
+            {{ $t('detail.rematchEmpty') }}
+          </div>
+          <div v-else-if="rematchResults" class="flex flex-col gap-1.5">
+            <button
+              v-for="it in rematchResults"
+              :key="it.id"
+              @click="applyRematch(it)"
+              class="flex items-center gap-3 rounded-xl border border-transparent p-2 text-left transition-colors hover:border-primary/30 hover:bg-primary/5"
+            >
+              <CoverImage :src="it.image" :alt="it.title" ratio="portrait" rounded="rounded-lg" class="w-10 shrink-0" />
+              <div class="min-w-0 flex-1">
+                <p class="line-clamp-1 text-xs font-semibold text-foreground">{{ it.title }}</p>
+                <p class="mt-0.5 text-[10px] text-muted-foreground">
+                  ID {{ it.id }}<template v-if="it.episodes_total"> · {{ $t('detail.totalEps', { n: it.episodes_total }) }}</template>
+                </p>
+              </div>
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
 </template>

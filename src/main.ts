@@ -7,6 +7,7 @@ import "./assets/globals.css";
 import { i18n, applyLocale } from "@/i18n";
 import { useLibraryStore } from "@/stores/library";
 import { useSettingsStore } from "@/stores/settings";
+import { setupAutoSync } from "@/lib/bangumi/auto-sync";
 import { registerGlobalUX } from "@/lib/global-ux";
 import { registerPreloadImg } from "@/lib/preload-img";
 import { initFileLogging, logInfo, logError } from "@/lib/logger";
@@ -52,6 +53,9 @@ app.use(i18n);
 
 // Hydrate persisted library data before mounting.
 useLibraryStore().hydrate();
+// 追番库自动云同步（默认开启、无开关）：监听库变更 → 防抖推送变更条目
+// （须在 hydrate 之后注册，避免水合写入触发首轮无意义推送）
+setupAutoSync();
 // Load persisted settings (theme, playback, background) before mounting.
 const settingsStore = useSettingsStore();
 // 启动时应用持久化的界面语言（默认 zh-CN），并在设置变更时实时切换

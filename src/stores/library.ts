@@ -224,6 +224,66 @@ export const useLibraryStore = defineStore("library", {
       this._persist();
     },
     /**
+     * 手动重新绑定 AniCh 条目（详情页「重新匹配」）：
+     * 把 oldId 条目的收藏状态/观看记录/评分/bgmId 迁移到 hit.id 上。
+     * - bgmOnly 条目 → 走 upgradeBgmOnly 升级；
+     * - 目标键已存在 → 合并（状态/评分以当前查看条目为准，观看记录取并集）；
+     * - 否则 → 整体改键（元数据用 hit 的，进度数据全保留）。
+     */
+    rebindEntry(
+      oldId: number,
+      hit: { id: number; title?: string; image?: string; tagline?: string; totalEpisodes?: number }
+    ) {
+      const old = this.entries[oldId];
+      if (!old || hit.id === oldId) {
+        if (old && hit.id === oldId) this.syncMeta(oldId, hit);
+        return;
+      }
+      if (old.bgmOnly) {
+        this.upgradeBgmOnly(oldId, hit);
+        return;
+      }
+      const now = Date.now();
+      const existing = this.entries[hit.id];
+      const cap = (n: number, total: number) => (total > 0 ? Math.min(Math.max(0, n), total) : Math.max(0, n));
+      if (existing) {
+        const total = hit.totalEpisodes || existing.totalEpisodes || 0;
+        const merged: LibraryEntry = {
+          ...existing,
+          title: hit.title || existing.title,
+          image: hit.image || existing.image,
+          tagline: hit.tagline ?? existing.tagline,
+          totalEpisodes: total,
+          status: old.status,
+          score: old.score || existing.score,
+          currentEpisode: cap(Math.max(existing.currentEpisode || 0, old.currentEpisode || 0), total),
+          watchedEpisodes: Array.from(
+            new Set([...existing.watchedEpisodes, ...old.watchedEpisodes])
+          ).sort((a, b) => a - b),
+          playbackProgress: { ...(existing.playbackProgress ?? {}), ...(old.playbackProgress ?? {}) },
+          bgmId: old.bgmId ?? existing.bgmId,
+          updatedAt: now,
+        };
+        const next = { ...this.entries, [hit.id]: merged };
+        delete next[oldId];
+        this.entries = next;
+      } else {
+        const next = { ...this.entries };
+        delete next[oldId];
+        next[hit.id] = {
+          ...old,
+          id: hit.id,
+          title: hit.title || old.title,
+          image: hit.image || old.image,
+          tagline: hit.tagline ?? old.tagline,
+          totalEpisodes: hit.totalEpisodes || old.totalEpisodes,
+          updatedAt: now,
+        };
+        this.entries = next;
+      }
+      this._persist();
+    },
+    /**
      * Sync metadata (title/image/tagline/totalEpisodes) for an existing
      * library entry from the latest API response. Used to repair legacy
      * entries that were created before the API returned episodesTotal.

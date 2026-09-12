@@ -44,10 +44,12 @@
     "library": "Library",
     "libraryCounted": "Library ({n})",
     "libraryEmpty": "Library is empty",
-    "settings": "Settings",
     "expandSidebar": "Expand sidebar",
     "collapseSidebar": "Collapse sidebar",
-    "toggleTheme": "Toggle dark / light mode"
+    "toggleTheme": "Toggle dark / light mode",
+    "me": "Me",
+    "meNotLoggedIn": "Not signed in",
+    "bgmId": "ID {id}"
   },
   "theme": {
     "light": "Light",
@@ -152,7 +154,13 @@
     "replies": "{n} replies",
     "noReplies": "No replies",
     "noCharacters": "No character info",
-    "noRelated": "No recommendations"
+    "noRelated": "No recommendations",
+    "rematch": "Re-match",
+    "rematchTitle": "Re-match AniCh entry",
+    "rematchHint": "Auto-matching can pick the wrong entry: search a keyword and click the correct item to rebind (watch progress / status / score / Bangumi link are all kept)",
+    "rematchPlaceholder": "Type a keyword to search…",
+    "rematchSearch": "Search",
+    "rematchEmpty": "No results — try another keyword"
   },
   "library": {
     "title": "My library",
@@ -179,7 +187,7 @@
       "goLogin": "Sign in",
       "loggedIn": "Connected: {name}",
       "lastSync": "Last synced {time}",
-      "autoOn": "Auto sync on",
+      "autoOn": "Auto-syncs on every change",
       "syncing": "Syncing…",
       "push": "Push to cloud",
       "pull": "Restore from cloud"
@@ -372,8 +380,8 @@
     "srcLocal": "Local cache"
   },
   "settings": {
-    "title": "Settings",
-    "subtitle": "Personalize your experience",
+    "title": "Me",
+    "subtitle": "Account · appearance · playback",
     "appearance": "Appearance",
     "themeHint": "Theme (synced with the toggle next to the top search bar)",
     "language": "Language",
@@ -420,11 +428,13 @@
       "pushHint": "Local library → Bangumi collections",
       "pull": "Restore from cloud",
       "pullHint": "Bangumi collections → local library",
-      "autoSync": "Auto sync",
-      "autoSyncHint": "Automatically push library changes to Bangumi (~10s debounce). Also syncs once right after login",
       "progress": "Progress {d}/{t}",
       "pushResult": "Pushed {p} · Skipped {s} (not on Bangumi) · Failed {f}",
       "pullResult": "Imported {p} · Skipped {s} (no AniCh match) · Failed {f}"
+    },
+    "profile": {
+      "hint": "Sign in to Bangumi to sync collections & progress",
+      "id": "Bangumi ID {id}"
     }
   },
   "time": {
