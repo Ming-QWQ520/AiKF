@@ -122,46 +122,59 @@ async function ensureSession(): Promise<BgmSession | null> {
   const s = loadSession();
   if (!s) return null;
   if (Date.now() < s.expiresAt - 5 * 60 * 1000) return s;
-  // 过期：尝试刷新
+  return forceRefresh(s);
+}
+
+/** 强制用 refresh_token 换新 token（到期续期 / 401 恢复共用）。失败登出并返回 null。 */
+async function forceRefresh(old: BgmSession): Promise<BgmSession | null> {
   try {
     const form = new URLSearchParams({
       grant_type: "refresh_token",
       client_id: BGM_CLIENT_ID,
       client_secret: BGM_CLIENT_SECRET,
-      refresh_token: s.refreshToken,
+      refresh_token: old.refreshToken,
       redirect_uri: BGM_REDIRECT_URI,
     });
     const res = await rawRequest("POST", `${BGM_OAUTH}/access_token`, form.toString(), {
       "Content-Type": "application/x-www-form-urlencoded",
       Accept: "application/json",
     });
-    if (!res.ok) throw new Error(`refresh HTTP ${res.status}`);
+    if (!res.ok) throw new Error(`refresh HTTP ${res.status}: ${res.body.slice(0, 200)}`);
     const tok = JSON.parse(res.body) as BgmTokenResp;
+    if (!tok?.access_token) {
+      throw new Error(`refresh 响应缺少 access_token: ${res.body.slice(0, 200)}`);
+    }
     const next: BgmSession = {
       accessToken: tok.access_token,
-      refreshToken: tok.refresh_token || s.refreshToken,
+      refreshToken: tok.refresh_token || old.refreshToken,
       expiresAt: Date.now() + (tok.expires_in || 604800) * 1000,
-      user: s.user,
+      user: old.user,
     };
     saveSession(next);
     logInfo("bgm-auth", "token 已自动续期（refresh_token）"); // i18n-skip: 日志文案
     return next;
   } catch (e) {
     logWarn("bgm-auth", `token 刷新失败，需要重新登录: ${String(e)}`); // i18n-skip: 日志文案
-    return s; // 仍返回旧会话，让请求 401 后走登出处理
+    logout();
+    return null;
   }
 }
 
 async function api<T>(method: string, path: string, body?: unknown, retried = false): Promise<T> {
   const s = await ensureSession();
   if (!s) throw new BgmAPIError("not logged in", 0);
-  const headers: Record<string, string> = { Accept: "application/json" };
+  const headers: Record<string, string> = {
+    Accept: "application/json",
+    // 关键：Bangumi API 靠 Bearer token 鉴权，缺失会 401 "need Login"
+    Authorization: `Bearer ${s.accessToken}`,
+  };
   if (body !== undefined) headers["Content-Type"] = "application/json";
   const res = await rawRequest(method, `${BGM_API}${path}`, body !== undefined ? JSON.stringify(body) : undefined, headers);
   if (res.status === 401 && !retried) {
     // token 可能已被服务端吊销：强制刷新一次后重试
-    logout();
-    throw new BgmAPIError("unauthorized — please login again", 401);
+    const fresh = await forceRefresh(s);
+    if (!fresh) throw new BgmAPIError("unauthorized — please login again", 401);
+    return api<T>(method, path, body, true);
   }
   if (!res.ok) throw new BgmAPIError(`Bangumi ${method} ${path} -> HTTP ${res.status}: ${res.body.slice(0, 200)}`, res.status);
   return JSON.parse(res.body) as T;
@@ -267,6 +280,18 @@ export async function login(opts: LoginOptions = {}): Promise<BgmSession> {
     );
   }
   const tok = JSON.parse(res.body) as BgmTokenResp;
+  if (!tok?.access_token) {
+    // HTTP 200 但响应体不是合法 token（bgm.tv 偶发把 OAuth 错误放在 200 里返回）
+    logError("bgm-auth", `token 响应异常（无 access_token）: ${res.body.slice(0, 300)}`); // i18n-skip: 日志文案
+    throw new BgmAPIError(
+      i18n.global.t("bgm.error.tokenFail", { status: res.status, redirect: BGM_REDIRECT_URI }),
+      res.status
+    );
+  }
+  logInfo(
+    "bgm-auth",
+    `token 换取成功（len=${tok.access_token.length} · expires_in=${tok.expires_in ?? 604800}s${tok.user_id ? ` · uid=${tok.user_id}` : ""}）`
+  ); // i18n-skip: 日志文案
 
   const session: BgmSession = {
     accessToken: tok.access_token,
@@ -283,8 +308,11 @@ export async function login(opts: LoginOptions = {}): Promise<BgmSession> {
     userFetched = true;
     saveSession(session);
     logInfo("bgm-auth", `登录完成：${me.nickname || me.username || me.id}`); // i18n-skip: 日志文案
-  } catch {
-    logWarn("bgm-auth", "/v0/me 拉取失败（不阻断登录）"); // i18n-skip: 日志文案
+  } catch (e) {
+    logWarn(
+      "bgm-auth",
+      `/v0/me 拉取失败（不阻断登录）: ${e instanceof BgmAPIError ? e.message : String(e)}`
+    ); // i18n-skip: 日志文案
     /* me 失败不阻断登录 */
   }
   return session;
