@@ -1,85 +1,94 @@
-/** Bangumi 账号状态 + 同步动作的共享 composable（Settings / Library 共用）。 */
+/**
+ * Bangumi 账号状态 + 登录/云端拉取的共享 composable（NavShell / 我的 / 追番库共用）。
+ *
+ * 同步模型（需求 2026-09-12）：
+ * - 上行：每次修改自动同步（auto-sync.ts 全局监听，无手动按钮）；
+ * - 下行：登录成功后自动从云端拉取一次 + 应用启动已登录时静默拉取一次；
+ *   手动「同步到云端 / 从云端恢复」按钮已随需求移除。
+ */
 import { computed, ref } from "vue";
 import * as bgm from "./client";
-import { pushAll, pullAll, setPushMuted, type SyncProgress, type SyncResult, type PullResult } from "./sync";
+import { pullAll, setPushMuted, type SyncProgress, type PullResult } from "./sync";
+import { logInfo, logWarn } from "@/lib/logger";
 
 const session = ref<bgm.BgmSession | null>(bgm.loadSession());
 const user = computed(() => session.value?.user ?? null);
 const loggedIn = computed(() => !!session.value);
-const busy = ref<"idle" | "login" | "push" | "pull">("idle");
-const progress = ref<SyncProgress | null>(null);
-const lastError = ref("");
-const lastResult = ref<SyncResult | PullResult | null>(null);
-const lastSyncAt = ref<number>(Number(localStorage.getItem("aikf:bgm-last-sync") || 0));
+const busy = ref<"idle" | "login" | "pull">("idle");
 
-function setLastSync() {
-  lastSyncAt.value = Date.now();
+const LAST_SYNC_KEY = "aikf:bgm-last-sync";
+
+function touchLastSync() {
   try {
-    localStorage.setItem("aikf:bgm-last-sync", String(lastSyncAt.value));
+    localStorage.setItem(LAST_SYNC_KEY, String(Date.now()));
   } catch {
     /* ignore */
   }
 }
 
-/** 重新从持久化读取会话（登录/登出后调用，跨组件同步状态）。 */
-function refreshSession() {
-  session.value = bgm.loadSession();
+/**
+ * 从云端拉取收藏到本地（内部方法，不再暴露手动按钮）。
+ * - 拉取期间静音自动同步：pullAll 批量 addOrUpdate 会触发变更监听，
+ *   不静音的话刚拉下来的收藏会被原样推回云端（无意义且消耗 API 配额）；
+ * - 失败仅记日志，绝不阻断使用。
+ */
+async function pull(): Promise<PullResult | null> {
+  if (!session.value) return null;
+  if (busy.value !== "idle") return null;
+  busy.value = "pull";
+  const progress: SyncProgress = { done: 0, total: 0 };
+  setPushMuted(true);
+  try {
+    const res = await pullAll((p) => Object.assign(progress, p));
+    touchLastSync();
+    logInfo(
+      "bgm-sync",
+      `云端拉取完成：导入 ${res.imported} · 跳过 ${res.skipped} · 失败 ${res.failed}` // i18n-skip: 日志文案
+    );
+    return res;
+  } catch (e: any) {
+    logWarn("bgm-sync", `云端拉取失败（不影响本地使用）: ${e?.message || e}`); // i18n-skip: 日志文案
+    return null;
+  } finally {
+    setPushMuted(false);
+    busy.value = "idle";
+  }
+}
+
+/** 每次应用运行最多自动拉取一次（登录触发的强拉不受限制）。 */
+let autoPulledThisRun = false;
+
+/**
+ * 自动从云端拉取（已登录时才生效）。
+ * - 登录成功后 force=true 立即拉取；
+ * - 应用启动时 force=false 静默补拉一次（会话恢复场景）。
+ */
+async function autoPullFromCloud(force = false) {
+  if (!session.value) return;
+  if (!force && autoPulledThisRun) return;
+  if (busy.value !== "idle") return;
+  autoPulledThisRun = true;
+  await pull();
 }
 
 async function login(manualCode?: string) {
   busy.value = "login";
-  lastError.value = "";
   try {
     session.value = await bgm.login(manualCode ? { manualCode } : {});
   } catch (e: any) {
-    lastError.value = String(e?.message || e);
+    logWarn("bgm-auth", `登录失败: ${e?.message || e}`); // i18n-skip: 日志文案
     await bgm.stopOAuth().catch(() => {});
   } finally {
     busy.value = "idle";
   }
-  // 需求变更（2026-09-12）：移除登录时的全量自动推送 —— 旧逻辑会把误匹配
-  // 条目一次性推入用户真实收藏；现在改为「每次修改自动同步」（auto-sync.ts），
-  // 只推用户主动变更的条目，云端不再被批量写入。
+  // 需求（2026-09-12）：登录成功后自动从云端拉取收藏数据到本地追番库。
+  // pull 内部已静音自动推送，拉取的条目不会被原样推回云端。
+  if (session.value) void autoPullFromCloud(true);
 }
 
 async function logout() {
   bgm.logout();
-  refreshSession();
-  lastResult.value = null;
-}
-
-async function push() {
-  busy.value = "push";
-  lastError.value = "";
-  progress.value = { done: 0, total: 0 };
-  try {
-    lastResult.value = await pushAll((p) => (progress.value = p));
-    setLastSync();
-  } catch (e: any) {
-    lastError.value = String(e?.message || e);
-  } finally {
-    busy.value = "idle";
-    progress.value = null;
-  }
-}
-
-async function pull() {
-  busy.value = "pull";
-  lastError.value = "";
-  progress.value = { done: 0, total: 0 };
-  // 拉取期间静音自动同步：pullAll 会批量 addOrUpdate 触发变更监听，
-  // 不静音的话刚拉下来的收藏会被原样推回云端（无意义且消耗 API 配额）
-  setPushMuted(true);
-  try {
-    lastResult.value = await pullAll((p) => (progress.value = p));
-    setLastSync();
-  } catch (e: any) {
-    lastError.value = String(e?.message || e);
-  } finally {
-    setPushMuted(false);
-    busy.value = "idle";
-    progress.value = null;
-  }
+  session.value = null;
 }
 
 export function useBangumi() {
@@ -88,15 +97,14 @@ export function useBangumi() {
     user,
     loggedIn,
     busy,
-    progress,
-    lastError,
-    lastResult,
-    lastSyncAt,
     login,
     logout,
-    push,
-    pull,
-    refreshSession,
     fetchMe: bgm.fetchMe,
+    autoPullFromCloud,
   };
+}
+
+/** 应用启动时调用：已有登录态则静默从云端拉取一次（每次运行最多一次）。 */
+export function autoPullOnBoot() {
+  void autoPullFromCloud(false);
 }

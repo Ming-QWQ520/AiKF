@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onBeforeUnmount, nextTick, watch } from "vue";
-import { Compass, CalendarDays, LayoutGrid, Bookmark, Search as SearchIcon, ChevronDown, CircleUserRound, PanelLeftClose, PanelLeftOpen, HardDriveDownload } from "lucide-vue-next";
+import { Compass, CalendarDays, LayoutGrid, Bookmark, ChevronDown, CircleUserRound, PanelLeftClose, PanelLeftOpen, HardDriveDownload } from "lucide-vue-next";
 import { useUIStore, type ViewKey } from "@/stores/ui";
 import { useLibraryStore } from "@/stores/library";
 import { useCacheStore } from "@/stores/cache";
@@ -41,7 +41,6 @@ const navItems: { key: ViewKey; labelKey: string; icon: any }[] = [
   { key: "discover", labelKey: "nav.discover", icon: Compass },
   { key: "calendar", labelKey: "nav.calendar", icon: CalendarDays },
   { key: "browse", labelKey: "nav.browse", icon: LayoutGrid },
-  { key: "search", labelKey: "nav.search", icon: SearchIcon },
   { key: "cache", labelKey: "nav.cache", icon: HardDriveDownload },
 ];
 
@@ -319,14 +318,6 @@ const progressLabel = (entry: { currentEpisode: number; watchedEpisodes: number[
           </div>
           <div class="hidden flex-1 md:block"><SearchBar /></div>
           <div class="ml-auto flex items-center gap-1.5">
-            <button
-              type="button"
-              @click="ui.setView('search')"
-              class="flex h-8 items-center gap-2 rounded-lg border border-border px-2.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-foreground/5 hover:text-foreground md:hidden"
-            >
-              <SearchIcon class="h-4 w-4" />
-              <span class="hidden sm:inline">{{ $t('nav.search') }}</span>
-            </button>
             <NTooltip placement="bottom">
               <template #trigger>
                 <ThemeToggle />

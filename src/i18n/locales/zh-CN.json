@@ -39,7 +39,6 @@
     "discover": "发现",
     "calendar": "时间表",
     "browse": "分类",
-    "search": "搜索",
     "cache": "本地缓存",
     "library": "追番库",
     "libraryCounted": "追番库 ({n})",
@@ -69,16 +68,7 @@
     "hot": "热门搜索",
     "hotLoading": "正在加载热门搜索…",
     "noResults": "没有找到 “{q}” 相关结果",
-    "viewAll": "查看全部 “{q}” 的结果 →",
     "suggest": "搜索联想"
-  },
-  "search": {
-    "title": "搜索番剧",
-    "subtitle": "输入番剧名称或关键词",
-    "placeholder": "搜索番剧、动画…",
-    "searching": "搜索中…",
-    "resultCount": "“{q}” 的搜索结果 · {n} 部",
-    "empty": "没有找到 “{q}” 相关的番剧"
   },
   "discover": {
     "today": "今日更新",
@@ -181,16 +171,6 @@
       "completed": "看过",
       "onhold": "搁置",
       "dropped": "弃番"
-    },
-    "bgm": {
-      "notLoggedIn": "连接 Bangumi 账号后可云同步追番库（收藏状态 + 观看进度）",
-      "goLogin": "去登录",
-      "loggedIn": "已连接：{name}",
-      "lastSync": "上次同步 {time}",
-      "autoOn": "修改后自动同步至 Bangumi",
-      "syncing": "同步中…",
-      "push": "同步到云端",
-      "pull": "从云端恢复"
     }
   },
   "cache": {
@@ -412,10 +392,8 @@
     "douyinHandle": "{'@'}开发者",
     "reset": "恢复默认设置",
     "imageFilter": "图片",
-    "notice": "公告",
     "bgm": {
-      "title": "Bangumi 账号 · 云同步",
-      "loginHint": "登录 Bangumi 账号后，可将本地追番库同步为 Bangumi 收藏（状态与观看进度），也能从云端恢复收藏到本地。数据保存在你的 Bangumi 账号中。",
+      "loginHint": "登录 Bangumi 账号后，追番库将与 Bangumi 收藏自动双向同步：本地修改自动推送到云端，登录/启动时自动拉取云端收藏。数据保存在你的 Bangumi 账号中。",
       "login": "登录 Bangumi 账号",
       "manualToggle": "手动粘贴授权码",
       "manualHint": "若浏览器未自动完成授权回调，可将授权完成后浏览器地址栏的完整链接（或其中的 code= 后内容）粘贴到这里。",
@@ -423,14 +401,7 @@
       "manualSubmit": "完成登录",
       "callbackHint": "请在 Bangumi 开发者后台将回调地址设置为：aikf://auth/callback（安装/首次运行 AiKF 后协议自动注册）",
       "user": "Bangumi 用户",
-      "logout": "登出",
-      "push": "同步到云端",
-      "pushHint": "本地追番库 → Bangumi 收藏",
-      "pull": "从云端恢复",
-      "pullHint": "Bangumi 收藏 → 本地追番库",
-      "progress": "进度 {d}/{t}",
-      "pushResult": "已同步 {p} 条 · 跳过 {s}（Bangumi 未收录）· 失败 {f}",
-      "pullResult": "已导入 {p} 条 · 跳过 {s}（无对应片源）· 失败 {f}"
+      "logout": "登出"
     },
     "profile": {
       "hint": "登录 Bangumi 账号后可云同步收藏与观看进度",

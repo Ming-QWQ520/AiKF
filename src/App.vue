@@ -8,7 +8,6 @@ import PlayerDialog from "@/components/PlayerDialog.vue";
 import DiscoverView from "@/components/views/DiscoverView.vue";
 import CalendarView from "@/components/views/CalendarView.vue";
 import BrowseView from "@/components/views/BrowseView.vue";
-import SearchView from "@/components/views/SearchView.vue";
 import CacheView from "@/components/views/CacheView.vue";
 import LibraryView from "@/components/views/LibraryView.vue";
 import DetailView from "@/components/views/DetailView.vue";
@@ -26,7 +25,6 @@ const viewComponent = () => {
     case "discover": return DiscoverView;
     case "calendar": return CalendarView;
     case "browse": return BrowseView;
-    case "search": return SearchView;
     case "cache": return CacheView;
     case "library": return LibraryView;
     case "detail": return DetailView;

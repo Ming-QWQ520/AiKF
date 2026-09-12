@@ -8,6 +8,7 @@ import { i18n, applyLocale } from "@/i18n";
 import { useLibraryStore } from "@/stores/library";
 import { useSettingsStore } from "@/stores/settings";
 import { setupAutoSync } from "@/lib/bangumi/auto-sync";
+import { autoPullOnBoot } from "@/lib/bangumi/useBangumi";
 import { registerGlobalUX } from "@/lib/global-ux";
 import { registerPreloadImg } from "@/lib/preload-img";
 import { initFileLogging, logInfo, logError } from "@/lib/logger";
@@ -56,6 +57,9 @@ useLibraryStore().hydrate();
 // 追番库自动云同步（默认开启、无开关）：监听库变更 → 防抖推送变更条目
 // （须在 hydrate 之后注册，避免水合写入触发首轮无意义推送）
 setupAutoSync();
+// 已有 Bangumi 登录态时，启动后静默从云端拉取一次收藏（每次运行最多一次；
+// 拉取期间自动推送被静音，不会把拉下来的数据原样推回）
+autoPullOnBoot();
 // Load persisted settings (theme, playback, background) before mounting.
 const settingsStore = useSettingsStore();
 // 启动时应用持久化的界面语言（默认 zh-CN），并在设置变更时实时切换

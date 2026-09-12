@@ -19,13 +19,9 @@ import {
   Languages,
   Github,
   ExternalLink,
-  CloudCog,
   LogIn,
   LogOut,
-  CloudUpload,
-  CloudDownload,
   Loader2,
-  Megaphone,
   FolderOpen,
 } from "lucide-vue-next";
 import { invoke } from "@tauri-apps/api/core";
@@ -35,8 +31,6 @@ import { AIKF_VERSION } from "@/lib/version";
 import { cn } from "@/lib/utils";
 import ToggleSwitch from "@/components/ToggleSwitch.vue";
 import { useBangumi } from "@/lib/bangumi/useBangumi";
-import { anich } from "@/lib/anich/api-client";
-import { useAsync } from "@/composables/useAsync";
 
 const settings = useSettingsStore();
 const s = computed(() => settings.data);
@@ -145,7 +139,7 @@ const openLogDir = async () => {
   }
 };
 
-// ── Bangumi 账号（云同步追番库）──
+// ── Bangumi 账号（登录/登出；同步本身全自动：修改即推 + 登录/启动拉取）──
 const bgmCtx = useBangumi();
 const bgmBusy = computed(() => bgmCtx.busy.value !== "idle");
 const manualCode = ref("");
@@ -156,19 +150,6 @@ const doBgmLoginManual = () => {
   if (!manualCode.value.trim()) return;
   bgmCtx.login(manualCode.value.trim());
 };
-
-// 公告（设置→关于；静默失败）
-const { data: noticeData } = useAsync(() => anich.notice(), { source: () => "notice" });
-
-// 同步结果文案（push/pull 结构不同，统一格式化）
-const bgmResultText = computed(() => {
-  const r = bgmCtx.lastResult.value as any;
-  if (!r) return "";
-  if (typeof r.pushed === "number") {
-    return t("settings.bgm.pushResult", { p: r.pushed, s: r.skipped, f: r.failed });
-  }
-  return t("settings.bgm.pullResult", { p: r.imported, s: r.skipped, f: r.failed });
-});
 </script>
 
 <template>
@@ -249,54 +230,6 @@ const bgmResultText = computed(() => {
         </div>
         <p v-if="bgmCtx.user.value?.sign" class="mt-3 line-clamp-2 text-xs leading-relaxed text-muted-foreground">{{ bgmCtx.user.value.sign }}</p>
       </template>
-    </section>
-
-    <!-- ─── 云同步（已登录显示；每次修改自动同步，无需手动）─── -->
-    <section v-if="bgmCtx.loggedIn.value" class="surface mb-4 rounded-2xl p-5">
-      <h3 class="mb-4 flex items-center gap-2 text-sm font-semibold text-foreground">
-        <CloudCog class="h-4 w-4 text-primary" /> {{ $t('settings.bgm.title') }}
-      </h3>
-
-      <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
-        <button
-          @click="bgmCtx.push()"
-          :disabled="bgmBusy"
-          class="state-layer flex items-center gap-2.5 rounded-xl bg-muted px-4 py-3 text-left transition-colors hover:bg-accent disabled:opacity-50"
-        >
-          <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-sky-500/15 text-sky-500">
-            <Loader2 v-if="bgmCtx.busy.value === 'push'" class="h-4 w-4 animate-spin" />
-            <CloudUpload v-else class="h-4 w-4" />
-          </span>
-          <div class="min-w-0 flex-1">
-            <p class="text-xs font-semibold text-foreground">{{ $t('settings.bgm.push') }}</p>
-            <p class="truncate text-[10px] text-muted-foreground">{{ $t('settings.bgm.pushHint') }}</p>
-          </div>
-        </button>
-        <button
-          @click="bgmCtx.pull()"
-          :disabled="bgmBusy"
-          class="state-layer flex items-center gap-2.5 rounded-xl bg-muted px-4 py-3 text-left transition-colors hover:bg-accent disabled:opacity-50"
-        >
-          <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-emerald-500/15 text-emerald-500">
-            <Loader2 v-if="bgmCtx.busy.value === 'pull'" class="h-4 w-4 animate-spin" />
-            <CloudDownload v-else class="h-4 w-4" />
-          </span>
-          <div class="min-w-0 flex-1">
-            <p class="text-xs font-semibold text-foreground">{{ $t('settings.bgm.pull') }}</p>
-            <p class="truncate text-[10px] text-muted-foreground">{{ $t('settings.bgm.pullHint') }}</p>
-          </div>
-        </button>
-      </div>
-
-      <!-- 进度 / 结果 / 错误 -->
-      <p v-if="bgmCtx.progress.value" class="mt-3 text-[11px] text-muted-foreground">
-        {{ $t('settings.bgm.progress', { d: bgmCtx.progress.value.done, t: bgmCtx.progress.value.total }) }}
-        <span v-if="bgmCtx.progress.value.current" class="ml-1">{{ bgmCtx.progress.value.current }}</span>
-      </p>
-      <p v-else-if="bgmCtx.lastResult.value" class="mt-3 text-[11px] text-emerald-500">
-        {{ bgmResultText }}
-      </p>
-      <p v-if="bgmCtx.lastError.value" class="mt-3 break-all text-[11px] text-destructive">{{ bgmCtx.lastError.value }}</p>
     </section>
 
     <!-- ─── 外观 ─── -->
@@ -497,18 +430,6 @@ const bgmResultText = computed(() => {
           >
             <FolderOpen class="h-3.5 w-3.5" /> {{ $t('settings.openLogs') }}
           </button>
-        </div>
-      </div>
-
-      <!-- 全站公告（AniCh /notice，无鉴权；隐藏空公告） -->
-      <div
-        v-if="noticeData?.message"
-        class="mt-3 flex items-start gap-2.5 rounded-xl bg-muted/60 px-4 py-3"
-      >
-        <Megaphone class="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" />
-        <div class="min-w-0 flex-1">
-          <p class="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">{{ $t('settings.notice') }}</p>
-          <p class="mt-0.5 break-words text-xs text-foreground/90">{{ noticeData.message }}</p>
         </div>
       </div>
 

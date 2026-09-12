@@ -79,13 +79,16 @@ const acItems = computed(() => (acData.value ?? []).slice(0, 6));
 const showSuggest = computed(() => focused.value && debounced.value.length === 0);
 const showResults = computed(() => focused.value && debounced.value.length > 0);
 
+/**
+ * 提交搜索：搜索页已移除（左侧导航无搜索入口），历史/热词点击后
+ * 直接把关键词填入输入框，由实时下拉结果承接，不再跳转页面。
+ */
 const submit = (q: string) => {
   const t = q.trim();
   if (!t) return;
   recordHistory(t);
-  ui.setSearchQuery(t);
-  ui.setView("search");
-  focused.value = false;
+  value.value = t;
+  focused.value = true;
 };
 </script>
 
@@ -214,9 +217,6 @@ const submit = (q: string) => {
             <p class="line-clamp-1 text-sm font-medium text-foreground">{{ item.title }}</p>
             <p class="line-clamp-1 text-xs text-muted-foreground">{{ item.tagline }}</p>
           </div>
-        </button>
-        <button v-if="debounced.length > 0" type="button" @mousedown.prevent @click="submit(value)" class="state-layer mt-1 w-full rounded-lg bg-primary/10 p-2 text-center text-xs font-medium text-primary hover:bg-primary/15">
-          {{ $t('searchBar.viewAll', { q: debounced }) }}
         </button>
       </div>
     </Transition>

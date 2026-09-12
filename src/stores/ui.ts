@@ -5,7 +5,6 @@ export type ViewKey =
   | "discover"
   | "calendar"
   | "browse"
-  | "search"
   | "cache"
   | "library"
   | "detail"
@@ -39,7 +38,6 @@ interface UIState {
   view: ViewKey;
   detailId: number | null;
   detailCover: string;
-  searchQuery: string;
   browseFilters: BrowseFilters;
   player: PlayerState;
   // Sidebar collapsed state — shared so all views can react to it (e.g. to
@@ -52,7 +50,6 @@ export const useUIStore = defineStore("ui", {
     view: "discover",
     detailId: null,
     detailCover: "",
-    searchQuery: "",
     browseFilters: { skip: 0 },
     player: { open: false, bangumiID: null, episode: 1, title: "", cover: "", episodeTitle: "", localPath: null },
     sidebarCollapsed: false,
@@ -65,9 +62,6 @@ export const useUIStore = defineStore("ui", {
       this.view = "detail";
       this.detailId = id;
       this.detailCover = cover;
-    },
-    setSearchQuery(q: string) {
-      this.searchQuery = q;
     },
     setBrowseFilters(f: Partial<BrowseFilters>) {
       this.browseFilters = { ...this.browseFilters, ...f };

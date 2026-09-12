@@ -6,8 +6,11 @@
  *   （季数感知：归一化完全相等，或去季数后主体相等且季数一致）。
  *   映射结果持久化到 localStorage，只搜一次。
  *
- * 下行（pull）：Bangumi 收藏列表 → 反查 AniCh → 导入本地追番库
- *   （未匹配到 AniCh 的条目以 bgmOnly 占位入库，详情页惰性重试 + 可手动重绑）。
+ * 下行（pull）：Bangumi 收藏列表 → 反查 AniCh → 导入本地追番库。
+ *   - 已绑定 AniCh 的条目（bgmId 直连）不再重复搜索；
+ *   - 反查结果持久化（aikf:bgm-anich-map:v1），未命中缓存 3 天后重试；
+ *   - 未匹配到 AniCh 的条目以 bgmOnly 占位入库（详情页惰性重试 + 可手动重绑）；
+ *   - 云端 ep_status（已看集数）导入本地：顺序标记第 1..N 集看过（取并集不减）。
  *
  * 自动同步（默认开启，无开关）：库变更 → auto-sync.ts 监听 → 防抖后
  * pushEntries 单条推送；pull 期间静音避免原样回推。
@@ -230,15 +233,6 @@ export async function pushEntries(
   return result;
 }
 
-/** 把整个本地追番库推送到 Bangumi（设置页/追番库手动按钮）。 */
-export async function pushAll(onProgress?: (p: SyncProgress) => void): Promise<SyncResult> {
-  const library = useLibraryStore();
-  return pushEntries(
-    library.list.map((e) => e.id),
-    onProgress
-  );
-}
-
 // ── 自动同步静音（pull 期间置位，避免把刚拉取的数据原样推回）──
 
 const muteState = { value: false };
@@ -270,6 +264,50 @@ function buildEpisodeIndex(eps: BgmEpisode[]): Map<number, number> {
 
 // ── 下行：云端 → 本地 ──
 
+// 反查结果缓存（bgmSubjectId → AniCh 匹配快照 / 失败记录），
+// 避免每次启动自动拉取时对同一批条目反复搜索。
+const PULL_MAP_KEY = "aikf:bgm-anich-map:v1";
+interface PullMapEntry {
+  anichId?: number;
+  title?: string;
+  image?: string;
+  tagline?: string;
+  totalEpisodes?: number;
+  failed?: boolean;
+  at: number;
+}
+
+function loadPullMap(): Record<string, PullMapEntry> {
+  try {
+    return JSON.parse(localStorage.getItem(PULL_MAP_KEY) || "{}");
+  } catch {
+    return {};
+  }
+}
+
+function savePullMap(m: Record<string, PullMapEntry>) {
+  try {
+    localStorage.setItem(PULL_MAP_KEY, JSON.stringify(m));
+  } catch {
+    /* ignore */
+  }
+}
+
+/** 失败记录重试窗口：3 天内不重复搜索（上游可能新增资源，留自愈机会） */
+const PULL_RETRY_MS = 3 * 24 * 60 * 60 * 1000;
+
+/**
+ * 把云端 ep_status（已看集数）合并进本地条目：顺序标记第 1..N 集看过。
+ * markEpisode 为并集语义（已标记的不动、不删本地多看的集数），
+ * 总集数钳制在 markEpisode 内部处理。云端看不到具体看了哪几集，
+ * 按顺序假设覆盖绝大多数场景。
+ */
+function applyCloudEpisodeProgress(id: number, epStatus: unknown) {
+  const library = useLibraryStore();
+  const n = Math.max(0, Math.min(2000, Math.floor(Number(epStatus) || 0)));
+  for (let e = 1; e <= n; e++) library.markEpisode(id, e);
+}
+
 export interface PullResult {
   imported: number;
   skipped: number;
@@ -277,10 +315,11 @@ export interface PullResult {
 }
 
 /**
- * 从 Bangumi 拉收藏并导入本地追番库（覆盖本地同 ID 条目的状态/观看集数）。
+ * 从 Bangumi 拉收藏并导入本地追番库（状态以云端为准，观看集数取并集）。
  * 仅导入类型 1 想看 / 3 在看 / 2 看过 的动画条目。
  * 需求：无论 AniCh 是否有资源都添加至追番库 —— 未匹配到 AniCh 条目时
  * 用 Bangumi 数据入库（负数占位 id + bgmOnly 标记），详情页打开时惰性重试匹配。
+ * 同时导入云端观看集数进度（ep_status），未同步/无资源番剧也能显示进度。
  */
 export async function pullAll(onProgress?: (p: SyncProgress) => void): Promise<PullResult> {
   const library = useLibraryStore();
@@ -299,30 +338,84 @@ export async function pullAll(onProgress?: (p: SyncProgress) => void): Promise<P
     }
     try {
       const status = (bgm.BGM_TO_STATUS[Number(item.type)] ?? "watching") as TrackStatus;
-      // 反查 AniCh（优先中文名；再试原名）
-      let match: any = null;
-      for (const kw of [subject?.name_cn, subject?.name]) {
-        if (!kw) continue;
-        const res = await anichSearchFirst(kw, title);
-        if (res) {
-          match = res;
-          break;
-        }
-        await sleep(250);
-      }
-      if (match) {
-        // 有资源：正常入库并记录 bgmId（推送时免搜索）
+
+      // 快路径：本地已有该 Bangumi 条目的绑定（bgmId 直连）→ 不再搜索。
+      // 已绑定资源的条目只刷新收藏状态；bgmOnly 占位条目额外尝试缓存/搜索升级。
+      const existing = Object.values(library.entries).find((e) => e.bgmId === subject.id);
+      if (existing && !existing.bgmOnly) {
         library.addOrUpdate(
           {
-            id: match.id,
-            title: match.title,
-            image: match.image,
-            tagline: match.tagline,
-            totalEpisodes: match.totalEpisodes,
+            id: existing.id,
+            title: existing.title,
+            image: existing.image,
+            tagline: existing.tagline,
+            totalEpisodes: existing.totalEpisodes,
             bgmId: subject.id,
           },
           status
         );
+        applyCloudEpisodeProgress(existing.id, item.ep_status);
+        result.imported++;
+        continue;
+      }
+
+      // 反查 AniCh：优先缓存，未命中或失败超窗口才真实搜索
+      const map = loadPullMap();
+      const cached = map[String(subject.id)];
+      const cacheUsable =
+        !!cached &&
+        (!!cached.anichId || (cached.failed === true && Date.now() - cached.at < PULL_RETRY_MS));
+      let match: any = null;
+      if (cacheUsable && cached!.anichId) {
+        match = {
+          id: cached!.anichId,
+          title: cached!.title,
+          image: cached!.image,
+          tagline: cached!.tagline,
+          totalEpisodes: cached!.totalEpisodes,
+        };
+      } else if (!cacheUsable) {
+        for (const kw of [subject?.name_cn, subject?.name]) {
+          if (!kw) continue;
+          const res = await anichSearchFirst(kw, title);
+          if (res) {
+            match = res;
+            break;
+          }
+          await sleep(250);
+        }
+        map[String(subject.id)] = match
+          ? {
+              anichId: match.id,
+              title: match.title,
+              image: match.image,
+              tagline: match.tagline,
+              totalEpisodes: match.totalEpisodes,
+              at: Date.now(),
+            }
+          : { failed: true, at: Date.now() };
+        savePullMap(map);
+      }
+
+      if (match) {
+        if (existing?.bgmOnly) {
+          // 惰性重试命中：bgmOnly 占位条目升级为真实 AniCh 条目（合并观看记录）
+          library.upgradeBgmOnly(existing.id, match);
+          applyCloudEpisodeProgress(match.id, item.ep_status);
+        } else {
+          library.addOrUpdate(
+            {
+              id: match.id,
+              title: match.title,
+              image: match.image,
+              tagline: match.tagline,
+              totalEpisodes: match.totalEpisodes,
+              bgmId: subject.id,
+            },
+            status
+          );
+          applyCloudEpisodeProgress(match.id, item.ep_status);
+        }
         result.imported++;
         await sleep(300);
       } else {
@@ -339,6 +432,7 @@ export async function pullAll(onProgress?: (p: SyncProgress) => void): Promise<P
           },
           status
         );
+        applyCloudEpisodeProgress(-subject.id, item.ep_status);
         result.imported++;
       }
     } catch (e: any) {
