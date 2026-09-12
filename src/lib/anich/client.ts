@@ -49,10 +49,61 @@ function isTauri(): boolean {
     ("__TAURI_INTERNALS__" in window || "__TAURI__" in window);
 }
 
-const ANICH_BASE_URL = "https://anich.sends.eu.org".replace(/\/$/, "");
+// Base URL is MUTABLE: runtime self-healing (GET /check/api) can switch it
+// when the upstream rotates domains (see refreshRuntimeConfig below).
+let ANICH_BASE_URL = "https://anich.sends.eu.org".replace(/\/$/, "");
+/** Fallback config URL used when the main site is unreachable (per SDK v2). */
+const RUNTIME_CONFIG_FALLBACK = "https://ani.emmmm.eu.org/go";
 const PROXY_BASE = (
   (import.meta as any).env?.VITE_ANICH_PROXY ?? "http://localhost:3000/api/anich"
 ).replace(/\/$/, "");
+
+export interface RuntimeConfig {
+  baseUrl?: string;
+  apis?: string[];
+  bilibiliApiUrl?: string;
+  qqVideoApiUrl?: string;
+  dandanApiUrl?: string;
+  [k: string]: unknown;
+}
+
+let runtimeConfigFetched = false;
+let runtimeConfigLastAt = 0;
+
+/**
+ * Domain self-healing (GET /check/api, unlocked per SDK docs):
+ * the upstream rotates domains, so on startup (and every 30 min) we fetch the
+ * latest config and switch the base URL if the server reports a new one.
+ * Main site first; on failure fall back to the hardcoded config URL.
+ * Fully silent — never throws.
+ */
+export async function refreshRuntimeConfig(force = false): Promise<void> {
+  const now = Date.now();
+  if (!force && runtimeConfigFetched && now - runtimeConfigLastAt < 30 * 60 * 1000) return;
+  runtimeConfigFetched = true; // prevent concurrent double-fetch loops
+  runtimeConfigLastAt = now;
+  const candidates = [
+    ANICH_BASE_URL + "/check/api",
+    RUNTIME_CONFIG_FALLBACK,
+  ];
+  for (const url of candidates) {
+    try {
+      const result = await invoke<{ status: number; ok: boolean; body: number[] }>("anich_fetch", {
+        args: { url, headers: { Accept: "application/json" } },
+      });
+      if (!result.ok) continue;
+      const cfg = JSON.parse(new TextDecoder().decode(new Uint8Array(result.body))) as RuntimeConfig;
+      const next = (cfg.baseUrl || cfg.apis?.[0] || "").replace(/\/$/, "");
+      if (next && next.startsWith("http") && next !== ANICH_BASE_URL) {
+        console.log(`[AiKF] runtime config: switching base ${ANICH_BASE_URL} -> ${next}`);
+        ANICH_BASE_URL = next;
+      }
+      return;
+    } catch {
+      /* try next candidate */
+    }
+  }
+}
 
 export class AnichAPIError extends Error {
   status: number;
@@ -181,6 +232,78 @@ export async function getBangumiDetail(id: number): Promise<BangumiDetail> {
 export async function getBangumiCalendar(): Promise<BangumiCalendar> {
   if (isTauri()) return fetchJSON<BangumiCalendar>("/bangumi/calendar");
   return proxyGet("/calendar");
+}
+
+/* ── 1.5.24 新增的无鉴权接口（推荐 / 联想 / 热榜 / 公告） ── */
+
+export interface RecommendCarouselItem {
+  id: number;
+  title: string;
+  image: string;
+  type?: string;
+  overview?: string;
+}
+export interface RecommendSection {
+  title: string;
+  list: Array<{ id: number; title: string; image: string; tagline?: string; episode?: number; episodes_total?: number; status?: string }>;
+}
+export interface Recommend {
+  carousel: RecommendCarouselItem[];
+  data: RecommendSection[];
+}
+
+/** 首页官方推荐（轮播 + 分区，≈40KB）。 */
+export async function getRecommend(): Promise<Recommend> {
+  if (isTauri()) return fetchJSON<Recommend>("/bangumi/recommend");
+  return proxyGet("/recommend");
+}
+
+export interface AutocompleteItem {
+  id: number;
+  title: string;
+  date: number;
+  lang: string;
+  type: string;
+}
+
+/** 搜索输入联想。 */
+export async function getAutocomplete(keyword: string): Promise<AutocompleteItem[]> {
+  if (!keyword.trim()) return [];
+  if (isTauri()) {
+    const env = await fetchJSON<{ data?: AutocompleteItem[] }>("/bangumi/autocomplete", { keyword });
+    return env.data ?? [];
+  }
+  return proxyGet(`/autocomplete?keyword=${encodeURIComponent(keyword)}`);
+}
+
+export interface SearchTrend {
+  value: string;
+  count: number;
+  date: number;
+}
+
+/** 全站搜索热榜（真实热搜数据）。 */
+export async function getSearchTrends(): Promise<SearchTrend[]> {
+  if (isTauri()) {
+    const env = await fetchJSON<{ data?: SearchTrend[] }>("/bangumi/search_trends");
+    return env.data ?? [];
+  }
+  return proxyGet("/search-trends");
+}
+
+export interface Notice {
+  version: number;
+  message: string;
+}
+
+/** 全站公告。失败静默（公告非关键路径）。 */
+export async function getNotice(): Promise<Notice | null> {
+  try {
+    if (isTauri()) return await fetchJSON<Notice>("/notice");
+    return await proxyGet<Notice>("/notice");
+  } catch {
+    return null;
+  }
 }
 
 export async function searchBangumi(keyword: string, skip = 0): Promise<{ items: any[]; prev: number; next: number }> {

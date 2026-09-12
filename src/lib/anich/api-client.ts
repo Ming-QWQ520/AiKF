@@ -24,9 +24,13 @@ import {
   getBangumiPersons,
   getBangumiRelated,
   getBangumiTags,
+  getAutocomplete,
   getCommentReplies,
   getEpisodes,
+  getNotice,
   getPlaybackSources,
+  getRecommend,
+  getSearchTrends,
   searchBangumi,
   getEpisodeComments,
   getEpisodeCommentCount,
@@ -70,6 +74,12 @@ export const anich = {
   // Danmaku — NOT cached (live data, may change between episodes/refreshes)
   danmaku: (bangumiID: number, episode: number) =>
     getAllDanmaku(bangumiID, episode),
+  // ── 无鉴权新接口（1.5.24）──
+  recommend: () => withCache("recommend", () => getRecommend()),
+  autocomplete: (keyword: string) =>
+    withCache(k("ac", keyword), () => getAutocomplete(keyword)),
+  searchTrends: () => withCache("trends", () => getSearchTrends()),
+  notice: () => getNotice(),
 };
 
 export type {

@@ -9,6 +9,7 @@ import { useLibraryStore } from "@/stores/library";
 import { useSettingsStore } from "@/stores/settings";
 import { registerGlobalUX } from "@/lib/global-ux";
 import { registerPreloadImg } from "@/lib/preload-img";
+import { refreshRuntimeConfig } from "@/lib/anich/client";
 import { AIKF_VERSION, AIKF_BUILD_TAG } from "@/lib/version";
 
 // Startup banner — makes the running build identifiable in the devtools
@@ -54,5 +55,10 @@ watch(() => settingsStore.data.language, (lang) => applyLocale(lang));
 registerGlobalUX(app);
 // Image preload directive (fetches ~300px before entering viewport).
 registerPreloadImg(app);
+
+// AniCh 域名自愈：启动 + 每 30 分钟拉 /check/api，上游轮换域名时自动切换
+// （静默失败，主站优先、固定配置 URL 兜底）。
+refreshRuntimeConfig().catch(() => {});
+setInterval(() => refreshRuntimeConfig().catch(() => {}), 30 * 60 * 1000);
 
 app.mount("#app");

@@ -19,12 +19,22 @@ import {
   Languages,
   Github,
   ExternalLink,
+  CloudCog,
+  LogIn,
+  LogOut,
+  CloudUpload,
+  CloudDownload,
+  Loader2,
+  Megaphone,
 } from "lucide-vue-next";
 import { useSettingsStore, type ThemeMode, type Language } from "@/stores/settings";
 import { LOCALE_OPTIONS } from "@/i18n";
 import { AIKF_VERSION } from "@/lib/version";
 import { cn } from "@/lib/utils";
 import ToggleSwitch from "@/components/ToggleSwitch.vue";
+import { useBangumi } from "@/lib/bangumi/useBangumi";
+import { anich } from "@/lib/anich/api-client";
+import { useAsync } from "@/composables/useAsync";
 
 const settings = useSettingsStore();
 const s = computed(() => settings.data);
@@ -123,6 +133,31 @@ const openExternalUrl = async (url: string) => {
     window.open(url, "_blank");
   }
 };
+
+// ── Bangumi 账号（云同步追番库）──
+const bgmCtx = useBangumi();
+const bgmBusy = computed(() => bgmCtx.busy.value !== "idle");
+const manualCode = ref("");
+const showManualCode = ref(false);
+
+const doBgmLogin = () => bgmCtx.login();
+const doBgmLoginManual = () => {
+  if (!manualCode.value.trim()) return;
+  bgmCtx.login(manualCode.value.trim());
+};
+
+// 公告（设置→关于；静默失败）
+const { data: noticeData } = useAsync(() => anich.notice(), { source: () => "notice" });
+
+// 同步结果文案（push/pull 结构不同，统一格式化）
+const bgmResultText = computed(() => {
+  const r = bgmCtx.lastResult.value as any;
+  if (!r) return "";
+  if (typeof r.pushed === "number") {
+    return t("settings.bgm.pushResult", { p: r.pushed, s: r.skipped, f: r.failed });
+  }
+  return t("settings.bgm.pullResult", { p: r.imported, s: r.skipped, f: r.failed });
+});
 </script>
 
 <template>
@@ -138,7 +173,123 @@ const openExternalUrl = async (url: string) => {
       </div>
     </div>
 
-    <!-- ─── Appearance（主题三态与搜索栏右侧切换按键实时同步）─── -->
+    <!-- ─── Bangumi 账号（云同步追番库）─── -->
+    <section class="surface mb-4 rounded-2xl p-5">
+      <h3 class="mb-4 flex items-center gap-2 text-sm font-semibold text-foreground">
+        <CloudCog class="h-4 w-4 text-primary" /> {{ $t('settings.bgm.title') }}
+      </h3>
+
+      <!-- 未登录 -->
+      <template v-if="!bgmCtx.loggedIn.value">
+        <p class="mb-4 text-[11px] text-muted-foreground">{{ $t('settings.bgm.loginHint') }}</p>
+        <div class="flex flex-wrap items-center gap-3">
+          <button
+            @click="doBgmLogin"
+            :disabled="bgmBusy"
+            class="state-layer flex items-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50"
+          >
+            <Loader2 v-if="bgmCtx.busy.value === 'login'" class="h-4 w-4 animate-spin" />
+            <LogIn v-else class="h-4 w-4" />
+            {{ $t('settings.bgm.login') }}
+          </button>
+          <button
+            @click="showManualCode = !showManualCode"
+            class="state-layer rounded-lg border border-border px-3 py-2.5 text-xs text-muted-foreground transition-colors hover:text-foreground"
+          >{{ $t('settings.bgm.manualToggle') }}</button>
+        </div>
+        <!-- 手动粘贴 code 兜底（redirect_uri 不匹配 / 回调监听被拦截时） -->
+        <div v-if="showManualCode" class="mt-3 rounded-xl border border-border p-3">
+          <p class="mb-2 text-[11px] text-muted-foreground">{{ $t('settings.bgm.manualHint') }}</p>
+          <div class="flex gap-2">
+            <input
+              v-model="manualCode"
+              :placeholder="$t('settings.bgm.manualPlaceholder')"
+              class="w-full rounded-lg border border-border bg-card px-3 py-2 text-xs text-foreground outline-none focus:border-primary/50"
+            />
+            <button
+              @click="doBgmLoginManual"
+              :disabled="bgmBusy || !manualCode.trim()"
+              class="state-layer shrink-0 rounded-lg bg-primary/10 px-4 py-2 text-xs font-medium text-primary transition-colors hover:bg-primary/15 disabled:opacity-50"
+            >{{ $t('settings.bgm.manualSubmit') }}</button>
+          </div>
+          <p class="mt-2 break-all font-mono text-[10px] text-muted-foreground/70">{{ $t('settings.bgm.callbackHint') }}</p>
+        </div>
+      </template>
+
+      <!-- 已登录 -->
+      <template v-else>
+        <div class="mb-4 flex items-center gap-3">
+          <img
+            v-if="bgmCtx.user.value?.avatar?.large"
+            :src="bgmCtx.user.value.avatar.large"
+            class="h-11 w-11 rounded-full object-cover ring-1 ring-border"
+            draggable="false"
+          />
+          <div class="min-w-0 flex-1">
+            <p class="text-sm font-medium text-foreground">{{ bgmCtx.user.value?.nickname || bgmCtx.user.value?.username || $t('settings.bgm.user') }}</p>
+            <p class="text-[11px] text-muted-foreground">Bangumi · ID {{ bgmCtx.session.value?.user?.id ?? '—' }}</p>
+          </div>
+          <button
+            @click="bgmCtx.logout()"
+            class="state-layer flex items-center gap-1.5 rounded-lg border border-border px-3 py-2 text-xs text-muted-foreground transition-colors hover:border-destructive/40 hover:text-destructive"
+          >
+            <LogOut class="h-3.5 w-3.5" /> {{ $t('settings.bgm.logout') }}
+          </button>
+        </div>
+
+        <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <button
+            @click="bgmCtx.push()"
+            :disabled="bgmBusy"
+            class="state-layer flex items-center gap-2.5 rounded-xl bg-muted px-4 py-3 text-left transition-colors hover:bg-accent disabled:opacity-50"
+          >
+            <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-sky-500/15 text-sky-500">
+              <Loader2 v-if="bgmCtx.busy.value === 'push'" class="h-4 w-4 animate-spin" />
+              <CloudUpload v-else class="h-4 w-4" />
+            </span>
+            <div class="min-w-0 flex-1">
+              <p class="text-xs font-semibold text-foreground">{{ $t('settings.bgm.push') }}</p>
+              <p class="truncate text-[10px] text-muted-foreground">{{ $t('settings.bgm.pushHint') }}</p>
+            </div>
+          </button>
+          <button
+            @click="bgmCtx.pull()"
+            :disabled="bgmBusy"
+            class="state-layer flex items-center gap-2.5 rounded-xl bg-muted px-4 py-3 text-left transition-colors hover:bg-accent disabled:opacity-50"
+          >
+            <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-emerald-500/15 text-emerald-500">
+              <Loader2 v-if="bgmCtx.busy.value === 'pull'" class="h-4 w-4 animate-spin" />
+              <CloudDownload v-else class="h-4 w-4" />
+            </span>
+            <div class="min-w-0 flex-1">
+              <p class="text-xs font-semibold text-foreground">{{ $t('settings.bgm.pull') }}</p>
+              <p class="truncate text-[10px] text-muted-foreground">{{ $t('settings.bgm.pullHint') }}</p>
+            </div>
+          </button>
+        </div>
+
+        <!-- 自动同步开关 -->
+        <div class="mt-3 flex items-center justify-between rounded-xl bg-muted/50 px-4 py-3">
+          <div>
+            <p class="text-sm font-medium text-foreground">{{ $t('settings.bgm.autoSync') }}</p>
+            <p class="text-[11px] text-muted-foreground">{{ $t('settings.bgm.autoSyncHint') }}</p>
+          </div>
+          <ToggleSwitch :on="s.bgmAutoSync" @toggle="settings.update('bgmAutoSync', !s.bgmAutoSync)" />
+        </div>
+      </template>
+
+      <!-- 进度 / 结果 / 错误 -->
+      <p v-if="bgmCtx.progress.value" class="mt-3 text-[11px] text-muted-foreground">
+        {{ $t('settings.bgm.progress', { d: bgmCtx.progress.value.done, t: bgmCtx.progress.value.total }) }}
+        <span v-if="bgmCtx.progress.value.current" class="ml-1">{{ bgmCtx.progress.value.current }}</span>
+      </p>
+      <p v-else-if="bgmCtx.lastResult.value" class="mt-3 text-[11px] text-emerald-500">
+        {{ bgmResultText }}
+      </p>
+      <p v-if="bgmCtx.lastError.value" class="mt-3 break-all text-[11px] text-destructive">{{ bgmCtx.lastError.value }}</p>
+    </section>
+
+    <!-- ─── 外观 ─── -->
     <section class="surface mb-4 rounded-2xl p-5">
       <h3 class="mb-4 flex items-center gap-2 text-sm font-semibold text-foreground">
         <Palette class="h-4 w-4 text-primary" /> {{ $t('settings.appearance') }}
@@ -326,6 +477,18 @@ const openExternalUrl = async (url: string) => {
         <div class="flex items-center justify-between">
           <span class="text-muted-foreground">{{ $t('settings.license') }}</span>
           <span class="font-medium text-foreground">AGPL-3.0</span>
+        </div>
+      </div>
+
+      <!-- 全站公告（AniCh /notice，无鉴权；隐藏空公告） -->
+      <div
+        v-if="noticeData?.message"
+        class="mt-3 flex items-start gap-2.5 rounded-xl bg-muted/60 px-4 py-3"
+      >
+        <Megaphone class="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" />
+        <div class="min-w-0 flex-1">
+          <p class="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">{{ $t('settings.notice') }}</p>
+          <p class="mt-0.5 break-words text-xs text-foreground/90">{{ noticeData.message }}</p>
         </div>
       </div>
 

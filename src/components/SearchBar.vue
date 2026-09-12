@@ -53,12 +53,13 @@ function clearHistory() {
   try { localStorage.removeItem(HISTORY_KEY); } catch {}
 }
 
-// ── 热门搜索（复用首页「热播榜」数据源，仅聚焦时拉取）──
-const { data: hotData, isFetching: hotFetching } = useAsync(() => anich.list({ type: "tv", skip: 0 }), {
+// ── 热门搜索（真实热搜榜 /bangumi/search_trends，无鉴权 1.5.24 新接口；
+//    此前为 list(type=tv) 模拟，现在换成官方真实热榜，仅聚焦时拉取）──
+const { data: trendData, isFetching: hotFetching } = useAsync(() => anich.searchTrends(), {
   enabled: focused,
-  source: () => "hot-terms",
+  source: () => "trends",
 });
-const hotTerms = computed(() => (hotData.value?.items ?? []).slice(0, 8).map((i) => String(i.title)));
+const hotTerms = computed(() => (trendData.value ?? []).slice(0, 8).map((t) => t.value));
 
 // 网络优化：仅在有实际关键词时才发起搜索请求 ——
 // 此前无 enabled 限制，应用每次启动都会白发一次空关键词搜索。
@@ -67,6 +68,14 @@ const { data, isFetching } = useAsync(() => anich.search(debounced.value), {
   enabled: computed(() => debounced.value.length > 0),
 });
 const results = computed(() => data.value?.items ?? []);
+
+// ── 输入联想（/bangumi/autocomplete，无鉴权新接口；≥2 字符触发）──
+const { data: acData, isFetching: acFetching } = useAsync(() => anich.autocomplete(debounced.value), {
+  source: debounced,
+  enabled: computed(() => debounced.value.length >= 2),
+});
+const acItems = computed(() => (acData.value ?? []).slice(0, 6));
+
 const showSuggest = computed(() => focused.value && debounced.value.length === 0);
 const showResults = computed(() => focused.value && debounced.value.length > 0);
 
@@ -171,6 +180,26 @@ const submit = (q: string) => {
       <div v-if="showResults" class="surface absolute z-50 mt-2 max-h-[60vh] w-full overflow-y-auto rounded-xl p-1.5 shadow-lg shadow-black/5 dark:shadow-black/40">
         <div v-if="results.length === 0 && !isFetching" class="px-3 py-6 text-center text-sm text-muted-foreground">
           {{ $t('searchBar.noResults', { q: debounced }) }}
+        </div>
+        <!-- 输入联想（官方 autocomplete 接口） -->
+        <div v-if="acItems.length > 0">
+          <div class="flex items-center gap-1.5 px-3 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground/70">
+            {{ $t('searchBar.suggest') }}
+            <Loader2 v-if="acFetching" class="h-3 w-3 animate-spin" />
+          </div>
+          <button
+            v-for="ac in acItems"
+            :key="`ac-${ac.id}`"
+            type="button"
+            @mousedown.prevent
+            @click="ui.openDetail(ac.id, ''), (focused = false)"
+            class="state-layer flex w-full items-center gap-2.5 rounded-lg px-3 py-1.5 text-left hover:bg-foreground/5"
+          >
+            <Search class="h-3 w-3 shrink-0 text-muted-foreground/60" />
+            <span class="min-w-0 flex-1 truncate text-xs text-foreground/90">{{ ac.title }}</span>
+            <span v-if="ac.type || ac.lang" class="shrink-0 rounded bg-muted px-1.5 py-0.5 text-[9px] text-muted-foreground">{{ [ac.type, ac.lang].filter(Boolean).join(' · ') }}</span>
+          </button>
+          <div v-if="results.length > 0" class="mx-3 my-1 border-t border-border/60" />
         </div>
         <button
           v-for="item in results"

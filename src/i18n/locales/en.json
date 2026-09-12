@@ -67,7 +67,8 @@
     "hot": "Trending",
     "hotLoading": "Loading trending searches…",
     "noResults": "No results for “{q}”",
-    "viewAll": "See all results for “{q}” →"
+    "viewAll": "See all results for “{q}” →",
+    "suggest": "Suggestions"
   },
   "search": {
     "title": "Search anime",
@@ -84,7 +85,8 @@
     "fresh": "New releases",
     "more": "See more →",
     "noAiringToday": "Nothing airing today",
-    "epN": "Ep. {n}"
+    "epN": "Ep. {n}",
+    "recommend": "Recommended"
   },
   "calendar": {
     "title": "Weekly schedule",
@@ -170,6 +172,16 @@
       "completed": "Completed",
       "onhold": "On hold",
       "dropped": "Dropped"
+    },
+    "bgm": {
+      "notLoggedIn": "Connect a Bangumi account to sync your library (status + progress) to the cloud",
+      "goLogin": "Sign in",
+      "loggedIn": "Connected: {name}",
+      "lastSync": "Last synced {time}",
+      "autoOn": "Auto sync on",
+      "syncing": "Syncing…",
+      "push": "Push to cloud",
+      "pull": "Restore from cloud"
     }
   },
   "cache": {
@@ -388,7 +400,29 @@
     "douyin": "Developer on Douyin",
     "douyinHandle": "{'@'}dev",
     "reset": "Reset settings",
-    "imageFilter": "Image"
+    "imageFilter": "Image",
+    "notice": "Notice",
+    "bgm": {
+      "title": "Bangumi Account · Cloud Sync",
+      "loginHint": "Sign in with your Bangumi account to sync your local library to Bangumi collections (status & episode progress), or restore collections from the cloud. Data lives in your Bangumi account.",
+      "login": "Sign in with Bangumi",
+      "manualToggle": "Paste code manually",
+      "manualHint": "If the browser callback didn't complete automatically, paste the full callback URL from your browser's address bar (or just the code= part) here.",
+      "manualPlaceholder": "Paste callback URL or code…",
+      "manualSubmit": "Finish sign-in",
+      "callbackHint": "Please set the callback URL in the Bangumi developer console to: http://localhost:27420/callback",
+      "user": "Bangumi user",
+      "logout": "Sign out",
+      "push": "Push to cloud",
+      "pushHint": "Local library → Bangumi collections",
+      "pull": "Restore from cloud",
+      "pullHint": "Bangumi collections → local library",
+      "autoSync": "Auto sync",
+      "autoSyncHint": "Automatically push library changes to Bangumi (~10s debounce)",
+      "progress": "Progress {d}/{t}",
+      "pushResult": "Pushed {p} · Skipped {s} (not on Bangumi) · Failed {f}",
+      "pullResult": "Imported {p} · Skipped {s} (no AniCh match) · Failed {f}"
+    }
   },
   "time": {
     "w0": "Sun",
@@ -422,5 +456,12 @@
     "errDandanNoEp": "DandanPlay found no matching episode",
     "errLocalDesktop": "Local danmaku requires the desktop app",
     "errLocalEmpty": "No cached danmaku locally"
+  },
+  "bgm": {
+    "error": {
+      "timeout": "Sign-in timed out (no authorization within 5 minutes)",
+      "authFailed": "Authorization failed: {msg}",
+      "tokenFail": "Token exchange failed (HTTP {status}). If it mentions redirect_uri mismatch, please set the callback URL in the Bangumi developer console to: {redirect}"
+    }
   }
 }

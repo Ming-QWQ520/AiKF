@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
-import { Flame, Clock, TrendingUp } from "lucide-vue-next";
+import { Flame, Clock, TrendingUp, Sparkles } from "lucide-vue-next";
 import { anich } from "@/lib/anich/api-client";
 import { useUIStore } from "@/stores/ui";
 import { useAsync } from "@/composables/useAsync";
@@ -15,6 +15,18 @@ const ui = useUIStore();
 const { data: latestData, isLoading: latestLoading } = useAsync(() => anich.latest(), { source: () => "latest" });
 const { data: calData, isLoading: calLoading } = useAsync(() => anich.calendar(), { source: () => "cal" });
 const { data: listData, isLoading: listLoading } = useAsync(() => anich.list({ type: "tv", skip: 0 }), { source: () => "list" });
+// 官方推荐（无鉴权 1.5.24 新接口：轮播带完整简介）
+const { data: recData, isLoading: recLoading } = useAsync(() => anich.recommend(), { source: () => "recommend" });
+
+// Carousel 0 — 官方推荐（官方运营位，轮播项带简介）
+const recSlides = computed(() =>
+  (recData.value?.carousel ?? []).slice(0, 6).map((s) => ({
+    id: s.id,
+    image: s.image,
+    title: s.title,
+    subtitle: s.overview || s.type || "",
+  }))
+);
 
 // Carousel 1 — 今日更新 (today's latest updates)
 const todaySlides = computed(() =>
@@ -58,6 +70,17 @@ const { containerRef: freshGridRef, style: freshGridStyle } = useResponsiveGrid(
 
 <template>
   <div class="mx-auto flex max-w-[1400px] flex-col gap-4 sm:gap-6">
+    <!-- ── Row 0: 官方推荐轮播（带简介的无鉴权 recommend 接口）── -->
+    <HeroCarousel
+      v-if="recSlides.length > 0 || recLoading"
+      :slides="recSlides"
+      :badge="$t('discover.recommend')"
+      :is-loading="recLoading"
+      @open="(id, cover) => ui.openDetail(id, cover)"
+    >
+      <template #badge-icon><Sparkles class="h-3 w-3" /></template>
+    </HeroCarousel>
+
     <!-- ── Row 1: today-updates carousel (left) + right sidebar (right) ── -->
     <div class="flex flex-col gap-4 lg:flex-row lg:gap-6">
       <HeroCarousel

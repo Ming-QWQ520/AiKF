@@ -67,6 +67,8 @@ export interface AppSettings {
   background: BackgroundSettings;
   /** 弹幕默认值 v2 迁移标记（1/4 屏 + 25% 透明度），仅用于一次性覆盖旧默认 */
   dmDefaultsV2?: boolean;
+  /** Bangumi 云同步：本地追番库变更后自动推送到 Bangumi 收藏（默认关） */
+  bgmAutoSync: boolean;
 }
 
 const STORAGE_KEY = "aikf-settings";
@@ -93,6 +95,8 @@ const DEFAULTS: AppSettings = {
     blur: 0,
     scale: 100,
   },
+  // Bangumi 云同步默认手动（避免未经用户同意上传收藏）
+  bgmAutoSync: false,
 };
 
 function load(): AppSettings {

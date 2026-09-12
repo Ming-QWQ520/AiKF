@@ -67,7 +67,8 @@
     "hot": "热门搜索",
     "hotLoading": "正在加载热门搜索…",
     "noResults": "没有找到 “{q}” 相关结果",
-    "viewAll": "查看全部 “{q}” 的结果 →"
+    "viewAll": "查看全部 “{q}” 的结果 →",
+    "suggest": "搜索联想"
   },
   "search": {
     "title": "搜索番剧",
@@ -84,7 +85,8 @@
     "fresh": "新番速递",
     "more": "查看更多 →",
     "noAiringToday": "本日暂无放送",
-    "epN": "第{n}话"
+    "epN": "第{n}话",
+    "recommend": "为你推荐"
   },
   "calendar": {
     "title": "每周放送时间表",
@@ -170,6 +172,16 @@
       "completed": "看过",
       "onhold": "搁置",
       "dropped": "弃番"
+    },
+    "bgm": {
+      "notLoggedIn": "连接 Bangumi 账号后可云同步追番库（收藏状态 + 观看进度）",
+      "goLogin": "去登录",
+      "loggedIn": "已连接：{name}",
+      "lastSync": "上次同步 {time}",
+      "autoOn": "自动同步已开启",
+      "syncing": "同步中…",
+      "push": "同步到云端",
+      "pull": "从云端恢复"
     }
   },
   "cache": {
@@ -388,7 +400,29 @@
     "douyin": "开发者抖音",
     "douyinHandle": "{'@'}开发者",
     "reset": "恢复默认设置",
-    "imageFilter": "图片"
+    "imageFilter": "图片",
+    "notice": "公告",
+    "bgm": {
+      "title": "Bangumi 账号 · 云同步",
+      "loginHint": "登录 Bangumi 账号后，可将本地追番库同步为 Bangumi 收藏（状态与观看进度），也能从云端恢复收藏到本地。数据保存在你的 Bangumi 账号中。",
+      "login": "登录 Bangumi 账号",
+      "manualToggle": "手动粘贴授权码",
+      "manualHint": "若浏览器未自动完成授权回调，可将授权完成后浏览器地址栏的完整链接（或其中的 code= 后内容）粘贴到这里。",
+      "manualPlaceholder": "粘贴回调地址或授权码…",
+      "manualSubmit": "完成登录",
+      "callbackHint": "请在 Bangumi 开发者后台将回调地址设置为：http://localhost:27420/callback",
+      "user": "Bangumi 用户",
+      "logout": "登出",
+      "push": "同步到云端",
+      "pushHint": "本地追番库 → Bangumi 收藏",
+      "pull": "从云端恢复",
+      "pullHint": "Bangumi 收藏 → 本地追番库",
+      "autoSync": "自动云同步",
+      "autoSyncHint": "追番库发生变更后自动推送到 Bangumi（约 10 秒延迟）",
+      "progress": "进度 {d}/{t}",
+      "pushResult": "已同步 {p} 条 · 跳过 {s}（Bangumi 未收录）· 失败 {f}",
+      "pullResult": "已导入 {p} 条 · 跳过 {s}（无对应片源）· 失败 {f}"
+    }
   },
   "time": {
     "w0": "周日",
@@ -422,5 +456,12 @@
     "errDandanNoEp": "弹弹未找到对应话次",
     "errLocalDesktop": "本地弹幕仅桌面端可用",
     "errLocalEmpty": "本地无缓存弹幕"
+  },
+  "bgm": {
+    "error": {
+      "timeout": "登录超时（5 分钟未完成授权）",
+      "authFailed": "授权失败: {msg}",
+      "tokenFail": "换取 token 失败（HTTP {status}）。若提示 redirect_uri 错误，请确认 Bangumi 开发者后台的回调地址已设置为 {redirect}"
+    }
   }
 }

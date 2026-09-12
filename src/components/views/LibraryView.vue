@@ -1,18 +1,28 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from "vue";
-import { Bookmark, Trash2, Play, CheckCircle2, Star, Library } from "lucide-vue-next";
+import { ref, computed, onMounted, watch } from "vue";
+import { Bookmark, Trash2, Play, CheckCircle2, Star, Library, CloudCog, CloudUpload, CloudDownload, Loader2 } from "lucide-vue-next";
 import { useLibraryStore, STATUS_I18N_KEYS, STATUS_ORDER, STATUS_STYLES, type TrackStatus } from "@/stores/library";
 import { useUIStore } from "@/stores/ui";
+import { useSettingsStore } from "@/stores/settings";
 import { anich } from "@/lib/anich/api-client";
+import { useBangumi } from "@/lib/bangumi/useBangumi";
 import SectionCard from "@/components/SectionCard.vue";
 import CoverImage from "@/components/CoverImage.vue";
 import { cn } from "@/lib/utils";
 
 const library = useLibraryStore();
 const ui = useUIStore();
+const settings = useSettingsStore();
 
 const filter = ref<TrackStatus | "all">("all");
 const confirmClear = ref(false);
+
+// ── Bangumi 云同步状态（登录/同步动作复用全局 composable）──
+const bgm = useBangumi();
+onMounted(() => {
+  // 拉取/刷新用户信息（未登录静默）
+  bgm.fetchMe();
+});
 
 // ── 旧数据自动修复：历史条目可能缺失 totalEpisodes（=0），导致追番库无法
 // 显示「已看 X / 总 Y 话 · Z%」，且主卡片进度条被误拉满。进入本页时后台
@@ -50,6 +60,19 @@ const doClear = () => {
     confirmClear.value = true;
   }
 };
+
+// ── 自动云同步：登录 + 开关开启时，追番库变更后 10s 防抖推送 ──
+let autoSyncTimer: ReturnType<typeof setTimeout> | undefined;
+watch(
+  () => library.list.map((e) => [e.id, e.status, e.currentEpisode, e.watchedEpisodes.length].join(":")).join("|"),
+  () => {
+    if (!bgm.loggedIn.value || !settings.data.bgmAutoSync) return;
+    if (autoSyncTimer) clearTimeout(autoSyncTimer);
+    autoSyncTimer = setTimeout(() => {
+      if (bgm.loggedIn.value && settings.data.bgmAutoSync) bgm.push();
+    }, 10_000);
+  }
+);
 </script>
 
 <template>
@@ -78,6 +101,34 @@ const doClear = () => {
             <span :class="cn('h-1.5 w-1.5 rounded-full', STATUS_STYLES[s].dot)" />
             {{ $t(STATUS_I18N_KEYS[s]) }} <span :class="filter === s ? 'opacity-70' : 'opacity-60'" class="text-[10px]">{{ counts[s] ?? 0 }}</span>
           </button>
+        </div>
+
+        <!-- ── Bangumi 云同步状态条 ── -->
+        <div class="flex flex-wrap items-center gap-2.5 rounded-xl bg-muted/50 px-3.5 py-2.5">
+          <CloudCog class="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+          <template v-if="!bgm.loggedIn.value">
+            <p class="min-w-0 flex-1 truncate text-[11px] text-muted-foreground">{{ $t('library.bgm.notLoggedIn') }}</p>
+            <button @click="ui.setView('settings')" class="state-layer flex shrink-0 items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-[11px] font-medium text-muted-foreground transition-colors hover:text-foreground">
+              <CloudCog class="h-3 w-3" /> {{ $t('library.bgm.goLogin') }}
+            </button>
+          </template>
+          <template v-else>
+            <img v-if="bgm.user.value?.avatar?.medium" :src="bgm.user.value.avatar.medium" class="h-5 w-5 shrink-0 rounded-full object-cover" draggable="false" />
+            <p class="min-w-0 flex-1 truncate text-[11px] text-muted-foreground">
+              {{ $t('library.bgm.loggedIn', { name: bgm.user.value?.nickname || 'Bangumi' }) }}
+              <span v-if="bgm.lastSyncAt.value"> · {{ $t('library.bgm.lastSync', { time: new Date(bgm.lastSyncAt.value).toLocaleString() }) }}</span>
+              <span v-if="settings.data.bgmAutoSync" class="ml-1 text-emerald-500">· {{ $t('library.bgm.autoOn') }}</span>
+            </p>
+            <span v-if="bgm.busy.value === 'push' || bgm.busy.value === 'pull'" class="flex shrink-0 items-center gap-1.5 text-[11px] text-muted-foreground">
+              <Loader2 class="h-3 w-3 animate-spin" /> {{ $t('library.bgm.syncing') }}
+            </span>
+            <button v-else @click="bgm.push()" :disabled="all.length === 0" class="state-layer flex shrink-0 items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-[11px] font-medium text-muted-foreground transition-colors hover:text-foreground disabled:opacity-50">
+              <CloudUpload class="h-3 w-3" /> {{ $t('library.bgm.push') }}
+            </button>
+            <button @click="bgm.pull()" :disabled="bgm.busy.value !== 'idle'" class="state-layer flex shrink-0 items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-[11px] font-medium text-muted-foreground transition-colors hover:text-foreground disabled:opacity-50">
+              <CloudDownload class="h-3 w-3" /> {{ $t('library.bgm.pull') }}
+            </button>
+          </template>
         </div>
       </div>
     </SectionCard>

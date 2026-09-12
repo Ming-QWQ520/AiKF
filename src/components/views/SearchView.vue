@@ -19,7 +19,9 @@ const { data, isLoading } = useAsync(() => anich.search(ui.searchQuery, 0), {
 });
 const items = computed(() => data.value?.items ?? []);
 
-const SUGGESTIONS = ["鬼灭之刃", "咒术回战", "间谍过家家", "葬送的芙莉莲", "进击的巨人", "海贼王", "名侦探柯南", "药屋少女"]; // i18n-skip: 作品名（专有名词）不翻译
+// 真实热搜榜（无鉴权 1.5.24 新接口；替换硬编码热词，静默失败）
+const { data: trendData } = useAsync(() => anich.searchTrends(), { source: () => "search-trends" });
+const hotList = computed(() => (trendData.value ?? []).slice(0, 8).map((t) => t.value));
 
 const submit = (val: string) => {
   const v = val.trim();
@@ -56,8 +58,9 @@ const submit = (val: string) => {
           <span class="flex items-center gap-1 text-xs text-muted-foreground">
             <TrendingUp class="h-3.5 w-3.5" /> {{ $t('searchBar.hot') }}
           </span>
-          <!-- i18n-skip: SUGGESTIONS 为作品名（专有名词），多语言下保持原样 -->
-          <button v-for="s in SUGGESTIONS" :key="s" @click="input = s; submit(s)" class="state-layer rounded-full bg-muted px-3 py-1.5 text-xs font-medium text-muted-foreground hover:bg-accent hover:text-foreground">{{ s }}</button>
+          <!-- 真实热搜榜（官方接口）；i18n-skip: 热词为用户输入内容，不翻译 -->
+          <button v-if="hotList.length === 0" type="button" class="rounded-full bg-muted px-3 py-1.5 text-xs text-muted-foreground/60">…</button>
+          <button v-for="s in hotList" :key="s" @click="input = s; submit(s)" class="state-layer max-w-[220px] truncate rounded-full bg-muted px-3 py-1.5 text-xs font-medium text-muted-foreground hover:bg-accent hover:text-foreground">{{ s }}</button>
         </div>
       </div>
     </SectionCard>
