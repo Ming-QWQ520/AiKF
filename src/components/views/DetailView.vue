@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { computed, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
-import { Play, Star, Heart, ChevronDown } from "lucide-vue-next";
+import { Play, Star, Heart, ChevronDown, Info } from "lucide-vue-next";
 import { anich } from "@/lib/anich/api-client";
+import { anichSearchFirst } from "@/lib/bangumi/sync";
 import { useUIStore } from "@/stores/ui";
 import { useLibraryStore, STATUS_I18N_KEYS, STATUS_ORDER, STATUS_STYLES, type TrackStatus } from "@/stores/library";
 import { useAsync } from "@/composables/useAsync";
@@ -14,11 +15,49 @@ const ui = useUIStore();
 const library = useLibraryStore();
 const { t, d } = useI18n();
 
-const idRef = computed(() => ui.detailId);
-const { data: detail, isLoading: detailLoading } = useAsync(() => anich.detail(idRef.value!), { enabled: idRef, source: idRef });
-const { data: episodes } = useAsync(() => anich.episodes(idRef.value!), { enabled: idRef, source: idRef });
-const { data: related } = useAsync(() => anich.related(idRef.value!), { enabled: idRef, source: idRef });
-const { data: characters } = useAsync(() => anich.characters(idRef.value!), { enabled: idRef, source: idRef });
+// ── bgmOnly 条目（云端导入、暂无 AniCh 资源，负数占位 id）──
+// 需求：无论是否有资源都添加至追番库。打开详情页时惰性重试 AniCh 匹配：
+// 命中则升级为真实条目（重新建键 + 摘除标记）并正常加载；
+// 未命中则展示提示（番剧仍在库中，资源上线后再次打开即可自动匹配）。
+const bgmOnlyEntry = computed(() => {
+  const id = ui.detailId;
+  if (id == null) return null;
+  const e = library.entries[id];
+  return e?.bgmOnly ? e : null;
+});
+const matchedAnichId = ref<number | null>(null);
+/** AniCh 条目 id：普通条目 = ui.detailId；bgmOnly = 惰性匹配结果（null 时不发起请求） */
+const anichId = computed<number | null>(() =>
+  bgmOnlyEntry.value ? matchedAnichId.value : ui.detailId
+);
+const bgmOnlyUnmatched = computed(() => !!bgmOnlyEntry.value && matchedAnichId.value == null);
+
+watch(
+  () => bgmOnlyEntry.value,
+  async (e) => {
+    matchedAnichId.value = null;
+    if (!e) return;
+    try {
+      const hit = await anichSearchFirst(e.title, e.title);
+      // 等待期间用户可能已切换详情页，校验仍是同一条目且仍是 bgmOnly
+      const cur = bgmOnlyEntry.value;
+      if (hit && cur && cur.id === e.id) {
+        library.upgradeBgmOnly(e.id, hit);
+        // 升级后条目不再是 bgmOnly，anichId 自动回落到 ui.detailId；
+        // 切换到真实 AniCh id 以加载详情/剧集
+        if (ui.detailId === e.id) ui.detailId = hit.id;
+      }
+    } catch {
+      /* 匹配失败保持未匹配状态，不阻断页面 */
+    }
+  },
+  { immediate: true }
+);
+
+const { data: detail, isLoading: detailLoading } = useAsync(() => anich.detail(anichId.value!), { enabled: anichId, source: anichId });
+const { data: episodes } = useAsync(() => anich.episodes(anichId.value!), { enabled: anichId, source: anichId });
+const { data: related } = useAsync(() => anich.related(anichId.value!), { enabled: anichId, source: anichId });
+const { data: characters } = useAsync(() => anich.characters(anichId.value!), { enabled: anichId, source: anichId });
 
 const entry = computed(() => (ui.detailId != null ? library.entries[ui.detailId] : undefined));
 const cover = computed(() => detail.value?.image || ui.detailCover);
@@ -115,12 +154,12 @@ watch(() => episodes.value, (eps) => {
 
 // ── Comments ──
 const { data: commentsData, isLoading: commentsLoading } = useAsync(
-  () => anich.comments(idRef.value!, 1, undefined),
-  { enabled: idRef, source: idRef }
+  () => anich.comments(anichId.value!, 1, undefined),
+  { enabled: anichId, source: anichId }
 );
 const { data: commentCountData } = useAsync(
-  () => anich.commentCount(idRef.value!, 1),
-  { enabled: idRef, source: idRef }
+  () => anich.commentCount(anichId.value!, 1),
+  { enabled: anichId, source: anichId }
 );
 const comments = computed(() => commentsData.value?.body?.data ?? []);
 const commentCount = computed(() => commentCountData.value?.body?.data ?? 0);
@@ -226,7 +265,7 @@ const closeStatusMenu = () => { statusMenuOpen.value = false; };
             <div class="space-y-3"><div class="h-7 w-3/4 rounded-lg shimmer" /><div class="h-4 w-1/2 rounded shimmer" /><div class="h-8 w-full rounded-lg shimmer" /></div>
           </template>
           <template v-else>
-            <h1 class="text-xl font-extrabold tracking-tight text-foreground sm:text-2xl">{{ detail?.title }}</h1>
+            <h1 class="text-xl font-extrabold tracking-tight text-foreground sm:text-2xl">{{ detail?.title || entry?.title }}</h1>
 
             <div class="mt-3 space-y-1 text-xs leading-relaxed text-foreground/85">
               <p><span class="text-muted-foreground">{{ $t('detail.metaTime') }}: </span>{{ fmtCnDate(detail?.airdate) }}</p>
@@ -285,6 +324,14 @@ const closeStatusMenu = () => { statusMenuOpen.value = false; };
         </div>
       </div>
     </section>
+
+    <!-- bgmOnly 未匹配提示：番剧已在库中，但 AniCh 暂无对应资源 -->
+    <div v-if="bgmOnlyUnmatched" class="mx-auto max-w-[1200px] px-4 pt-4 sm:px-6">
+      <div class="flex items-start gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-xs leading-relaxed text-amber-700 dark:text-amber-400">
+        <Info class="mt-0.5 h-4 w-4 shrink-0" />
+        <span>{{ $t('detail.bgmOnlyNoMatch') }}</span>
+      </div>
+    </div>
 
     <!-- ═══ Tab bar ═══ -->
     <div class="border-b border-border/70">

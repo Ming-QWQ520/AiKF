@@ -6,5 +6,5 @@
 - 若运行报错提示缺少 WebView2，请从微软官网下载安装：
   https://developer.microsoft.com/microsoft-edge/webview2/
 
-Build SHA: ca3117ac7208c9b19a49d93e22f42e9e3ca2b2f3
-Build Time: 2026-09-12 12:18:02 +00:00
+Build SHA: 5080af1294aeb115db182694ce6f7b8ae0cc264e
+Build Time: 2026-09-12 12:32:41 +00:00

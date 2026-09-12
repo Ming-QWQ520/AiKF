@@ -46,6 +46,10 @@ export interface LibraryEntry {
   updatedAt: number;
   // Playback progress: { [episode: number]: { time: number, duration: number } }
   playbackProgress?: Record<number, { time: number; duration: number }>;
+  /** 关联的 Bangumi 条目 ID（用于免搜索直接推送收藏；已匹配与 bgmOnly 条目均有） */
+  bgmId?: number;
+  /** 无 AniCh 资源：来自 Bangumi 导入、尚未匹配到 AniCh 条目（id 为负数占位，详情页打开时惰性重试匹配） */
+  bgmOnly?: boolean;
 }
 
 interface LibraryState {
@@ -133,6 +137,8 @@ export const useLibraryStore = defineStore("library", {
         image: string;
         tagline?: string;
         totalEpisodes?: number;
+        bgmId?: number;
+        bgmOnly?: boolean;
       },
       status: TrackStatus
     ) {
@@ -149,6 +155,8 @@ export const useLibraryStore = defineStore("library", {
             image: info.image || existing.image,
             tagline: info.tagline ?? existing.tagline,
             totalEpisodes: info.totalEpisodes ?? existing.totalEpisodes,
+            bgmId: info.bgmId ?? existing.bgmId,
+            bgmOnly: info.bgmOnly ?? existing.bgmOnly,
             updatedAt: now,
           }
         : {
@@ -163,8 +171,56 @@ export const useLibraryStore = defineStore("library", {
             score: 0,
             addedAt: now,
             updatedAt: now,
+            bgmId: info.bgmId,
+            bgmOnly: info.bgmOnly,
           };
       this.entries = { ...this.entries, [info.id]: entry };
+      this._persist();
+    },
+    /**
+     * bgmOnly 条目（负数占位 id）匹配到真实 AniCh 条目后升级：
+     * 重新建键为正数 id、摘除 bgmOnly 标记、记录 bgmId。
+     * 若库中已存在同 AniCh id 的条目则合并（保留原键，观看记录取并集）。
+     */
+    upgradeBgmOnly(
+      oldId: number,
+      hit: { id: number; title?: string; image?: string; tagline?: string; totalEpisodes?: number }
+    ) {
+      const bgmEntry = this.entries[oldId];
+      if (!bgmEntry?.bgmOnly) return;
+      const existing = hit.id > 0 ? this.entries[hit.id] : undefined;
+      const now = Date.now();
+      if (existing) {
+        // 已有同 AniCh 条目：合并观看记录/播放进度，状态以云端导入的为准
+        const merged: LibraryEntry = {
+          ...existing,
+          status: bgmEntry.status,
+          watchedEpisodes: Array.from(
+            new Set([...existing.watchedEpisodes, ...bgmEntry.watchedEpisodes])
+          ).sort((a, b) => a - b),
+          playbackProgress: { ...(bgmEntry.playbackProgress ?? {}), ...(existing.playbackProgress ?? {}) },
+          bgmId: existing.bgmId ?? bgmEntry.bgmId,
+          updatedAt: now,
+        };
+        const next = { ...this.entries };
+        delete next[oldId];
+        next[hit.id] = merged;
+        this.entries = next;
+      } else {
+        const { bgmOnly: _drop, ...rest } = bgmEntry;
+        const upgraded: LibraryEntry = {
+          ...rest,
+          id: hit.id,
+          title: hit.title || rest.title,
+          image: hit.image || rest.image,
+          tagline: hit.tagline ?? rest.tagline,
+          totalEpisodes: hit.totalEpisodes || rest.totalEpisodes,
+          updatedAt: now,
+        };
+        const next = { ...this.entries, [hit.id]: upgraded };
+        delete next[oldId];
+        this.entries = next;
+      }
       this._persist();
     },
     /**

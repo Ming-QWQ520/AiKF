@@ -67,6 +67,8 @@ function pickSubject(title: string, data: BgmSubject[]): BgmSubject | null {
 
 /** 查（并缓存）本地条目对应的 Bangumi 条目。匹配不到返回 null。 */
 export async function findSubjectFor(entry: LibraryEntry): Promise<BgmSubject | null> {
+  // 已知 Bangumi 条目 ID（云端导入的条目都带 bgmId）→ 免搜索直接用
+  if (entry.bgmId) return { id: entry.bgmId, name: entry.title };
   const map = loadMap();
   const hit = map[String(entry.id)];
   if (hit) {
@@ -183,6 +185,8 @@ export interface PullResult {
 /**
  * 从 Bangumi 拉收藏并导入本地追番库（覆盖本地同 ID 条目的状态/观看集数）。
  * 仅导入类型 1 想看 / 3 在看 / 2 看过 的动画条目。
+ * 需求：无论 AniCh 是否有资源都添加至追番库 —— 未匹配到 AniCh 条目时
+ * 用 Bangumi 数据入库（负数占位 id + bgmOnly 标记），详情页打开时惰性重试匹配。
  */
 export async function pullAll(onProgress?: (p: SyncProgress) => void): Promise<PullResult> {
   const library = useLibraryStore();
@@ -195,11 +199,12 @@ export async function pullAll(onProgress?: (p: SyncProgress) => void): Promise<P
     const subject = (item.subject ?? item) as BgmCollectionItem["subject"];
     const title = subject?.name_cn || subject?.name || "";
     onProgress?.({ done: i, total: valid.length, current: title });
-    if (!title) {
+    if (!title || !subject?.id) {
       result.skipped++;
       continue;
     }
     try {
+      const status = (bgm.BGM_TO_STATUS[Number(item.type)] ?? "watching") as TrackStatus;
       // 反查 AniCh（优先中文名；再试原名）
       let match: any = null;
       for (const kw of [subject?.name_cn, subject?.name]) {
@@ -211,17 +216,37 @@ export async function pullAll(onProgress?: (p: SyncProgress) => void): Promise<P
         }
         await sleep(250);
       }
-      if (!match) {
-        result.skipped++;
-        continue;
+      if (match) {
+        // 有资源：正常入库并记录 bgmId（推送时免搜索）
+        library.addOrUpdate(
+          {
+            id: match.id,
+            title: match.title,
+            image: match.image,
+            tagline: match.tagline,
+            totalEpisodes: match.totalEpisodes,
+            bgmId: subject.id,
+          },
+          status
+        );
+        result.imported++;
+        await sleep(300);
+      } else {
+        // 无匹配：仍添加至追番库（负数占位 id 避免与 AniCh id 空间冲突）
+        library.addOrUpdate(
+          {
+            id: -subject.id,
+            title,
+            image: subject.images?.large || subject.images?.common || subject.images?.medium || "",
+            tagline: subject.date || "",
+            totalEpisodes: subject.eps ?? 0,
+            bgmId: subject.id,
+            bgmOnly: true,
+          },
+          status
+        );
+        result.imported++;
       }
-      const status = (bgm.BGM_TO_STATUS[Number(item.type)] ?? "watching") as TrackStatus;
-      library.addOrUpdate(
-        { id: match.id, title: match.title, image: match.image, tagline: match.tagline, totalEpisodes: match.totalEpisodes },
-        status
-      );
-      result.imported++;
-      await sleep(300);
     } catch (e: any) {
       result.failed++;
       if (e instanceof bgm.BgmAPIError && e.status === 401) throw e;
@@ -232,7 +257,7 @@ export async function pullAll(onProgress?: (p: SyncProgress) => void): Promise<P
 }
 
 /** AniCh 搜索并选最佳匹配（标题归一化比对）。 */
-async function anichSearchFirst(keyword: string, expect: string): Promise<any | null> {
+export async function anichSearchFirst(keyword: string, expect: string): Promise<any | null> {
   const { anich } = await import("@/lib/anich/api-client");
   try {
     const res = await anich.search(keyword, 0);

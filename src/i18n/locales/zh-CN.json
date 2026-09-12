@@ -144,6 +144,7 @@
     "tags": "标签",
     "noOverview": "暂无简介",
     "noEpisodes": "暂无剧集",
+    "bgmOnlyNoMatch": "该番剧已加入追番库，但暂未收录播放资源；资源上线后打开详情页将自动匹配",
     "hasResource": "有资源",
     "noResource": "无资源",
     "noComments": "暂无评论",
@@ -420,7 +421,7 @@
       "pull": "从云端恢复",
       "pullHint": "Bangumi 收藏 → 本地追番库",
       "autoSync": "自动云同步",
-      "autoSyncHint": "追番库发生变更后自动推送到 Bangumi（约 10 秒延迟）",
+      "autoSyncHint": "追番库变更后自动推送到 Bangumi（约 10 秒延迟），登录成功后也会自动同步一次",
       "progress": "进度 {d}/{t}",
       "pushResult": "已同步 {p} 条 · 跳过 {s}（Bangumi 未收录）· 失败 {f}",
       "pullResult": "已导入 {p} 条 · 跳过 {s}（无对应片源）· 失败 {f}"

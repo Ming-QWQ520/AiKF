@@ -144,6 +144,7 @@
     "tags": "Tags",
     "noOverview": "No synopsis",
     "noEpisodes": "No episodes",
+    "bgmOnlyNoMatch": "Added to your library, but no streaming source is indexed yet. It will match automatically once available",
     "hasResource": "Available",
     "noResource": "No source",
     "noComments": "No comments",
@@ -420,7 +421,7 @@
       "pull": "Restore from cloud",
       "pullHint": "Bangumi collections → local library",
       "autoSync": "Auto sync",
-      "autoSyncHint": "Automatically push library changes to Bangumi (~10s debounce)",
+      "autoSyncHint": "Automatically push library changes to Bangumi (~10s debounce). Also syncs once right after login",
       "progress": "Progress {d}/{t}",
       "pushResult": "Pushed {p} · Skipped {s} (not on Bangumi) · Failed {f}",
       "pullResult": "Imported {p} · Skipped {s} (no AniCh match) · Failed {f}"

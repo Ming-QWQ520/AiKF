@@ -37,6 +37,8 @@ async function login(manualCode?: string) {
   } finally {
     busy.value = "idle";
   }
+  // 需求：授权登录成功后自动把本地追番库同步到 Bangumi（无需手动推送）
+  if (session.value) void push();
 }
 
 async function logout() {
