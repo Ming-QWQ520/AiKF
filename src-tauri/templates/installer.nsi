@@ -510,34 +510,41 @@ Function .onInit
   !insertmacro SetContext
 
   ${If} $INSTDIR == "${PLACEHOLDER_INSTALL_DIR}"
-    ; Set default install location
-    ; AiKF: default to "D:\${PRODUCTNAME}" whenever a D: drive is present.
-    ; Drive detection is deliberately redundant (GetLogicalDrives bit test AND
-    ; a readable drive root) so a real hard-disk partition always matches.
-    ; The previous-install-location restore is applied ONLY in the no-D-drive
-    ; fallback below, so it can never override the D:\AiKF default.
-    System::Call 'kernel32::GetLogicalDrives() i .r0'
-    IntOp $0 $0 & 8 ; bit 3 (value 8) => D: drive letter present
-    ${If} $0 <> 0
-    ${AndIf} ${FileExists} "D:\*.*"
-      StrCpy $INSTDIR "D:\${PRODUCTNAME}"
-    ${Else}
-      !if "${INSTALLMODE}" == "perMachine"
-        ${If} ${RunningX64}
-          !if "${ARCH}" == "x64"
-            StrCpy $INSTDIR "$PROGRAMFILES64\${PRODUCTNAME}"
-          !else if "${ARCH}" == "arm64"
-            StrCpy $INSTDIR "$PROGRAMFILES64\${PRODUCTNAME}"
-          !else
+    ; Set install location.
+    ; AiKF: restore the previously-recorded install location FIRST, so an
+    ; upgrade/reinstall always lands where the app actually lives (e.g.
+    ; "E:\${PRODUCTNAME}") and never relocates an existing install.
+    ; The D:\${PRODUCTNAME} default is applied ONLY to brand-new installs
+    ; (nothing recorded in the registry yet).
+    StrCpy $INSTDIR ""
+    Call RestorePreviousInstallLocation
+    ${If} $INSTDIR == ""
+      ; Brand-new install: default to "D:\${PRODUCTNAME}" whenever a D:
+      ; drive is present. Drive detection is deliberately redundant
+      ; (GetLogicalDrives bit test AND a readable drive root) so a real
+      ; hard-disk partition always matches.
+      System::Call 'kernel32::GetLogicalDrives() i .r0'
+      IntOp $0 $0 & 8 ; bit 3 (value 8) => D: drive letter present
+      ${If} $0 <> 0
+      ${AndIf} ${FileExists} "D:\*.*"
+        StrCpy $INSTDIR "D:\${PRODUCTNAME}"
+      ${Else}
+        !if "${INSTALLMODE}" == "perMachine"
+          ${If} ${RunningX64}
+            !if "${ARCH}" == "x64"
+              StrCpy $INSTDIR "$PROGRAMFILES64\${PRODUCTNAME}"
+            !else if "${ARCH}" == "arm64"
+              StrCpy $INSTDIR "$PROGRAMFILES64\${PRODUCTNAME}"
+            !else
+              StrCpy $INSTDIR "$PROGRAMFILES\${PRODUCTNAME}"
+            !endif
+          ${Else}
             StrCpy $INSTDIR "$PROGRAMFILES\${PRODUCTNAME}"
-          !endif
-        ${Else}
-          StrCpy $INSTDIR "$PROGRAMFILES\${PRODUCTNAME}"
-        ${EndIf}
-      !else if "${INSTALLMODE}" == "currentUser"
-        StrCpy $INSTDIR "$LOCALAPPDATA\${PRODUCTNAME}"
-      !endif
-      Call RestorePreviousInstallLocation
+          ${EndIf}
+        !else if "${INSTALLMODE}" == "currentUser"
+          StrCpy $INSTDIR "$LOCALAPPDATA\${PRODUCTNAME}"
+        !endif
+      ${EndIf}
     ${EndIf}
   ${EndIf}
 

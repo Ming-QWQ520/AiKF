@@ -118,10 +118,13 @@ jobs:
       - name: 🏗️ Build Tauri app (NSIS installer + portable exe)
         # bundle.targets=["nsis"] → NSIS setup.exe lands under
         # release/bundle/nsis/, while the raw .exe + any sidecar DLLs
-        # land directly under release/ for the portable zip.
+        # land directly under release/ for the portable artifact.
         run: pnpm tauri build --target x86_64-pc-windows-msvc
 
-      - name: 📦 Create portable zip archive
+      - name: 📦 Stage portable files
+        # NOTE: do NOT Compress-Archive here — GitHub Actions artifacts are
+        # always delivered as a single zip by upload-artifact itself. Zipping
+        # here produced a zip-inside-zip that users had to extract twice.
         shell: pwsh
         run: |
           $releaseDir = "src-tauri/target/x86_64-pc-windows-msvc/release"
@@ -154,16 +157,16 @@ jobs:
           Build Time: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss zzz')
           "@ | Out-File -FilePath "$stageDir/README.txt" -Encoding utf8
 
-          # Compress the staged folder into a single zip
-          Compress-Archive -Path "$stageDir/*" -DestinationPath "aikf-windows-portable.zip" -CompressionLevel Optimal
-          Write-Host "✅ Portable zip created: aikf-windows-portable.zip"
-          Get-ChildItem -Path "aikf-windows-portable.zip" | Select-Object Name, @{N='SizeMB';E={[math]::Round($_.Length/1MB,2)}}
+          Write-Host "✅ Portable stage ready (flat, no inner zip): $stageDir"
+          Get-ChildItem -Path $stageDir | Select-Object Name, @{N='SizeMB';E={[math]::Round($_.Length/1MB,2)}}
 
-      - name: 📤 Upload portable zip artifact
+      - name: 📤 Upload portable artifact
+        # Uploading the staged directory itself → the downloaded artifact zip
+        # contains AiKF.exe / *.dll / README.txt at its root (extract once).
         uses: actions/upload-artifact@v4
         with:
           name: aikf-windows-portable
-          path: aikf-windows-portable.zip
+          path: aikf-windows-portable/
           retention-days: 30
           if-no-files-found: error
 
