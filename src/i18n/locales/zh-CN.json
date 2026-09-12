@@ -33,7 +33,8 @@
       "en": "英语",
       "ko": "韩语",
       "other": "其他"
-    }
+    },
+    "backTop": "回到顶部"
   },
   "nav": {
     "discover": "发现",
@@ -150,7 +151,12 @@
     "rematchHint": "自动匹配可能张冠李戴：输入关键词搜索，点击正确条目即可重绑（观看记录 / 状态 / 评分 / Bangumi 关联全部保留）",
     "rematchPlaceholder": "输入关键词搜索…",
     "rematchSearch": "搜索",
-    "rematchEmpty": "未找到相关条目，可换个关键词再试"
+    "rematchEmpty": "未找到相关条目，可换个关键词再试",
+    "tabStaff": "制作",
+    "tabBgmRelated": "关联条目",
+    "noStaff": "暂无制作人员信息",
+    "staffOther": "其他职务",
+    "relatedOther": "其他关联"
   },
   "library": {
     "title": "我的追番库",
@@ -171,7 +177,10 @@
       "completed": "看过",
       "onhold": "搁置",
       "dropped": "弃番"
-    }
+    },
+    "epDetail": "集数明细",
+    "epWatched": "第 {n} 集 · 已看",
+    "epUnwatched": "第 {n} 集 · 未看"
   },
   "cache": {
     "title": "本地缓存",
@@ -447,5 +456,17 @@
       "authFailed": "授权失败: {msg}",
       "tokenFail": "换取 token 失败（HTTP {status}）。若提示 redirect_uri 错误，请确认 Bangumi 开发者后台的回调地址已设置为 {redirect}"
     }
+  },
+  "entity": {
+    "character": "角色",
+    "person": "制作人员",
+    "cv": "配音",
+    "gender": "性别",
+    "aka": "别名",
+    "summary": "简介",
+    "noSummary": "暂无简介",
+    "works": "关联作品",
+    "noWorks": "暂无关联作品",
+    "loadMore": "加载更多"
   }
 }

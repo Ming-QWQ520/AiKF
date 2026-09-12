@@ -1366,7 +1366,7 @@ const retestLatency = async () => {
           :class="cn('aikf-lock-btn', !artControlsVisible && 'aikf-float-hidden')"
           @click="lockPlayer"
           :aria-label="$t('player.lockAria')"
-          :title="$t('player.lock')"
+          v-tip="$t('player.lock')"
         >
           <Lock class="h-4 w-4" />
         </button>
@@ -1379,7 +1379,7 @@ const retestLatency = async () => {
           :class="cn('aikf-edge-toggle', !artControlsVisible && 'aikf-float-hidden')"
           @click="toggleSide"
           :aria-label="sideOpen ? $t('player.panelCollapse') : $t('player.panelExpand')"
-          :title="sideOpen ? $t('player.panelCollapse') : $t('player.panelExpand')"
+          v-tip="sideOpen ? $t('player.panelCollapse') : $t('player.panelExpand')"
         >
           <ChevronRight v-if="sideOpen" class="h-4 w-4" />
           <ChevronLeft v-else class="h-4 w-4" />
@@ -1391,7 +1391,7 @@ const retestLatency = async () => {
         <template v-if="playerLocked">
           <div class="aikf-lock-shield" @mousemove="bumpLockChrome" @click.stop @dblclick.stop @contextmenu.prevent.capture @wheel.stop />
           <div class="aikf-lock-top" :class="{ 'aikf-lock-top-show': lockChrome }" @mousemove="bumpLockChrome">
-            <button type="button" class="aikf-top-btn" @click="closePlayerBack" :aria-label="$t('common.back')" :title="$t('common.back')">
+            <button type="button" class="aikf-top-btn" @click="closePlayerBack" :aria-label="$t('common.back')" v-tip="$t('common.back')">
               <ArrowLeft class="h-4 w-4" />
             </button>
             <div class="aikf-top-titles">
@@ -1406,7 +1406,7 @@ const retestLatency = async () => {
             @mousemove="bumpLockChrome"
             @click="unlockPlayer"
             :aria-label="$t('player.unlockAria')"
-            :title="$t('player.unlock')"
+            v-tip="$t('player.unlock')"
           >
             <LockOpen class="h-4 w-4" />
           </button>
@@ -1423,12 +1423,12 @@ const retestLatency = async () => {
                 class="aikf-top-btn"
                 @click="closePlayerBack"
                 :aria-label="$t('common.back')"
-                :title="$t('common.back')"
+                v-tip="$t('common.back')"
               >
                 <ArrowLeft class="h-4 w-4" />
               </button>
               <div class="aikf-top-titles" data-tauri-drag-region>
-                <p class="aikf-top-title" data-tauri-drag-region :title="ui.player.title">{{ ui.player.title }}<span v-if="isLocal" class="aikf-local-tag">{{ $t('player.localTag') }}</span></p>
+                <p class="aikf-top-title" data-tauri-drag-region v-tip="ui.player.title">{{ ui.player.title }}<span v-if="isLocal" class="aikf-local-tag">{{ $t('player.localTag') }}</span></p>
                 <p class="aikf-top-sub" data-tauri-drag-region>
                   {{ $t('common.epN', { n: episode }) }}{{ currentEpisodeTitle ? ` ${currentEpisodeTitle}` : "" }}<template v-if="videoResolution"> ({{ videoResolution.width }}x{{ videoResolution.height }})</template>
                 </p>
@@ -1438,14 +1438,14 @@ const retestLatency = async () => {
               <!-- 真全屏/网页全屏时隐藏窗口控制键；
                    面板开合键已移至视频右缘中部（红圈位置），顶栏不再重复放置 -->
               <template v-if="isTauri && !artFullscreen && !artFullscreenWeb && !sideOpen">
-                <button type="button" class="aikf-top-btn" @click="winMinimize" :aria-label="$t('theme.minimize')" :title="$t('theme.minimize')">
+                <button type="button" class="aikf-top-btn" @click="winMinimize" :aria-label="$t('theme.minimize')" v-tip="$t('theme.minimize')">
                   <Minus class="h-4 w-4" />
                 </button>
-                <button type="button" class="aikf-top-btn" @click="winToggleMax" :aria-label="$t('theme.maximize')" :title="$t('theme.maximize')">
+                <button type="button" class="aikf-top-btn" @click="winToggleMax" :aria-label="$t('theme.maximize')" v-tip="$t('theme.maximize')">
                   <Square class="h-3.5 w-3.5" />
                 </button>
               </template>
-              <button v-if="!sideOpen" type="button" class="aikf-top-btn aikf-top-close" @click="closePlayerBack" :aria-label="$t('common.close')" :title="$t('common.close')">
+              <button v-if="!sideOpen" type="button" class="aikf-top-btn aikf-top-close" @click="closePlayerBack" :aria-label="$t('common.close')" v-tip="$t('common.close')">
                 <X class="h-4 w-4" />
               </button>
             </div>
@@ -1462,7 +1462,7 @@ const retestLatency = async () => {
                 :disabled="latencyTesting"
                 @click="retestLatency"
                 class="aikf-retest"
-                :title="$t('player.speedTestTitle')"
+                v-tip="$t('player.speedTestTitle')"
               >
                 <Loader2 v-if="latencyTesting" class="h-3 w-3 animate-spin" />
                 <Zap v-else class="h-3 w-3" />
@@ -1481,13 +1481,13 @@ const retestLatency = async () => {
                 <span class="aikf-line-texts">
                   <span class="aikf-line-title">
                     <span class="min-w-0 truncate">{{ rawLineName(s) }}</span>
-                    <span v-if="isAdkwaiSource(s.url)" class="aikf-pick-tag" :title="$t('player.speedTestTitle')">{{ $t('cache.preferred') }}</span>
+                    <span v-if="isAdkwaiSource(s.url)" class="aikf-pick-tag" v-tip="$t('player.speedTestTitle')">{{ $t('cache.preferred') }}</span>
                     <span v-if="i === effectiveIdx" class="aikf-cur-tag">{{ $t('cache.current') }}</span>
                   </span>
                   <span class="aikf-line-host">{{ sourceName(s.url) }}</span>
                 </span>
                 <span class="aikf-line-meta">
-                  <span class="aikf-chip aikf-chip-proto" :title="$t('player.protoTip', { p: sourceProtoLabel(s.url) })">{{ sourceProtoLabel(s.url) }}</span>
+                  <span class="aikf-chip aikf-chip-proto" v-tip="$t('player.protoTip', { p: sourceProtoLabel(s.url) })">{{ sourceProtoLabel(s.url) }}</span>
                   <span class="aikf-chip">{{ lineResOf(i) }}</span>
                   <span
                     v-if="sourceLatencies[i] !== undefined"
@@ -1663,10 +1663,10 @@ const retestLatency = async () => {
               <div class="aikf-panel-title aikf-panel-title-row">
                 <span>{{ $t('player.ctrlEpisodes') }}<template v-if="currentEpisodeTitle"> · {{ $t('common.epN', { n: episode }) }}</template></span>
                 <div class="flex items-center gap-0.5">
-                  <button type="button" class="aikf-side-btn" @click="expandSideFromPopup" :aria-label="$t('player.panelExpand')" :title="$t('player.viewInSide')">
+                  <button type="button" class="aikf-side-btn" @click="expandSideFromPopup" :aria-label="$t('player.panelExpand')" v-tip="$t('player.viewInSide')">
                     <PanelRightOpen class="h-3.5 w-3.5" />
                   </button>
-                  <button type="button" class="aikf-side-btn" @click="epPopupOpen = false" :aria-label="$t('player.closeEpisodes')" :title="$t('common.close')">
+                  <button type="button" class="aikf-side-btn" @click="epPopupOpen = false" :aria-label="$t('player.closeEpisodes')" v-tip="$t('common.close')">
                     <X class="h-3.5 w-3.5" />
                   </button>
                 </div>
@@ -1678,7 +1678,7 @@ const retestLatency = async () => {
                     :key="`pp${ep.key}`"
                     type="button"
                     class="aikf-epcard text-left"
-                    :title="ep.title ? $t('common.epNT', { n: ep.sort, t: ep.title }) : $t('common.epN', { n: ep.sort })"
+                    v-tip="ep.title ? $t('common.epNT', { n: ep.sort, t: ep.title }) : $t('common.epN', { n: ep.sort })"
                     @click="clickEpItem(ep)"
                   >
                     <span :class="cn('aikf-epcard-thumb', ep.playing && 'aikf-epcard-thumb-active', !ep.playable && 'opacity-55')">
@@ -1750,14 +1750,14 @@ const retestLatency = async () => {
             <!-- 窗口控制键：内嵌面板头右侧（参考图 1/2 的 — □ × 位置） -->
             <div class="flex flex-none items-center gap-0">
               <template v-if="isTauri && !artFullscreen && !artFullscreenWeb">
-                <button type="button" class="aikf-side-btn" @click="winMinimize" :aria-label="$t('theme.minimize')" :title="$t('theme.minimize')">
+                <button type="button" class="aikf-side-btn" @click="winMinimize" :aria-label="$t('theme.minimize')" v-tip="$t('theme.minimize')">
                   <Minus class="h-4 w-4" />
                 </button>
-                <button type="button" class="aikf-side-btn" @click="winToggleMax" :aria-label="$t('theme.maximize')" :title="$t('theme.maximize')">
+                <button type="button" class="aikf-side-btn" @click="winToggleMax" :aria-label="$t('theme.maximize')" v-tip="$t('theme.maximize')">
                   <Square class="h-3.5 w-3.5" />
                 </button>
               </template>
-              <button type="button" class="aikf-side-btn aikf-side-close" @click="closePlayerBack" :aria-label="$t('common.close')" :title="$t('common.close')">
+              <button type="button" class="aikf-side-btn aikf-side-close" @click="closePlayerBack" :aria-label="$t('common.close')" v-tip="$t('common.close')">
                 <X class="h-4 w-4" />
               </button>
             </div>
@@ -1767,7 +1767,7 @@ const retestLatency = async () => {
           <div class="flex shrink-0 items-center justify-between gap-2 border-b border-white/5 px-3 py-2">
             <div class="min-w-0">
               <button type="button" @click="openDetailPage" class="group flex min-w-0 max-w-full items-center gap-1.5 text-left">
-                <span class="min-w-0 truncate text-xs font-bold text-white transition-colors group-hover:text-primary" :title="ui.player.title">{{ ui.player.title || $t('player.unknownBangumi') }}</span>
+                <span class="min-w-0 truncate text-xs font-bold text-white transition-colors group-hover:text-primary" v-tip="ui.player.title">{{ ui.player.title || $t('player.unknownBangumi') }}</span>
                 <span class="shrink-0 text-[10px] text-white/35 transition-colors group-hover:text-primary">{{ $t('player.detailMore') }}</span>
               </button>
               <p class="mt-0.5 truncate text-[10px] text-white/45">
@@ -1779,7 +1779,7 @@ const retestLatency = async () => {
               @click="toggleFav"
               :class="cn('aikf-side-btn shrink-0', isFav && 'text-primary')"
               :aria-label="isFav ? $t('player.unfav') : $t('player.fav')"
-              :title="isFav ? $t('player.unfav') : $t('player.fav')"
+              v-tip="isFav ? $t('player.unfav') : $t('player.fav')"
             >
               <Heart :class="cn('h-4 w-4', isFav && 'fill-current')" />
             </button>
@@ -1862,13 +1862,13 @@ const retestLatency = async () => {
                           <span class="aikf-line-texts">
                             <span class="aikf-line-title">
                               <span class="min-w-0 truncate">{{ rawLineName(s) }}</span>
-                              <span v-if="isAdkwaiSource(s.url)" class="aikf-pick-tag" :title="$t('player.speedTestTitle')">{{ $t('cache.preferred') }}</span>
+                              <span v-if="isAdkwaiSource(s.url)" class="aikf-pick-tag" v-tip="$t('player.speedTestTitle')">{{ $t('cache.preferred') }}</span>
                               <span v-if="i === effectiveIdx" class="aikf-cur-tag">{{ $t('cache.current') }}</span>
                             </span>
                             <span class="aikf-line-host">{{ sourceName(s.url) }}</span>
                           </span>
                           <span class="aikf-line-meta">
-                            <span class="aikf-chip aikf-chip-proto" :title="$t('player.protoTip', { p: sourceProtoLabel(s.url) })">{{ sourceProtoLabel(s.url) }}</span>
+                            <span class="aikf-chip aikf-chip-proto" v-tip="$t('player.protoTip', { p: sourceProtoLabel(s.url) })">{{ sourceProtoLabel(s.url) }}</span>
                             <span class="aikf-chip">{{ lineResOf(i) }}</span>
                             <span
                               v-if="sourceLatencies[i] !== undefined"
@@ -1892,7 +1892,7 @@ const retestLatency = async () => {
                       <button
                         type="button"
                         class="flex-none text-[10px] text-white/35 transition-colors hover:text-white/70"
-                        :title="$t('player.refreshTitle')"
+                        v-tip="$t('player.refreshTitle')"
                         @click="refreshDanmaku"
                       >{{ $t('player.refresh') }}</button>
                     </div>
@@ -1908,7 +1908,7 @@ const retestLatency = async () => {
                           s.loaded && s.enabled && 'aikf-dm-row-on',
                           (!s.available || s.loading) && 'cursor-default opacity-60'
                         )"
-                        :title="s.error || (s.loaded ? (s.enabled ? $t('player.dmDisableHint') : $t('player.dmEnableHint')) : (s.available ? $t('player.dmLoadHint') : ''))"
+                        v-tip="s.error || (s.loaded ? (s.enabled ? $t('player.dmDisableHint') : $t('player.dmEnableHint')) : (s.available ? $t('player.dmLoadHint') : ''))"
                       >
                         <MessageSquare :class="cn('h-3.5 w-3.5 flex-none', s.loaded && s.enabled ? 'text-primary' : 'text-white/35')" />
                         <span class="min-w-0 flex-1 text-left">
@@ -1952,7 +1952,7 @@ const retestLatency = async () => {
                   :key="ep.key"
                   type="button"
                   class="aikf-epcard text-left"
-                  :title="ep.title ? $t('common.epNT', { n: ep.sort, t: ep.title }) : $t('common.epN', { n: ep.sort })"
+                  v-tip="ep.title ? $t('common.epNT', { n: ep.sort, t: ep.title }) : $t('common.epN', { n: ep.sort })"
                   @click="clickEpItem(ep)"
                 >
                   <span :class="cn('aikf-epcard-thumb', ep.playing && 'aikf-epcard-thumb-active', !ep.playable && 'opacity-55')">

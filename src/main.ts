@@ -10,6 +10,7 @@ import { useSettingsStore } from "@/stores/settings";
 import { setupAutoSync } from "@/lib/bangumi/auto-sync";
 import { autoPullOnBoot } from "@/lib/bangumi/useBangumi";
 import { registerGlobalUX } from "@/lib/global-ux";
+import { tipDirective } from "@/lib/tip";
 import { registerPreloadImg } from "@/lib/preload-img";
 import { initFileLogging, logInfo, logError } from "@/lib/logger";
 import { refreshRuntimeConfig } from "@/lib/anich/client";
@@ -69,6 +70,10 @@ watch(() => settingsStore.data.language, (lang) => applyLocale(lang));
 // Global UX: block web shortcuts + right-click (always on, not configurable),
 // spacebar scroll, img draggable=false.
 registerGlobalUX(app);
+
+// v-tip 全局气泡指令：统一所有 hover 提示为侧栏 NTooltip 同款深色气泡
+// （需求：替换原生 title 原生提示，见 src/lib/tip.ts）
+app.directive("tip", tipDirective);
 // Image preload directive (fetches ~300px before entering viewport).
 registerPreloadImg(app);
 

@@ -72,7 +72,7 @@ onMounted(() => {
       </div>
     </div>
     <div class="mt-2 px-0.5">
-      <h3 class="line-clamp-1 text-sm font-medium text-foreground" :title="title">{{ title }}</h3>
+      <h3 class="line-clamp-1 text-sm font-medium text-foreground" v-tip="title">{{ title }}</h3>
       <p v-if="latestName || tagline" class="mt-0.5 line-clamp-1 text-[11px] text-muted-foreground">{{ latestName || tagline }}</p>
       <p v-if="episodesTotal" class="mt-0.5 text-[10px] text-muted-foreground/70">{{ $t('common.totalEps', { n: episodesTotal }) }}</p>
     </div>

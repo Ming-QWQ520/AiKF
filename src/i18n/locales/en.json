@@ -33,7 +33,8 @@
       "en": "English",
       "ko": "Korean",
       "other": "Other"
-    }
+    },
+    "backTop": "Back to top"
   },
   "nav": {
     "discover": "Discover",
@@ -150,7 +151,12 @@
     "rematchHint": "Auto-matching can pick the wrong entry: search a keyword and click the correct item to rebind (watch progress / status / score / Bangumi link are all kept)",
     "rematchPlaceholder": "Type a keyword to search…",
     "rematchSearch": "Search",
-    "rematchEmpty": "No results — try another keyword"
+    "rematchEmpty": "No results — try another keyword",
+    "tabStaff": "Staff",
+    "tabBgmRelated": "Related",
+    "noStaff": "No staff information",
+    "staffOther": "Other roles",
+    "relatedOther": "Other relations"
   },
   "library": {
     "title": "My library",
@@ -171,7 +177,10 @@
       "completed": "Completed",
       "onhold": "On hold",
       "dropped": "Dropped"
-    }
+    },
+    "epDetail": "Episode detail",
+    "epWatched": "Ep {n} · watched",
+    "epUnwatched": "Ep {n} · not watched"
   },
   "cache": {
     "title": "Downloads",
@@ -447,5 +456,17 @@
       "authFailed": "Authorization failed: {msg}",
       "tokenFail": "Token exchange failed (HTTP {status}). If it mentions redirect_uri mismatch, please set the callback URL in the Bangumi developer console to: {redirect}"
     }
+  },
+  "entity": {
+    "character": "Character",
+    "person": "Staff",
+    "cv": "Voice Cast",
+    "gender": "Gender",
+    "aka": "Aliases",
+    "summary": "Introduction",
+    "noSummary": "No introduction yet",
+    "works": "Related Works",
+    "noWorks": "No related works",
+    "loadMore": "Load more"
   }
 }

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from "vue";
-import { Bookmark, Trash2, Play, CheckCircle2, Star, Library, CircleUserRound } from "lucide-vue-next";
+import { Bookmark, Trash2, Play, CheckCircle2, Star, Library, CircleUserRound, ChevronDown } from "lucide-vue-next";
 import { useLibraryStore, STATUS_I18N_KEYS, STATUS_ORDER, STATUS_STYLES, type TrackStatus } from "@/stores/library";
 import { useUIStore } from "@/stores/ui";
 import { anich } from "@/lib/anich/api-client";
@@ -55,6 +55,18 @@ const doClear = () => {
     confirmClear.value = true;
   }
 };
+
+// ── 集数明细（需求：观看过的集数不连续时，追番库提供逐集明细展示）──
+// 展开后显示全部集数芯片：已看=主色实底；点击芯片可切换已看/未看
+// （变更经 auto-sync 自动推送到 Bangumi，无需手动同步）。
+const epDetailExpanded = ref<Set<number>>(new Set());
+const toggleEpDetail = (id: number) => {
+  const s = new Set(epDetailExpanded.value);
+  if (s.has(id)) s.delete(id);
+  else s.add(id);
+  epDetailExpanded.value = s;
+};
+const isWatched = (entry: { watchedEpisodes: number[] }, n: number) => entry.watchedEpisodes.includes(n);
 // 注：云同步已全自动化 —— 每次修改约 3 秒后自动推送变更条目（auto-sync.ts），
 // 登录/启动时自动从云端拉取（useBangumi），页面不再提供任何手动同步按钮。</script>
 
@@ -78,7 +90,7 @@ const doClear = () => {
               v-if="bgm.loggedIn.value"
               @click="ui.setView('settings')"
               class="flex items-center gap-2 rounded-full bg-muted/60 py-1 pl-1 pr-3 transition-colors hover:bg-muted"
-              :title="$t('nav.me')"
+              v-tip="$t('nav.me')"
             >
               <img
                 v-if="bgm.user.value?.avatar?.medium"
@@ -163,6 +175,32 @@ const doClear = () => {
                         : 0}%`
                     }"
                   />
+                </div>
+
+                <!-- 集数明细（需求：观看集数不连续时提供逐集明细；点击芯片可切换已看/未看） -->
+                <div v-if="entry.totalEpisodes > 0" class="mt-1.5">
+                  <button
+                    @click="toggleEpDetail(entry.id)"
+                    class="flex items-center gap-1 rounded px-0.5 py-0.5 text-[11px] text-muted-foreground transition-colors hover:text-foreground"
+                  >
+                    <ChevronDown :class="cn('h-3 w-3 transition-transform duration-200', epDetailExpanded.has(entry.id) && 'rotate-180')" />
+                    {{ $t('library.epDetail') }}
+                    <span class="tabular-nums">{{ entry.watchedEpisodes.length }}/{{ entry.totalEpisodes }}</span>
+                  </button>
+                  <div v-if="epDetailExpanded.has(entry.id)" class="mt-1.5 flex max-h-[88px] flex-wrap gap-1 overflow-y-auto">
+                    <button
+                      v-for="n in entry.totalEpisodes"
+                      :key="n"
+                      @click="library.toggleEpisode(entry.id, n, entry.totalEpisodes)"
+                      :class="cn(
+                        'h-6 min-w-[26px] rounded-md px-1 text-[10px] font-semibold tabular-nums transition-colors',
+                        isWatched(entry, n)
+                          ? 'bg-primary text-primary-foreground'
+                          : 'bg-foreground/[0.06] text-muted-foreground hover:bg-foreground/10 hover:text-foreground'
+                      )"
+                      v-tip="isWatched(entry, n) ? $t('library.epWatched', { n }) : $t('library.epUnwatched', { n })"
+                    >{{ n }}</button>
+                  </div>
                 </div>
               </div>
 

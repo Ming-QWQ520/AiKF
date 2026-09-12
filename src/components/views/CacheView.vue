@@ -448,7 +448,7 @@ async function clearAllCompleted() {
             type="button"
             @click="cache.rescan()"
             class="state-layer flex items-center gap-1.5 rounded-lg border border-border px-3 py-2 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground"
-            :title="$t('cache.rebuildIndexTitle')"
+            v-tip="$t('cache.rebuildIndexTitle')"
           >
             <RefreshCw class="h-3.5 w-3.5" /> {{ $t('cache.rebuildIndex') }}
           </button>
@@ -561,7 +561,7 @@ async function clearAllCompleted() {
               type="button"
               @click="cancelAll(d.id)"
               class="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-destructive text-white shadow-sm transition-opacity hover:opacity-85"
-              :title="$t('cache.cancelAllTitle')"
+              v-tip="$t('cache.cancelAllTitle')"
             >
               <X class="h-4 w-4" />
             </button>
@@ -662,7 +662,7 @@ async function clearAllCompleted() {
                   type="button"
                   :disabled="cache.statusOf(entry.id, ep.sort).status === 'downloading'"
                   @click="toggleSelect(entry.id, ep.sort)"
-                  :title="`(${ep.sort}) ${ep.title}${cache.statusOf(entry.id, ep.sort).status === 'failed' ? ' · ' + cache.statusOf(entry.id, ep.sort).errorMsg : ''}`"
+                  v-tip="`(${ep.sort}) ${ep.title}${cache.statusOf(entry.id, ep.sort).status === 'failed' ? ' · ' + cache.statusOf(entry.id, ep.sort).errorMsg : ''}`"
                   :class="cn(
                     'group relative flex h-[52px] flex-col items-center justify-center overflow-hidden rounded-xl border transition-all',
                     cache.statusOf(entry.id, ep.sort).status === 'done'
@@ -738,7 +738,7 @@ async function clearAllCompleted() {
                     type="button"
                     @click.stop="toggleLineMenu(entry.id)"
                     class="flex items-center gap-1 rounded-md bg-foreground/[0.06] px-2 py-1 text-[11px] font-medium text-foreground transition-colors hover:bg-foreground/10"
-                    :title="$t('cache.node')"
+                    v-tip="$t('cache.node')"
                   >
                     <Network class="h-3 w-3 text-muted-foreground" />
                     {{ $t('cache.node') }}：{{ pickedLineName(entry.id) }}
@@ -800,7 +800,7 @@ async function clearAllCompleted() {
                 </span>
 
                 <!-- 需求：并发下载 = 同时缓存的集数（默认 3，最高 12），全部线路类型生效 -->
-                <span class="flex items-center gap-1 text-[11px] text-muted-foreground" :title="$t('cache.concurrencyTitle')">
+                <span class="flex items-center gap-1 text-[11px] text-muted-foreground" v-tip="$t('cache.concurrencyTitle')">
                   {{ $t('cache.concurrency') }}
                   <button type="button" @click="settings.setCacheMp4Threads(settings.data.cacheMp4Threads - 1)" class="flex h-5 w-5 items-center justify-center rounded bg-foreground/10 text-xs font-bold hover:bg-foreground/20">−</button>
                   <span class="w-5 text-center font-bold tabular-nums text-foreground">{{ settings.data.cacheMp4Threads }}</span>
@@ -892,7 +892,7 @@ async function clearAllCompleted() {
               type="button"
               @click.stop="cache.openDir(sanitizeName(b.title))"
               class="state-layer flex shrink-0 items-center gap-1.5 rounded-lg border border-border px-2.5 py-1.5 text-[11px] font-medium text-muted-foreground transition-colors hover:text-foreground"
-              :title="$t('cache.openFolderTitle')"
+              v-tip="$t('cache.openFolderTitle')"
             >
               <FolderOpen class="h-3.5 w-3.5" /> <span class="hidden sm:inline">{{ $t('cache.openFolder') }}</span>
             </button>
@@ -900,7 +900,7 @@ async function clearAllCompleted() {
               type="button"
               @click.stop="confirmDelete = `b:${b.id}`"
               class="state-layer flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
-              :title="$t('cache.deleteAllTitle')"
+              v-tip="$t('cache.deleteAllTitle')"
             >
               <Trash2 class="h-3.5 w-3.5" />
             </button>
@@ -956,7 +956,7 @@ async function clearAllCompleted() {
                 <p v-if="ep.status === 'downloading'" class="mt-0.5 text-[10px] tabular-nums text-primary">
                   {{ $t('cache.segments', { a: ep.segments_done, b: ep.segments_total || "…" }) }} · {{ formatBytes(cache.statusOf(b.id, ep.sort).bytes) }}<template v-if="cache.statusOf(b.id, ep.sort).bytesTotal > 0"> / {{ formatBytes(cache.statusOf(b.id, ep.sort).bytesTotal) }}</template> · {{ formatSpeed(cache.statusOf(b.id, ep.sort).speed) || "…" }}
                 </p>
-                <p v-else-if="ep.status === 'failed'" class="mt-0.5 truncate text-[10px] text-destructive/90" :title="ep.error">{{ ep.error || $t('cache.downloadFailed') }}</p>
+                <p v-else-if="ep.status === 'failed'" class="mt-0.5 truncate text-[10px] text-destructive/90" v-tip="ep.error">{{ ep.error || $t('cache.downloadFailed') }}</p>
                 <p v-else class="mt-0.5 text-[10px] text-muted-foreground">{{ $t('cache.cachedAt', { t: fmtDate(ep.cached_at) }) }}</p>
               </div>
 
@@ -964,7 +964,7 @@ async function clearAllCompleted() {
               <div class="flex shrink-0 flex-wrap items-center gap-1.5">
                 <span v-if="ep.kind" class="rounded px-1.5 py-0.5 text-[10px] font-semibold" :class="protoChipClass(ep.kind === 'mp4' ? 'MP4' : 'm3u8')">{{ ep.kind === "mp4" ? "MP4" : "m3u8" }}</span>
                 <span v-if="ep.resolution" class="rounded bg-muted px-1.5 py-0.5 text-[10px] font-semibold text-foreground/80">{{ ep.resolution }}</span>
-                <span v-if="ep.line_name" class="max-w-[120px] truncate rounded bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground" :title="ep.line_name">{{ ep.line_name }}</span>
+                <span v-if="ep.line_name" class="max-w-[120px] truncate rounded bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground" v-tip="ep.line_name">{{ ep.line_name }}</span>
                 <span v-if="ep.duration_sec" class="rounded bg-muted px-1.5 py-0.5 font-mono text-[10px] tabular-nums text-muted-foreground">{{ formatDuration(ep.duration_sec) }}</span>
                 <span v-if="ep.bytes" class="rounded bg-muted px-1.5 py-0.5 text-[10px] tabular-nums text-muted-foreground">{{ formatBytes(ep.bytes) }}</span>
                 <span v-if="ep.segments_total" class="rounded bg-muted px-1.5 py-0.5 text-[10px] tabular-nums text-muted-foreground">{{ $t('cache.segs', { a: ep.segments_done, b: ep.segments_total }) }}</span>

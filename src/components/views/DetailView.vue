@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { computed, ref, watch } from "vue";
+import { computed, ref, watch, onMounted, onBeforeUnmount, nextTick } from "vue";
 import { useI18n } from "vue-i18n";
-import { Play, Star, Heart, ChevronDown, Info, RefreshCw, Search as SearchIcon, X, Loader2 } from "lucide-vue-next";
+import { Play, Star, Heart, ChevronDown, ChevronUp, Info, RefreshCw, Search as SearchIcon, X, Loader2 } from "lucide-vue-next";
 import { anich } from "@/lib/anich/api-client";
 import { anichSearchFirst } from "@/lib/bangumi/sync";
 import { useUIStore } from "@/stores/ui";
@@ -9,6 +9,7 @@ import { useLibraryStore, STATUS_I18N_KEYS, STATUS_ORDER, STATUS_STYLES, type Tr
 import { useAsync } from "@/composables/useAsync";
 import { useResponsiveGrid } from "@/composables/useResponsiveGrid";
 import CoverImage from "@/components/CoverImage.vue";
+import BgmEntityDialog from "@/components/BgmEntityDialog.vue";
 import { cn } from "@/lib/utils";
 
 const ui = useUIStore();
@@ -59,6 +60,13 @@ const { data: episodes } = useAsync(() => anich.episodes(anichId.value!), { enab
 const { data: related } = useAsync(() => anich.related(anichId.value!), { enabled: anichId, source: anichId });
 const { data: characters } = useAsync(() => anich.characters(anichId.value!), { enabled: anichId, source: anichId });
 
+// ── 制作人员（需求：角色项右侧新增制作 Tab）——进入该 Tab 时才拉取 ──
+const staffTabActive = computed(() => activeTab.value === "staff");
+const { data: staff, isLoading: staffLoading } = useAsync(() => anich.persons(anichId.value!), {
+  enabled: computed(() => staffTabActive.value && anichId.value != null),
+  source: anichId,
+});
+
 const entry = computed(() => (ui.detailId != null ? library.entries[ui.detailId] : undefined));
 const cover = computed(() => detail.value?.image || ui.detailCover);
 const bestRating = computed(() => detail.value?.rating?.find((r) => r.score > 0));
@@ -68,14 +76,16 @@ const onCharImgError = (e: Event) => {
   (e.target as HTMLElement).style.opacity = "0";
 };
 
-// ── Tabs (reference app order: 详情 / 剧集 / 评论 / 角色 / 推荐) ──
-const activeTab = ref<"info" | "episodes" | "comments" | "characters" | "related">("info");
+// ── Tabs（需求：角色项右侧新增「制作」与「关联条目」，原「推荐」Tab 即关联条目
+// 数据源，合并升级为分组完整展示，避免两个 Tab 内容重复）──
+const activeTab = ref<"info" | "episodes" | "comments" | "characters" | "staff" | "bgmRelated">("info");
 const TABS = [
   { key: "info", labelKey: "detail.tabInfo" },
   { key: "episodes", labelKey: "detail.tabEpisodes" },
   { key: "comments", labelKey: "detail.tabComments" },
   { key: "characters", labelKey: "detail.tabCharacters" },
-  { key: "related", labelKey: "detail.tabRelated" },
+  { key: "staff", labelKey: "detail.tabStaff" },
+  { key: "bgmRelated", labelKey: "detail.tabBgmRelated" },
 ] as const;
 
 // ── Hero helpers ──
@@ -119,15 +129,47 @@ const { containerRef: epGridRef, style: epGridStyle } = useResponsiveGrid({
   gap: 14,
   trigger: () => `${episodes.value?.length ?? 0}-${activeTab.value === "episodes" ? 1 : 0}-${ui.sidebarCollapsed}`,
 });
-const { containerRef: relatedGridRef, style: relatedGridStyle } = useResponsiveGrid({
-  minWidth: 160,
-  gap: 12,
-  trigger: () => `${related.value?.length ?? 0}-${activeTab.value === "related" ? 1 : 0}-${ui.sidebarCollapsed}`,
-});
 const { containerRef: charGridRef, style: charGridStyle } = useResponsiveGrid({
   minWidth: 112,
   gap: 12,
   trigger: () => `${characters.value?.length ?? 0}-${ui.sidebarCollapsed}`,
+});
+
+// ── 制作人员按职务分组（保持首次出现顺序；一人多职务时在各组重复出现，与 Bangumi 网页一致）──
+const staffGroups = computed(() => {
+  const list = staff.value ?? [];
+  const groups: { job: string; people: any[] }[] = [];
+  const idx = new Map<string, number>();
+  for (const p of list) {
+    const jobs = String(p?.jobs || "")
+      .split(/[,，、;；]/)
+      .map((s) => s.trim())
+      .filter(Boolean);
+    for (const j of jobs.length ? jobs : ["—"]) {
+      if (!idx.has(j)) {
+        idx.set(j, groups.length);
+        groups.push({ job: j, people: [] });
+      }
+      groups[idx.get(j)!].people.push(p);
+    }
+  }
+  return groups;
+});
+
+// ── 关联条目按类型分组（续集/书籍/画集/联动/片头曲…，完整展示不再截断12条）──
+const relatedGroups = computed(() => {
+  const list = related.value ?? [];
+  const groups: { type: string; items: any[] }[] = [];
+  const idx = new Map<string, number>();
+  for (const it of list) {
+    const ty = String(it?.type || "").trim() || "—";
+    if (!idx.has(ty)) {
+      idx.set(ty, groups.length);
+      groups.push({ type: ty, items: [] });
+    }
+    groups[idx.get(ty)!].items.push(it);
+  }
+  return groups;
 });
 
 // ── Library metadata sync (unchanged behaviour) ──
@@ -238,6 +280,45 @@ const unfav = () => {
   statusMenuOpen.value = false;
 };
 const closeStatusMenu = () => { statusMenuOpen.value = false; };
+
+// ── 角色/制作人员详情弹窗（需求：角色/制作可点击查看详情）──
+const entity = ref<{ kind: "character" | "person"; id: number; name?: string; image?: string } | null>(null);
+const openEntity = (kind: "character" | "person", id: number, name?: string, image?: string) => {
+  if (id == null) return;
+  entity.value = { kind, id, name, image };
+};
+
+// ── 评论页回到顶部按键（需求：评论页面增加回到顶部）──
+const showBackTop = ref(false);
+let mainScroller: HTMLElement | null = null;
+let scrollerBound = false;
+const onMainScroll = () => {
+  showBackTop.value = (mainScroller?.scrollTop ?? 0) > 320;
+};
+const bindMainScroller = () => {
+  if (scrollerBound) return;
+  const el = document.querySelector("main");
+  if (!el) return;
+  mainScroller = el as HTMLElement;
+  mainScroller.addEventListener("scroll", onMainScroll, { passive: true });
+  scrollerBound = true;
+};
+onMounted(() => nextTick(bindMainScroller));
+watch(activeTab, (t) => {
+  if (t === "comments") {
+    nextTick(() => {
+      bindMainScroller();
+      onMainScroll();
+    });
+  }
+});
+onBeforeUnmount(() => {
+  mainScroller?.removeEventListener("scroll", onMainScroll);
+  mainScroller = null;
+});
+const backToTop = () => {
+  mainScroller?.scrollTo({ top: 0, behavior: "smooth" });
+};
 
 // ── 重新匹配 AniCh 资源（修复误匹配 / 补匹配 bgmOnly 条目）──
 // 自动匹配可能张冠李戴（同名不同季、译名差异），提供手动搜索重绑：
@@ -500,36 +581,105 @@ const applyRematch = (hit: any) => {
         </div>
       </div>
 
-      <!-- ── 角色 ── -->
+      <!-- ── 角色（需求：可点击查看详情）── -->
       <div v-else-if="activeTab === 'characters'">
         <div v-if="!characters || characters.length === 0" class="py-10 text-center text-sm text-muted-foreground">{{ $t('detail.noCharacters') }}</div>
         <div v-else ref="charGridRef" class="w-full overflow-hidden" :style="{ ...charGridStyle, contain: 'layout', maxWidth: '100%' }">
-          <div v-for="c in characters" :key="c.id" class="min-w-0 text-center">
-            <!-- 无边框：仅上半身截图 + 名称 + CV -->
-            <div class="aspect-square w-full overflow-hidden rounded-xl bg-muted">
+          <button
+            v-for="c in characters"
+            :key="c.id"
+            class="group min-w-0 text-center"
+            @click="openEntity('character', c.id, c.name, c.image)"
+            v-tip="c.name"
+          >
+            <!-- 无边框：仅上半身截图 + 名称 + CV；hover 高亮提示可点击 -->
+            <div class="aspect-square w-full overflow-hidden rounded-xl bg-muted ring-1 ring-transparent transition-shadow group-hover:ring-primary/40">
               <img :src="c.image" :alt="c.name" loading="lazy" class="h-full w-full object-cover object-top" @error="onCharImgError" />
             </div>
-            <p class="mt-1.5 line-clamp-1 text-xs font-medium text-foreground">{{ c.name }}</p>
+            <p class="mt-1.5 line-clamp-1 text-xs font-medium text-foreground transition-colors group-hover:text-primary">{{ c.name }}</p>
             <p v-if="c.actors[0]" class="line-clamp-1 text-[10px] text-muted-foreground">CV: {{ c.actors[0].name }}</p>
-          </div>
+          </button>
         </div>
       </div>
 
-      <!-- ── 推荐 ── -->
-      <div v-else-if="activeTab === 'related'">
+      <!-- ── 制作（需求：角色项右侧新增；数据 = AniCh 代理 Bangumi 制作人员，按职务分组）── -->
+      <div v-else-if="activeTab === 'staff'">
+        <div v-if="staffLoading" class="grid grid-cols-[repeat(auto-fill,minmax(96px,1fr))] gap-3">
+          <div v-for="i in 8" :key="i" class="aspect-square rounded-xl shimmer" />
+        </div>
+        <div v-else-if="staffGroups.length === 0" class="py-10 text-center text-sm text-muted-foreground">{{ $t('detail.noStaff') }}</div>
+        <div v-else class="space-y-5">
+          <section v-for="g in staffGroups" :key="g.job">
+            <h4 class="mb-2 flex items-center gap-2 text-sm font-bold text-foreground">
+              {{ g.job === '—' ? $t('detail.staffOther') : g.job }}
+              <span class="text-[10px] font-normal tabular-nums text-muted-foreground">{{ g.people.length }}</span>
+            </h4>
+            <div class="grid grid-cols-[repeat(auto-fill,minmax(96px,1fr))] gap-3">
+              <button
+                v-for="p in g.people"
+                :key="`${g.job}-${p.id}`"
+                class="group min-w-0 text-center"
+                @click="openEntity('person', p.id, p.name, p.image)"
+                v-tip="p.name"
+              >
+                <div class="aspect-square w-full overflow-hidden rounded-xl bg-muted ring-1 ring-transparent transition-shadow group-hover:ring-primary/40">
+                  <img
+                    v-if="p.image"
+                    :src="p.image"
+                    :alt="p.name"
+                    loading="lazy"
+                    class="h-full w-full object-cover object-top"
+                    draggable="false"
+                    @error="($event.target as HTMLElement).style.opacity = '0'"
+                  />
+                </div>
+                <p class="mt-1.5 line-clamp-1 text-xs font-medium text-foreground transition-colors group-hover:text-primary">{{ p.name }}</p>
+              </button>
+            </div>
+          </section>
+        </div>
+      </div>
+
+      <!-- ── 关联条目（需求：角色项右侧新增；原推荐 Tab 同数据源升级为完整分组展示，点击进入应用内详情）── -->
+      <div v-else-if="activeTab === 'bgmRelated'">
         <div v-if="!related || related.length === 0" class="py-10 text-center text-sm text-muted-foreground">{{ $t('detail.noRelated') }}</div>
-        <div v-else ref="relatedGridRef" class="w-full overflow-hidden" :style="{ ...relatedGridStyle, contain: 'layout', maxWidth: '100%' }">
-          <button v-for="item in related.slice(0, 12)" :key="item.id" @click="ui.openDetail(item.id, item.image)" class="group flex min-w-0 flex-col text-left">
-            <CoverImage :src="item.image" :alt="item.title" ratio="portrait" rounded="rounded-lg" class="transition-transform group-hover:scale-[1.03]" />
-            <p class="mt-1.5 line-clamp-1 text-xs font-medium text-foreground">{{ item.title }}</p>
-            <p v-if="item.type" class="text-[10px] text-muted-foreground">{{ item.type }}</p>
-          </button>
+        <div v-else class="space-y-5">
+          <section v-for="g in relatedGroups" :key="g.type">
+            <h4 class="mb-2 flex items-center gap-2 text-sm font-bold text-foreground">
+              {{ g.type === '—' ? $t('detail.relatedOther') : g.type }}
+              <span class="text-[10px] font-normal tabular-nums text-muted-foreground">{{ g.items.length }}</span>
+            </h4>
+            <div class="grid grid-cols-[repeat(auto-fill,minmax(120px,1fr))] gap-3">
+              <button
+                v-for="item in g.items"
+                :key="`${g.type}-${item.id}`"
+                @click="ui.openDetail(item.id, item.image)"
+                class="group flex min-w-0 flex-col text-left"
+                v-tip="item.title"
+              >
+                <CoverImage :src="item.image" :alt="item.title" ratio="portrait" rounded="rounded-lg" class="transition-transform group-hover:scale-[1.03]" />
+                <p class="mt-1.5 line-clamp-1 text-xs font-medium text-foreground transition-colors group-hover:text-primary">{{ item.title }}</p>
+                <p v-if="item.episodesTotal > 0" class="text-[10px] tabular-nums text-muted-foreground">{{ $t('detail.totalEps', { n: item.episodesTotal }) }}</p>
+              </button>
+            </div>
+          </section>
         </div>
       </div>
     </div>
 
     <!-- 状态菜单遮罩：点击空白处关闭 -->
     <div v-if="statusMenuOpen" class="fixed inset-0 z-20" @click="closeStatusMenu" />
+
+    <!-- ── 评论页回到顶部（需求：评论页面增加回到顶部按键）── -->
+    <button
+      v-if="activeTab === 'comments' && showBackTop"
+      @click="backToTop"
+      class="fixed bottom-24 right-6 z-40 flex h-10 w-10 items-center justify-center rounded-full border border-border bg-card text-muted-foreground shadow-lg shadow-black/10 transition-colors hover:text-foreground dark:shadow-black/50"
+      v-tip="$t('common.backTop')"
+      :aria-label="$t('common.backTop')"
+    >
+      <ChevronUp class="h-4.5 w-4.5" />
+    </button>
 
     <!-- ── 重新匹配弹窗：搜索 AniCh 并手动选择正确条目 ── -->
     <div v-if="rematchOpen" class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm" @click.self="closeRematch">
@@ -586,5 +736,15 @@ const applyRematch = (hit: any) => {
         </div>
       </div>
     </div>
+
+    <!-- ── 角色/制作人员详情弹窗（可点击查看详情）── -->
+    <BgmEntityDialog
+      v-if="entity"
+      :kind="entity.kind"
+      :id="entity.id"
+      :initial-name="entity.name"
+      :initial-image="entity.image"
+      @close="entity = null"
+    />
   </div>
 </template>

@@ -125,7 +125,7 @@ const submit = (q: string) => {
               @mousedown.prevent
               @click="clearHistory"
               class="flex items-center gap-1 text-[11px] text-muted-foreground/70 transition-colors hover:text-foreground"
-              :title="$t('searchBar.clearAllTitle')"
+              v-tip="$t('searchBar.clearAllTitle')"
             >
               <Trash2 class="h-3 w-3" /> {{ $t('searchBar.clearAll') }}
             </button>

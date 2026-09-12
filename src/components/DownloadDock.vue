@@ -108,7 +108,7 @@ const totalPct = computed(() =>
       </span>
       <span
         class="flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-foreground/10 hover:text-foreground"
-        :title="expanded ? $t('dock.collapse') : $t('dock.expand')"
+        v-tip="expanded ? $t('dock.collapse') : $t('dock.expand')"
       >
         <ChevronDown v-if="expanded" class="h-3.5 w-3.5" />
         <ChevronUp v-else class="h-3.5 w-3.5" />
@@ -121,13 +121,13 @@ const totalPct = computed(() =>
         v-for="d in items"
         :key="`dock${d.id}`"
         class="group flex cursor-pointer items-center gap-3 rounded-xl px-1.5 py-2 transition-colors hover:bg-foreground/[0.04]"
-        :title="$t('dock.viewCache')"
+        v-tip="$t('dock.viewCache')"
         @click="ui.setView('cache')"
       >
         <CoverImage :src="d.cover" :alt="d.title" ratio="portrait" class="h-[52px] w-9 shrink-0" rounded="rounded-md" />
         <div class="min-w-0 flex-1">
           <div class="flex items-center justify-between gap-2">
-            <p class="line-clamp-1 text-xs font-bold text-foreground" :title="d.title">{{ d.title }}</p>
+            <p class="line-clamp-1 text-xs font-bold text-foreground" v-tip="d.title">{{ d.title }}</p>
             <p class="flex flex-none items-center gap-1.5 text-[10px] tabular-nums text-muted-foreground">
               <span class="font-semibold text-emerald-500">{{ formatSpeed(d.speed) || $t('cache.connecting') }}</span>
               <span class="hidden sm:inline">{{ formatBytes(d.bytes) }}<template v-if="d.bytesTotal > 0"> / {{ formatBytes(d.bytesTotal) }}</template></span>
@@ -145,7 +145,7 @@ const totalPct = computed(() =>
         <button
           type="button"
           class="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
-          :title="$t('cache.cancelAllTitle')"
+          v-tip="$t('cache.cancelAllTitle')"
           @click.stop="cache.cancelDownload(d.id)"
         >
           <XCircle class="h-4 w-4" />

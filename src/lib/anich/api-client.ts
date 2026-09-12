@@ -2,11 +2,15 @@
 import type {
   BangumiCalendar,
   BangumiCharacterCredit,
+  BangumiCharacterDetail,
   BangumiDetail,
   BangumiList,
   BangumiListOptions,
   BangumiLatest,
   BangumiPersonCredit,
+  BangumiPersonDetail,
+  BangumiWorksPage,
+  BangumiWork,
   BangumiTag,
   Episode,
   BangumiRelatedItem,
@@ -18,10 +22,14 @@ import type {
 import {
   getBangumiCalendar,
   getBangumiCharacters,
+  getBangumiCharacter,
+  getBangumiCharacterWorks,
   getBangumiDetail,
   getBangumiLatest,
   getBangumiList,
   getBangumiPersons,
+  getBangumiPerson,
+  getBangumiPersonWorks,
   getBangumiRelated,
   getBangumiTags,
   getAutocomplete,
@@ -58,6 +66,15 @@ export const anich = {
   related: (id: number) => withCache(k("related", id), () => getBangumiRelated(id)),
   characters: (id: number) => withCache(k("characters", id), () => getBangumiCharacters(id)),
   persons: (id: number) => withCache(k("persons", id), () => getBangumiPersons(id)),
+  // ── 角色/制作人员详情与关联作品（需求：角色/制作/关联条目可点击查看详情）──
+  characterDetail: (id: number) =>
+    withCache(k("charDetail", id), () => getBangumiCharacter(id)),
+  personDetail: (id: number) =>
+    withCache(k("personDetail", id), () => getBangumiPerson(id)),
+  characterWorks: (id: number, skip = 0) =>
+    withCache(k("charWorks", id, skip), () => getBangumiCharacterWorks(id, skip)),
+  personWorks: (id: number, skip = 0) =>
+    withCache(k("personWorks", id, skip), () => getBangumiPersonWorks(id, skip)),
   vod: (id: number, episode: number) =>
     // VOD sources are NOT cached — playback URLs rotate and expire.
     getPlaybackSources(id, episode),
@@ -85,6 +102,10 @@ export const anich = {
 export type {
   BangumiCalendar,
   BangumiCharacterCredit,
+  BangumiCharacterDetail,
+  BangumiPersonDetail,
+  BangumiWorksPage,
+  BangumiWork,
   BangumiDetail,
   BangumiList,
   BangumiListOptions,
