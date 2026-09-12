@@ -27,6 +27,10 @@ export interface UseAsyncResult<T> {
  *
  * Includes automatic retry logic (default 2 retries with 1s delay) since the
  * Anich API is occasionally slow/flaky.
+ *
+ * 竞态保护（stale-response guard）：source 快速变化（如搜索连续输入）时，
+ * 旧请求的迟到响应会被直接丢弃，不会覆盖新请求的结果；
+ * loading 状态也只由最后一次 run 决定，避免闪烁。
  */
 export function useAsync<T>(
   factory: () => Promise<T>,
@@ -58,21 +62,29 @@ export function useAsync<T>(
     throw lastErr;
   };
 
+  // 单调递增的运行序号：只有最新一次 run 允许写 data/error/loading
+  let runSeq = 0;
+
   const run = async () => {
     if (!enabled.value) return;
+    const seq = ++runSeq;
     if (firstRun) isLoading.value = true;
     isFetching.value = true;
     try {
       const result = await runWithRetry();
+      if (seq !== runSeq) return; // stale response — newer run has started
       data.value = result as T;
       error.value = null;
     } catch (e) {
+      if (seq !== runSeq) return; // stale error — ignore
       error.value = e instanceof Error ? e : new Error(String(e));
       if (firstRun) data.value = null;
     } finally {
-      isLoading.value = false;
-      isFetching.value = false;
-      firstRun = false;
+      if (seq === runSeq) {
+        isLoading.value = false;
+        isFetching.value = false;
+        firstRun = false;
+      }
     }
   };
 

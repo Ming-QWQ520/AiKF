@@ -386,7 +386,7 @@
     "license": "开源协议",
     "repo": "项目仓库",
     "douyin": "开发者抖音",
-    "douyinHandle": "@开发者",
+    "douyinHandle": "{'@'}开发者",
     "reset": "恢复默认设置",
     "imageFilter": "图片"
   },

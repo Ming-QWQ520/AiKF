@@ -60,8 +60,11 @@ const { data: hotData, isFetching: hotFetching } = useAsync(() => anich.list({ t
 });
 const hotTerms = computed(() => (hotData.value?.items ?? []).slice(0, 8).map((i) => String(i.title)));
 
+// 网络优化：仅在有实际关键词时才发起搜索请求 ——
+// 此前无 enabled 限制，应用每次启动都会白发一次空关键词搜索。
 const { data, isFetching } = useAsync(() => anich.search(debounced.value), {
   source: debounced,
+  enabled: computed(() => debounced.value.length > 0),
 });
 const results = computed(() => data.value?.items ?? []);
 const showSuggest = computed(() => focused.value && debounced.value.length === 0);

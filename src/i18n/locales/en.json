@@ -386,7 +386,7 @@
     "license": "License",
     "repo": "Repository",
     "douyin": "Developer on Douyin",
-    "douyinHandle": "@dev",
+    "douyinHandle": "{'@'}dev",
     "reset": "Reset settings",
     "imageFilter": "Image"
   },

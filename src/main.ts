@@ -28,6 +28,12 @@ const app = createApp(App);
 const pinia = createPinia();
 app.use(pinia);
 
+// 全局错误兜底：组件渲染/生命周期抛错时记录可读日志（避免静默白屏难排查）。
+// 注意：不会恢复渲染，但 devtools/日志中会出现 [AiKF] 前缀的完整错误栈。
+app.config.errorHandler = (err, _instance, info) => {
+  console.error(`[AiKF] Vue error (${info}):`, err);
+};
+
 // Naive UI — registered globally so NButton, NIcon, NSlider etc. are
 // available inside the player & sidebar templates.
 app.use(naive);

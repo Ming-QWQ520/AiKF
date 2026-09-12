@@ -24,7 +24,9 @@ tauri-plugin-dialog = "2"
 tauri-plugin-fs = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-reqwest = { version = "0.12", default-features = false, features = ["rustls-tls-native-roots"] }
+# 网络优化：gzip/brotli 响应压缩（API 返回的 protobuf/JSON 体积大幅减小，
+# reqwest 自动附带 Accept-Encoding 并透明解压）；http2 启用 ALPN 多路复用。
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls-native-roots", "gzip", "brotli", "http2"] }
 tokio = { version = "1", features = ["time", "rt", "sync", "macros"] }
 
 [features]
