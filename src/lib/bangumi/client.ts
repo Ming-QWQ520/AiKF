@@ -3,15 +3,17 @@
  *
  * - 所有请求经 Rust `bgm_fetch` 命令发出（Bangumi 强制自定义 User-Agent，
  *   浏览器 fetch 无法覆盖 UA）。
- * - OAuth：打开系统浏览器授权 → Rust 本地回调服务器（127.0.0.1:27420）
- *   截获 code 并 emit `bgm-oauth-code` 事件 → 此处换 token 并持久化。
- * - 手动兜底：授权完成后浏览器会停在回调页，用户也可以把地址栏完整 URL
+ * - OAuth（RFC 8252）：打开系统浏览器授权 → bgm.tv 重定向到自定义协议
+ *   aikf://auth/callback → 系统拉起/唤醒 AiKF → Rust 校验 state 后 emit
+ *   `bgm-oauth-code` 事件 → 此处换 token 并持久化。
+ * - 手动兜底：若协议注册异常，用户也可以把浏览器地址栏完整 URL
  *   （或纯 code）粘贴进设置页的兜底输入框完成登录。
  */
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { i18n } from "@/i18n";
+import { logError, logInfo, logWarn } from "@/lib/logger";
 import type {
   BgmCollectionItem,
   BgmEpisode,
@@ -27,7 +29,8 @@ export type { BgmSession, BgmCollectionItem, BgmEpisode, BgmSearchResult, BgmUse
 // ── 应用凭据（Bangumi 开发者后台注册）──
 export const BGM_CLIENT_ID = "bgm71176aa5120285808";
 export const BGM_CLIENT_SECRET = "8c33136b712c777acc9e2cc4d3995d00";
-export const BGM_REDIRECT_URI = "http://localhost:27420/callback";
+/** 自定义协议回调地址（须与 Bangumi 开发者后台「回调地址」完全一致）。 */
+export const BGM_REDIRECT_URI = "aikf://auth/callback";
 const BGM_API = "https://api.bgm.tv";
 const BGM_OAUTH = "https://bgm.tv/oauth";
 const SESSION_KEY = "aikf:bgm-session";
@@ -85,7 +88,7 @@ export function logout() {
   userFetched = false;
 }
 
-/** 停止本地 OAuth 回调监听（登录取消/超时时调用）。 */
+/** 停止登录流程（清空 Rust 侧预期 state 与 pending code，取消/超时时调用）。 */
 export async function stopOAuth() {
   try {
     await invoke("bgm_oauth_stop");
@@ -141,9 +144,10 @@ async function ensureSession(): Promise<BgmSession | null> {
       user: s.user,
     };
     saveSession(next);
+    logInfo("bgm-auth", "token 已自动续期（refresh_token）"); // i18n-skip: 日志文案
     return next;
   } catch (e) {
-    console.warn("[AiKF] Bangumi token 刷新失败，需要重新登录:", e);
+    logWarn("bgm-auth", `token 刷新失败，需要重新登录: ${String(e)}`); // i18n-skip: 日志文案
     return s; // 仍返回旧会话，让请求 401 后走登出处理
   }
 }
@@ -165,13 +169,9 @@ async function api<T>(method: string, path: string, body?: unknown, retried = fa
 
 // ── OAuth 登录 ──
 
-export function buildAuthorizeUrl(): string {
-  const q = new URLSearchParams({
-    client_id: BGM_CLIENT_ID,
-    response_type: "code",
-    redirect_uri: BGM_REDIRECT_URI,
-  });
-  return `https://bgm.tv/oauth/authorize?${q.toString()}`;
+interface OauthStartResult {
+  authorize_url: string;
+  redirect_uri: string;
 }
 
 export interface LoginOptions {
@@ -181,7 +181,8 @@ export interface LoginOptions {
 
 /**
  * 完整登录流程：
- * 1. 启动本地回调服务器  2. 打开系统浏览器授权  3. 等待 code（或用 manualCode）
+ * 1. 优先取 pending 授权码（冷启动回调已就绪时直接登录）
+ * 2. 否则打开系统浏览器授权  3. 等待 code（事件 + 轮询兜底，或 manualCode）
  * 4. 换 token  5. 拉 /v0/me 存档。
  */
 export async function login(opts: LoginOptions = {}): Promise<BgmSession> {
@@ -195,33 +196,54 @@ export async function login(opts: LoginOptions = {}): Promise<BgmSession> {
   }
 
   if (!code) {
-    await invoke("bgm_oauth_start");
-    const url = buildAuthorizeUrl();
-    await openUrl(url);
-    code = await new Promise<string>((resolve, reject) => {
-      const timers: ReturnType<typeof setTimeout>[] = [];
-      const offs: UnlistenFn[] = [];
-      const cleanup = () => {
-        timers.forEach(clearTimeout);
-        offs.forEach((off) => off && off());
-      };
-      // 5 分钟未完成则放弃（同时停掉本地监听）
-      timers.push(
-        setTimeout(async () => {
+    // 冷启动场景：授权回调已把应用拉起、code 已在 pending 槽位 → 直接用
+    const pending = await invoke<string | null>("bgm_oauth_take_pending").catch(() => null);
+    if (pending) {
+      code = pending;
+      logInfo("bgm-auth", "命中 pending 授权码（冷启动/事件丢失兜底）"); // i18n-skip: 日志文案
+    } else {
+      const st = await invoke<OauthStartResult>("bgm_oauth_start");
+      logInfo("bgm-auth", `打开系统浏览器授权 → ${st.authorize_url}`); // i18n-skip: 日志文案
+      await openUrl(st.authorize_url);
+      code = await new Promise<string>((resolve, reject) => {
+        const timers: ReturnType<typeof setTimeout>[] = [];
+        const offs: UnlistenFn[] = [];
+        let poll: ReturnType<typeof setInterval> | undefined;
+        const cleanup = () => {
+          timers.forEach(clearTimeout);
+          offs.forEach((off) => off && off());
+          if (poll) clearInterval(poll);
+        };
+        // 5 分钟未完成则放弃（同时清空 Rust 侧 state/pending）
+        timers.push(
+          setTimeout(async () => {
+            cleanup();
+            await invoke("bgm_oauth_stop").catch(() => {});
+            reject(new BgmAPIError(i18n.global.t("bgm.error.timeout"), 0));
+          }, 5 * 60 * 1000)
+        );
+        listen<string>("bgm-oauth-code", (ev) => {
           cleanup();
-          await invoke("bgm_oauth_stop").catch(() => {});
-          reject(new BgmAPIError(i18n.global.t("bgm.error.timeout"), 0));
-        }, 5 * 60 * 1000)
-      );
-      listen<string>("bgm-oauth-code", (ev) => {
-        cleanup();
-        resolve(ev.payload);
-      }).then((off) => offs.push(off));
-      listen<string>("bgm-oauth-error", (ev) => {
-        cleanup();
-        reject(new BgmAPIError(i18n.global.t("bgm.error.authFailed", { msg: ev.payload }), 0));
-      }).then((off) => offs.push(off));
-    });
+          resolve(ev.payload);
+        }).then((off) => offs.push(off));
+        listen<string>("bgm-oauth-error", (ev) => {
+          cleanup();
+          reject(new BgmAPIError(i18n.global.t("bgm.error.authFailed", { msg: ev.payload }), 0));
+        }).then((off) => offs.push(off));
+        // 轮询兜底：协议拉起新实例时事件可能早于监听器就绪
+        poll = setInterval(async () => {
+          try {
+            const c = await invoke<string | null>("bgm_oauth_take_pending");
+            if (c) {
+              cleanup();
+              resolve(c);
+            }
+          } catch {
+            /* ignore */
+          }
+        }, 1500);
+      });
+    }
   }
 
   // 换 token
@@ -232,11 +254,13 @@ export async function login(opts: LoginOptions = {}): Promise<BgmSession> {
     code,
     redirect_uri: BGM_REDIRECT_URI,
   });
+  logInfo("bgm-auth", "授权码已获取，开始换取 token"); // i18n-skip: 日志文案
   const res = await rawRequest("POST", `${BGM_OAUTH}/access_token`, form.toString(), {
     "Content-Type": "application/x-www-form-urlencoded",
     Accept: "application/json",
   });
   if (!res.ok) {
+    logError("bgm-auth", `换 token 失败 HTTP ${res.status}: ${res.body.slice(0, 300)}`); // i18n-skip: 日志文案
     throw new BgmAPIError(
       i18n.global.t("bgm.error.tokenFail", { status: res.status, redirect: BGM_REDIRECT_URI }),
       res.status
@@ -258,7 +282,9 @@ export async function login(opts: LoginOptions = {}): Promise<BgmSession> {
     currentUser = me;
     userFetched = true;
     saveSession(session);
+    logInfo("bgm-auth", `登录完成：${me.nickname || me.username || me.id}`); // i18n-skip: 日志文案
   } catch {
+    logWarn("bgm-auth", "/v0/me 拉取失败（不阻断登录）"); // i18n-skip: 日志文案
     /* me 失败不阻断登录 */
   }
   return session;

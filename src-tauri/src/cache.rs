@@ -680,6 +680,7 @@ async fn download_episode_hls(
     let key = job_key(args.bangumi_id, ep.sort);
     let cancel = Arc::new(AtomicBool::new(false));
     register_cancel(&key, cancel.clone());
+    log::info!("[cache] 开始 HLS 分片下载 {} S{} · threads={}", args.title, ep.sort, threads);
 
     let root = match cache_root() {
         Ok(r) => r,
@@ -927,6 +928,7 @@ async fn download_episode_hls(
             }
         }
     });
+    log::info!("[cache] HLS 下载完成 {} S{} · {} 分片 · {} bytes", args.title, ep.sort, total, bytes);
     let _ = app.emit("cache-progress", ProgressEvent {
         bangumi_id: args.bangumi_id, sort: ep.sort, title: args.title.clone(),
         status: "done".into(), segments_done: total as u64, segments_total: total as u64,
@@ -946,6 +948,7 @@ async fn download_episode_direct(
     let key = job_key(args.bangumi_id, ep.sort);
     let cancel = Arc::new(AtomicBool::new(false));
     register_cancel(&key, cancel.clone());
+    log::info!("[cache] 开始直链下载 {} S{}", args.title, ep.sort);
 
     let root = match cache_root() {
         Ok(r) => r,
@@ -1121,6 +1124,7 @@ async fn download_episode_direct(
             }
         }
     });
+    log::info!("[cache] 直链下载完成 {} S{} · {} bytes", args.title, ep.sort, bytes);
     let _ = app.emit("cache-progress", ProgressEvent {
         bangumi_id: args.bangumi_id, sort: ep.sort, title: args.title.clone(),
         status: "done".into(), segments_done: 1, segments_total: 1,
@@ -1130,6 +1134,7 @@ async fn download_episode_direct(
 }
 
 fn emit_fail(app: &tauri::AppHandle, args: &StartArgs, ep: &StartEpisode, msg: &str) {
+    log::error!("[cache] 下载失败 {} S{}: {}", args.title, ep.sort, msg);
     let _ = app.emit("cache-progress", ProgressEvent {
         bangumi_id: args.bangumi_id, sort: ep.sort, title: args.title.clone(),
         status: "failed".into(), segments_done: 0, segments_total: 0,
@@ -1144,6 +1149,7 @@ async fn mark_failed(ctx: &EpisodeCtx, msg: &str) {
     } else {
         format!("[{}] {}", ctx.line_name, msg)
     };
+    log::error!("[cache] 下载失败 {} S{}: {}", ctx.title, ctx.sort, full);
     with_index_mut(|idx| {
         if let Some(b) = idx.bangumi.iter_mut().find(|b| b.id == ctx.bangumi_id) {
             if let Some(slot) = b.episodes.iter_mut().find(|e| e.sort == ctx.sort) {
@@ -1164,6 +1170,7 @@ async fn mark_failed(ctx: &EpisodeCtx, msg: &str) {
 }
 
 async fn on_cancelled(ctx: &EpisodeCtx) {
+    log::info!("[cache] 下载已取消 {} S{}", ctx.title, ctx.sort);
     let _ = std::fs::remove_dir_all(&ctx.ep_dir);
     remove_episode_from_index(ctx.bangumi_id, ctx.sort);
     let _ = ctx.app.emit("cache-progress", ProgressEvent {
@@ -1195,20 +1202,23 @@ fn remove_episode_from_index(bangumi_id: i64, sort: i64) {
 ///   * 这些条目没有任何活动 worker，必须统一改写为 failed
 /// 仅处理状态，不动磁盘文件（分片 .part 会在下次下载时被覆盖）。
 pub fn reset_stale_downloads() {
-    with_index_mut(|idx| {
-        let mut changed = false;
+    let n = with_index_mut(|idx| {
+        let mut n = 0usize;
         for b in idx.bangumi.iter_mut() {
             for ep in b.episodes.iter_mut() {
                 if ep.status == "downloading" {
                     ep.status = "failed".into();
                     ep.error = "上次下载未完成，请重新选择下载".into();
                     ep.updated_at = now_ms();
-                    changed = true;
+                    n += 1;
                 }
             }
         }
-        changed
+        n
     });
+    if n > 0 {
+        log::warn!("[cache] 清理上次运行残留的 downloading 状态 {} 条", n);
+    }
 }
 
 /// 缓存根目录绝对路径
@@ -1232,6 +1242,7 @@ pub fn cache_rescan_index() -> Result<Value, String> {
         .unwrap_or_else(|p| p.into_inner());
     let idx = scan_disk();
     save_index_locked(&idx)?;
+    log::info!("[cache] 重扫磁盘完成：{} 部番剧", idx.bangumi.len());
     serde_json::to_value(&idx).map_err(|e| e.to_string())
 }
 
@@ -1316,6 +1327,7 @@ pub fn cache_download_start(app: tauri::AppHandle, args: StartArgs) -> Result<()
     let threads = args.threads.unwrap_or(6).clamp(1, 32);
     // 并发下载集数：默认 3（同时缓存三集），限制 1–12；全部线路类型通用
     let mp4_threads = args.mp4_threads.unwrap_or(3).clamp(1, 12);
+    log::info!("[cache] 开始下载批次 {} · {} 集 · 分片线程={} · 并发集数={}", args.title, args.episodes.len(), threads, mp4_threads);
     // 索引预登记番剧信息（持锁读改写）
     with_index_mut(|idx| {
         ensure_bangumi(idx, args.bangumi_id, &args.title, &args.cover, args.total_episodes);
@@ -1364,6 +1376,7 @@ pub fn cache_download_start(app: tauri::AppHandle, args: StartArgs) -> Result<()
 /// 取消下载（sort 为空则取消该番剧全部任务）
 #[tauri::command]
 pub fn cache_download_cancel(bangumi_id: i64, sort: Option<i64>) -> Result<(), String> {
+    log::info!("[cache] 请求取消下载 bangumi_id={} sort={:?}", bangumi_id, sort);
     let jobs = jobs();
     let mut map = jobs.lock().unwrap();
     match sort {
@@ -1400,6 +1413,7 @@ pub fn cache_danmaku_save(bangumi_id: i64, title: String, sort: i64, ep_title: S
     let root = cache_root()?;
     let dir = bangumi_dir(&root, &title).join(ep_dir_name(sort, &ep_title));
     std::fs::create_dir_all(&dir).map_err(|e| format!("创建目录失败: {e}"))?;
+    log::info!("[cache] 保存弹幕 {} S{} · {} KB", title, sort, json.len() / 1024);
     std::fs::write(dir.join("danmaku.json"), json.as_bytes())
         .map_err(|e| format!("写入弹幕失败: {e}"))
 }
@@ -1444,6 +1458,7 @@ pub fn cache_danmaku_load(bangumi_id: i64, sort: i64) -> Result<Option<String>, 
 /// 删除缓存（sort 为空则删除整部番剧目录；索引修改持锁，防与并发下载写回交错）
 #[tauri::command]
 pub fn cache_delete(bangumi_id: i64, sort: Option<i64>) -> Result<(), String> {
+    log::info!("[cache] 删除缓存 bangumi_id={} sort={:?}", bangumi_id, sort);
     with_index_mut(|idx| -> Result<(), String> {
         let root = cache_root()?;
         match sort {

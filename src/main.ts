@@ -9,8 +9,14 @@ import { useLibraryStore } from "@/stores/library";
 import { useSettingsStore } from "@/stores/settings";
 import { registerGlobalUX } from "@/lib/global-ux";
 import { registerPreloadImg } from "@/lib/preload-img";
+import { initFileLogging, logInfo, logError } from "@/lib/logger";
 import { refreshRuntimeConfig } from "@/lib/anich/client";
 import { AIKF_VERSION, AIKF_BUILD_TAG } from "@/lib/version";
+
+// 日志系统优先初始化：此后所有 console.* 与全局错误均写入
+// exe目录\log\yyyy-MM-dd HH-mm.log（供问题排查与用户反馈）
+initFileLogging().catch(() => {});
+logInfo("boot", `AiKF ${AIKF_VERSION} (${AIKF_BUILD_TAG}) 启动`); // i18n-skip: 日志文案
 
 // Startup banner — makes the running build identifiable in the devtools
 // console at a glance. If this banner is absent, you are on an old build.
@@ -33,6 +39,8 @@ app.use(pinia);
 // 注意：不会恢复渲染，但 devtools/日志中会出现 [AiKF] 前缀的完整错误栈。
 app.config.errorHandler = (err, _instance, info) => {
   console.error(`[AiKF] Vue error (${info}):`, err);
+  const detail = err instanceof Error ? err.stack || err.message : String(err);
+  logError("vue", `(${info}): ${detail}`);
 };
 
 // Naive UI — registered globally so NButton, NIcon, NSlider etc. are

@@ -3,9 +3,14 @@
 // - `bgm_fetch`：通用 HTTP 命令（GET/POST/PATCH/PUT/DELETE）。Bangumi 强制
 //   要求自定义 User-Agent（浏览器 fetch 不允许覆盖 UA），因此所有 Bangumi
 //   请求必须经由此命令从 Rust 侧发出。
-// - `bgm_oauth_start` / `bgm_oauth_stop`：OAuth 授权码流程的本地回调服务。
-//   在 127.0.0.1 上监听，接收 bgm.tv 授权完成后的跳转 code，
-//   通过 `bgm-oauth-code` 事件推送给前端后自动退出。
+// - `bgm_oauth_start` / `bgm_oauth_stop` / `bgm_oauth_take_pending`：OAuth
+//   授权码流程（aikf:// 自定义协议回调，RFC 8252）。授权完成后 bgm.tv 把
+//   浏览器重定向到 aikf://auth/callback?code=...，系统直接拉起 AiKF.exe：
+//   已运行实例由 single-instance 插件转交 URL；冷启动在 setup 解析参数。
+//   code 经 `bgm-oauth-code` 事件推送给前端，另有 pending 槽位轮询兑底。
+// - 日志系统：tauri-plugin-log 写入 exe 所在目录\log\yyyy-MM-dd HH-mm.log
+//   （Windows 文件名禁止冒号，故用 HH-mm），前端 console 经 attachConsole
+//   汇聚到同一文件；级别 Debug，含网络请求、OAuth 全流程、缓存与崩溃信息。
 
 pub mod cache;
 
@@ -80,6 +85,9 @@ async fn anich_fetch(args: FetchArgs) -> Result<FetchResult, String> {
 
     let mut last_err: Option<String> = None;
 
+    log::debug!("[anich] GET {}", args.url);
+    let started = std::time::Instant::now();
+
     for attempt in 0..=MAX_RETRIES {
         let mut req = client.get(&args.url);
         for (k, v) in &args.headers {
@@ -102,6 +110,7 @@ async fn anich_fetch(args: FetchArgs) -> Result<FetchResult, String> {
                     Ok(b) => b.to_vec(),
                     Err(e) => {
                         last_err = Some(format!("body read error: {}", e));
+                        log::warn!("[anich] attempt {}/{} 响应体读取失败: {}", attempt + 1, MAX_RETRIES + 1, e);
                         // retry on body read failure
                         if attempt < MAX_RETRIES {
                             tokio::time::sleep(Duration::from_millis(500)).await;
@@ -114,18 +123,25 @@ async fn anich_fetch(args: FetchArgs) -> Result<FetchResult, String> {
                 // If the status is a retryable transient error, retry
                 if !ok && retry_statuses.contains(&status) && attempt < MAX_RETRIES {
                     last_err = Some(format!("HTTP {} (retryable)", status));
+                    log::warn!("[anich] attempt {}/{} -> HTTP {}（可重试），800ms 后重试", attempt + 1, MAX_RETRIES + 1, status);
                     tokio::time::sleep(Duration::from_millis(800)).await;
                     continue;
                 }
 
+                log::info!(
+                    "[anich] GET {} -> HTTP {} · {} ms · {} bytes · attempt {}/{}",
+                    args.url, status, started.elapsed().as_millis(), body.len(), attempt + 1, MAX_RETRIES + 1
+                );
                 return Ok(FetchResult { status, ok, body, headers });
             }
             Err(e) => {
                 last_err = Some(format!("request error: {}", e));
+                log::warn!("[anich] attempt {}/{} 请求失败: {}", attempt + 1, MAX_RETRIES + 1, e);
                 if attempt < MAX_RETRIES {
                     tokio::time::sleep(Duration::from_millis(800)).await;
                     continue;
                 }
+                log::error!("[anich] GET {} 彻底失败: {}", args.url, last_err.as_ref().unwrap());
                 return Err(last_err.unwrap());
             }
         }
@@ -156,6 +172,9 @@ async fn bgm_fetch(args: BgmFetchArgs) -> Result<BgmFetchResult, String> {
     let method = reqwest::Method::from_bytes(args.method.to_uppercase().as_bytes())
         .map_err(|e| format!("invalid method: {}", e))?;
 
+    log::debug!("[bgm] {} {}", args.method, args.url);
+    let started = std::time::Instant::now();
+
     let mut req = client.request(method, &args.url);
     for (k, v) in &args.headers {
         req = req.header(k, v);
@@ -181,118 +200,248 @@ async fn bgm_fetch(args: BgmFetchArgs) -> Result<BgmFetchResult, String> {
         .await
         .map_err(|e| format!("body read error: {}", e))?;
 
+    if ok {
+        log::info!(
+            "[bgm] {} {} -> HTTP {} · {} ms · {} bytes",
+            args.method, args.url, status, started.elapsed().as_millis(), body.len()
+        );
+    } else {
+        log::warn!(
+            "[bgm] {} {} -> HTTP {} · {} ms · body: {}",
+            args.method, args.url, status, started.elapsed().as_millis(),
+            body.chars().take(300).collect::<String>()
+        );
+    }
+
     Ok(BgmFetchResult { status, ok, body, headers })
 }
 
-// ── OAuth 本地回调服务 ──
+// ── OAuth（aikf:// 自定义协议回调，RFC 8252）──
+//
+// 授权完成后 bgm.tv 把浏览器重定向到 aikf://auth/callback?code=...&state=...，
+// Windows 依据注册表协议定义直接拉起 AiKF.exe 并把 URL 作为命令行参数传入：
+// - 应用已运行 → tauri-plugin-single-instance 把参数转交主实例后新进程退出；
+// - 应用未运行 → setup 中解析自身命令行参数。
+// code 校验 state 后写入 pending 槽位并 emit `bgm-oauth-code` 事件；
+// 前端监听事件，另有 `bgm_oauth_take_pending` 轮询兜底（事件早于监听器就绪）。
 
-/// OAuth 回调监听端口（redirect_uri = http://localhost:{PORT}/callback）。
-const OAUTH_PORT: u16 = 27420;
+/// Bangumi 开发者后台登记的回调地址（须与后台「回调地址」完全一致）。
+pub const OAUTH_REDIRECT_URI: &str = "aikf://auth/callback";
+
+const BGM_CLIENT_ID: &str = "bgm71176aa5120285808";
+
+/// state / pending 的有效期（与授权页会话时长对齐）。
+const OAUTH_TTL: Duration = Duration::from_secs(600);
 
 #[derive(Serialize)]
 struct OauthStartResult {
-    port: u16,
+    authorize_url: String,
     redirect_uri: String,
 }
 
-/// 启动一次性回调服务器：收到 /callback?code=... 后 emit 事件并自动退出。
-/// 重复调用会先停掉上一次未完成的监听。
+// std::sync::Mutex：短临界区、无 await，供同步上下文（single-instance 回调 /
+// setup）与 async 命令共用。
+static PENDING_CODE: std::sync::Mutex<Option<(String, std::time::Instant)>> =
+    std::sync::Mutex::new(None);
+static EXPECTED_STATE: std::sync::Mutex<Option<(String, std::time::Instant)>> =
+    std::sync::Mutex::new(None);
+
+/// 生成 OAuth state（纳秒时钟 + 进程 ID + 计数器 + ASLR 地址混合哈希）。
+fn gen_oauth_state() -> String {
+    use std::collections::hash_map::DefaultHasher;
+    use std::hash::{Hash, Hasher};
+    use std::sync::atomic::{AtomicU64, Ordering};
+    static COUNTER: AtomicU64 = AtomicU64::new(0);
+    let mut h = DefaultHasher::new();
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_nanos())
+        .unwrap_or(0)
+        .hash(&mut h);
+    std::process::id().hash(&mut h);
+    COUNTER.fetch_add(1, Ordering::Relaxed).hash(&mut h);
+    (&h as *const _ as usize).hash(&mut h);
+    format!("{:016x}", h.finish())
+}
+
+/// 启动一次 OAuth 登录：生成 state 并返回授权页 URL（不再监听本地端口）。
 #[tauri::command]
-async fn bgm_oauth_start(app: tauri::AppHandle) -> Result<OauthStartResult, String> {
-    use tauri::Emitter;
+async fn bgm_oauth_start() -> Result<OauthStartResult, String> {
+    *PENDING_CODE.lock().unwrap() = None;
+    let state = gen_oauth_state();
+    *EXPECTED_STATE.lock().unwrap() = Some((state.clone(), std::time::Instant::now()));
 
-    // 若已有监听在跑，先终止
-    bgm_oauth_stop();
+    let mut u = tauri::Url::parse("https://bgm.tv/oauth/authorize")
+        .map_err(|e| format!("parse authorize url: {}", e))?;
+    u.query_pairs_mut()
+        .append_pair("client_id", BGM_CLIENT_ID)
+        .append_pair("response_type", "code")
+        .append_pair("redirect_uri", OAUTH_REDIRECT_URI)
+        .append_pair("state", &state);
+    let authorize_url = u.to_string();
 
-    let listener = tokio::net::TcpListener::bind(("127.0.0.1", OAUTH_PORT))
-        .await
-        .map_err(|e| format!("无法监听端口 {}（可能被占用）: {}", OAUTH_PORT, e))?;
-
-    let handle = tokio::spawn(async move {
-        // 一次性 accept：处理完第一个 callback 请求（或明显非法请求）即退出。
-        // 设置 10 分钟超时防止长期挂起。
-        let _ = tokio::time::timeout(Duration::from_secs(600), async {
-            if let Ok((mut stream, _)) = listener.accept().await {
-                let mut buf = vec![0u8; 8192];
-                let n = stream.read(&mut buf).await.unwrap_or(0);
-                let req = String::from_utf8_lossy(&buf[..n]).to_string();
-                // 请求行形如 "GET /callback?code=xxx&state=yyy HTTP/1.1"
-                let line = req.lines().next().unwrap_or("");
-                let target = line.split_whitespace().nth(1).unwrap_or("");
-                let (path, query) = match target.split_once('?') {
-                    Some((p, q)) => (p, q),
-                    None => (target, ""),
-                };
-
-                if path == "/callback" {
-                    let mut code: Option<String> = None;
-                    let mut err: Option<String> = None;
-                    for kv in query.split('&') {
-                        let mut it = kv.splitn(2, '=');
-                        let k = it.next().unwrap_or("");
-                        let v = it.next().unwrap_or("");
-                        match k {
-                            "code" => code = Some(v.to_string()),
-                            "error_description" | "error" => {
-                                if err.is_none() {
-                                    err = Some(v.to_string());
-                                }
-                            }
-                            _ => {}
-                        }
-                    }
-                    let body = if code.is_some() {
-                        "<html><head><meta charset='utf-8'><title>AiKF</title></head><body style='font-family:sans-serif;text-align:center;padding-top:80px'><h2>✅ 授权成功</h2><p>请返回 AiKF 窗口，登录即将完成…</p></body></html>"
-                    } else {
-                        "<html><head><meta charset='utf-8'><title>AiKF</title></head><body style='font-family:sans-serif;text-align:center;padding-top:80px'><h2>❌ 授权失败</h2><p>请关闭此页面并回到 AiKF 重试。</p></body></html>"
-                    };
-                    let resp = format!(
-                        "HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
-                        body.len(),
-                        body
-                    );
-                    let _ = stream.write_all(resp.as_bytes()).await;
-                    let _ = stream.flush().await;
-                    if let Some(c) = code {
-                        let _ = app.emit("bgm-oauth-code", c);
-                    } else {
-                        let _ = app.emit("bgm-oauth-error", err.unwrap_or_else(|| "授权被取消".into()));
-                    }
-                } else {
-                    // 非 callback 路径（例如用户手滑访问根路径）——简单应答后继续等待
-                    let resp = "HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nConnection: close\r\n\r\n<h3>AiKF OAuth 回调服务运行中…</h3>";
-                    let _ = stream.write_all(resp.as_bytes()).await;
-                }
-            }
-        })
-        .await;
-    });
-
-    // 保存句柄供取消
-    {
-        let mut slot = OAUTH_TASK.lock().await;
-        *slot = Some(handle);
-    }
-
+    log::info!("[bgm-oauth] start · redirect_uri={} · authorize_url={}", OAUTH_REDIRECT_URI, authorize_url);
     Ok(OauthStartResult {
-        port: OAUTH_PORT,
-        redirect_uri: format!("http://localhost:{}/callback", OAUTH_PORT),
+        authorize_url,
+        redirect_uri: OAUTH_REDIRECT_URI.to_string(),
     })
 }
 
-/// 停止回调监听（用户取消登录时调用）。
+/// 取走待消费的授权码（10 分钟内有效）。事件丢失时的轮询兑底。
 #[tauri::command]
-async fn bgm_oauth_stop() {
-    let mut slot = OAUTH_TASK.lock().await;
-    if let Some(h) = slot.take() {
-        h.abort();
+async fn bgm_oauth_take_pending() -> Option<String> {
+    let mut slot = PENDING_CODE.lock().unwrap();
+    match slot.take() {
+        Some((code, at)) if at.elapsed() < OAUTH_TTL => {
+            log::info!("[bgm-oauth] pending code 被前端取走（len={}）", code.len());
+            Some(code)
+        }
+        Some((code, _)) => {
+            log::warn!("[bgm-oauth] 丢弃过期 pending code（len={}）", code.len());
+            None
+        }
+        None => None,
     }
 }
 
-static OAUTH_TASK: tokio::sync::Mutex<Option<tokio::task::JoinHandle<()>>> =
-    tokio::sync::Mutex::const_new(None);
+/// 停止登录流程（用户取消 / 超时）：清空预期 state 与 pending code。
+#[tauri::command]
+async fn bgm_oauth_stop() {
+    *EXPECTED_STATE.lock().unwrap() = None;
+    *PENDING_CODE.lock().unwrap() = None;
+    log::info!("[bgm-oauth] stopped（取消或超时）");
+}
 
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
+/// 解析 aikf:// 回调 URL：校验 state → 存 pending → 通知前端。
+fn handle_protocol_url(app: &tauri::AppHandle, raw: &str) {
+    use tauri::Emitter;
+
+    log::info!("[bgm-oauth] 收到协议回调: {}", raw);
+    let parsed = match tauri::Url::parse(raw) {
+        Ok(u) => u,
+        Err(e) => {
+            log::error!("[bgm-oauth] URL 解析失败: {} ({})", raw, e);
+            let _ = app.emit("bgm-oauth-error", format!("invalid callback url: {}", e));
+            return;
+        }
+    };
+
+    let mut code: Option<String> = None;
+    let mut state: Option<String> = None;
+    let mut err: Option<String> = None;
+    for (k, v) in parsed.query_pairs() {
+        match k.as_ref() {
+            "code" => code = Some(v.into_owned()),
+            "state" => state = Some(v.into_owned()),
+            "error" | "error_description" => {
+                if err.is_none() {
+                    err = Some(v.into_owned());
+                }
+            }
+            _ => {}
+        }
+    }
+
+    match code {
+        Some(c) => {
+            // state 校验：登记中的 state 必须与回调一致且未过期；
+            // 无登记（冷启动残留码被复用等场景）时放行。
+            let valid = match EXPECTED_STATE.try_lock() {
+                Ok(mut guard) => match guard.take() {
+                    Some((expected, at)) => {
+                        let ok = state.as_deref() == Some(expected.as_str()) && at.elapsed() < OAUTH_TTL;
+                        if !ok {
+                            log::warn!("[bgm-oauth] state 不匹配或过期（expected 已消费）");
+                        }
+                        ok
+                    }
+                    None => true,
+                },
+                Err(_) => true,
+            };
+            if !valid {
+                let _ = app.emit("bgm-oauth-error", "state mismatch");
+                return;
+            }
+            log::info!("[bgm-oauth] code 校验通过（len={}），存 pending 并推送前端", c.len());
+            *PENDING_CODE.lock().unwrap() = Some((c.clone(), std::time::Instant::now()));
+            let _ = app.emit("bgm-oauth-code", c);
+        }
+        None => {
+            let msg = err.unwrap_or_else(|| "授权被取消".into());
+            log::warn!("[bgm-oauth] 授权失败/取消: {}", msg);
+            let _ = app.emit("bgm-oauth-error", msg);
+        }
+    }
+}
+
+// ── aikf:// URL 协议注册 ──
+
+/// 运行时注册 aikf:// 协议（写入 HKCU\Software\Classes，无需管理员；
+/// 便携版每次启动自愈，安装版另有 NSIS 写入 HKLM 兜底）。
+#[cfg(windows)]
+fn register_aikf_protocol() {
+    use winreg::enums::HKEY_CURRENT_USER;
+    use winreg::RegKey;
+
+    let exe = match std::env::current_exe() {
+        Ok(p) => p,
+        Err(e) => {
+            log::warn!("[protocol] 无法定位 exe，跳过 aikf:// 注册: {}", e);
+            return;
+        }
+    };
+    let cmd = format!("\"{}\" \"%1\"", exe.display());
+    let hkcu = RegKey::predef(HKEY_CURRENT_USER);
+    match hkcu.create_subkey("Software\\Classes\\aikf") {
+        Ok((key, _)) => {
+            let _ = key.set_value("", &"URL:AiKF Protocol");
+            let _ = key.set_value("URL Protocol", &"");
+            if let Ok((icon, _)) = key.create_subkey("DefaultIcon") {
+                let _ = icon.set_value("", &format!("{},0", exe.display()));
+            }
+            if let Ok((open, _)) = key.create_subkey("shell\\open\\command") {
+                let _ = open.set_value("", &cmd);
+            }
+            log::info!("[protocol] aikf:// 已注册（HKCU）· command={}", cmd);
+        }
+        Err(e) => log::warn!("[protocol] aikf:// 注册失败: {}", e),
+    }
+}
+
+// ── 日志目录 ──
+
+/// 日志目录：exe 所在目录\log（只读/不可写时回退 %TEMP%\AiKF\log）。
+fn resolve_log_dir() -> std::path::PathBuf {
+    let exe_dir = std::env::current_exe()
+        .ok()
+        .and_then(|p| p.parent().map(|d| d.to_path_buf()));
+    if let Some(dir) = exe_dir {
+        let log_dir = dir.join("log");
+        if std::fs::create_dir_all(&log_dir).is_ok() {
+            // 探针：确认可写（只读目录 create_dir_all 也可能成功）
+            let probe = log_dir.join(".aikf-log-probe");
+            if std::fs::write(&probe, b"ok").is_ok() {
+                let _ = std::fs::remove_file(&probe);
+                return log_dir;
+            }
+        }
+    }
+    let fallback = std::env::temp_dir().join("AiKF").join("log");
+    let _ = std::fs::create_dir_all(&fallback);
+    fallback
+}
+
+/// 打开日志文件夹（设置页「打开日志文件夹」按钮），返回实际路径。
+#[tauri::command]
+fn log_open_dir(app: tauri::AppHandle) -> Result<String, String> {
+    use tauri_plugin_opener::OpenerExt;
+    let dir = resolve_log_dir();
+    app.opener()
+        .open_path(dir.to_string_lossy().into_owned(), None::<&str>)
+        .map_err(|e| e.to_string())?;
+    Ok(dir.to_string_lossy().into_owned())
+}
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -312,16 +461,93 @@ pub fn run() {
     // 否则前端选集按钮会因残留状态被永久禁用（表现为无法重新缓存）
     cache::reset_stale_downloads();
 
+    // 日志文件：exe目录\log\yyyy-MM-dd HH-mm.log（Windows 文件名禁冒号 → HH-mm）
+    let log_dir = resolve_log_dir();
+    let log_file_name = chrono::Local::now().format("%Y-%m-%d %H-%M").to_string();
+    let log_dir_for_setup = log_dir.clone();
+    let log_file_for_setup = log_file_name.clone();
+
     tauri::Builder::default()
+        // single-instance 必须最先注册：aikf:// 回调拉起的新进程在此把 URL
+        // 转交给主实例后退出（并顺带把主窗口带回前台）。
+        .plugin(tauri_plugin_single_instance::init(|app, args, _cwd| {
+            log::info!("[single-instance] 第二实例启动，args={:?}，转交后退出", args);
+            for a in &args {
+                if a.starts_with("aikf://") {
+                    handle_protocol_url(app, a);
+                }
+            }
+            if let Some(w) = tauri::Manager::get_webview_window(app, "main") {
+                let _ = w.unminimize();
+                let _ = w.show();
+                let _ = w.set_focus();
+            }
+        }))
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_http::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
+        .plugin(
+            tauri_plugin_log::Builder::new()
+                .targets([
+                    tauri_plugin_log::Target::new(tauri_plugin_log::TargetKind::Folder {
+                        path: log_dir,
+                        file_name: Some(log_file_name),
+                    }),
+                    tauri_plugin_log::Target::new(tauri_plugin_log::TargetKind::Stdout),
+                ])
+                .level(log::LevelFilter::Debug)
+                .max_file_size(20 * 1024 * 1024) // 20MB，超出滚动新文件
+                .rotation_strategy(tauri_plugin_log::RotationStrategy::KeepAll)
+                .format(|out, message, record| {
+                    out.finish(format_args!(
+                        "[{}] [{}] [{}] {}",
+                        chrono::Local::now().format("%Y-%m-%d %H:%M:%S%.3f"),
+                        record.level(),
+                        record.target(),
+                        message
+                    ))
+                })
+                .build(),
+        )
+        .setup(move |app| {
+            let handle = app.handle().clone();
+
+            // panic 兜底写入日志（release 为 abort，但 hook 在 abort 前仍会执行）
+            std::panic::set_hook(Box::new(|info| {
+                log::error!("[panic] {}", info);
+            }));
+
+            // 每次启动自愈式注册 aikf:// 协议（便携版无安装器写入）
+            #[cfg(windows)]
+            register_aikf_protocol();
+
+            log::info!("================ AiKF 启动 ================");
+            log::info!("[boot] version={}", env!("CARGO_PKG_VERSION"));
+            log::info!("[boot] exe={:?}", std::env::current_exe());
+            log::info!("[boot] log 文件 = {}\\{}.log", log_dir_for_setup.display(), log_file_for_setup);
+            log::info!("[boot] args={:?}", std::env::args().collect::<Vec<_>>());
+
+            // 冷启动协议回调：应用未运行时经 aikf:// 拉起，URL 在自身命令行里
+            let cold_urls: Vec<String> = std::env::args()
+                .skip(1)
+                .filter(|a| a.starts_with("aikf://"))
+                .collect();
+            if !cold_urls.is_empty() {
+                log::info!("[boot] 检测到冷启动协议回调 {} 条", cold_urls.len());
+                for url in cold_urls {
+                    handle_protocol_url(&handle, &url);
+                }
+            }
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![
             anich_fetch,
             bgm_fetch,
             bgm_oauth_start,
             bgm_oauth_stop,
+            bgm_oauth_take_pending,
+            log_open_dir,
             cache::cache_root_path,
             cache::cache_load_index,
             cache::cache_rescan_index,

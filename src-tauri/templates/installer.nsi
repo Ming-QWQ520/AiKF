@@ -706,6 +706,13 @@ Section "-Install"
     WriteRegStr SHCTX "Software\Classes\\{{protocol}}\shell\open\command" "" "$\"$INSTDIR\${MAINBINARYNAME}.exe$\" $\"%1$\""
   {{/each}}
 
+  ; ── AiKF 自定义 URL 协议 aikf://（Bangumi OAuth 回跳）──
+  ; 显式注册，不依赖打包器 deep-link 配置；应用每次启动亦会在 HKCU 自愈
+  WriteRegStr SHCTX "Software\Classes\\aikf" "URL Protocol" ""
+  WriteRegStr SHCTX "Software\Classes\\aikf" "" "URL:${BUNDLEID} protocol"
+  WriteRegStr SHCTX "Software\Classes\\aikf\DefaultIcon" "" "$\"$INSTDIR\${MAINBINARYNAME}.exe$\",0"
+  WriteRegStr SHCTX "Software\Classes\\aikf\shell\open\command" "" "$\"$INSTDIR\${MAINBINARYNAME}.exe$\" $\"%1$\""
+
   ; Create uninstaller
   WriteUninstaller "$INSTDIR\uninstall.exe"
 
@@ -832,6 +839,12 @@ Section Uninstall
       DeleteRegKey SHCTX "Software\Classes\\{{protocol}}"
     ${EndIf}
   {{/each}}
+
+  ; 移除 AiKF 自定义协议 aikf://（仅当指向本安装位置时才删，避免误伤便携版注册）
+  ReadRegStr $R7 SHCTX "Software\Classes\\aikf\shell\open\command" ""
+  ${If} $R7 == "$\"$INSTDIR\${MAINBINARYNAME}.exe$\" $\"%1$\""
+    DeleteRegKey SHCTX "Software\Classes\\aikf"
+  ${EndIf}
 
 
   ; Delete uninstaller

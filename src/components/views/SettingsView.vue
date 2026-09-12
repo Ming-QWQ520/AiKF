@@ -26,7 +26,9 @@ import {
   CloudDownload,
   Loader2,
   Megaphone,
+  FolderOpen,
 } from "lucide-vue-next";
+import { invoke } from "@tauri-apps/api/core";
 import { useSettingsStore, type ThemeMode, type Language } from "@/stores/settings";
 import { LOCALE_OPTIONS } from "@/i18n";
 import { AIKF_VERSION } from "@/lib/version";
@@ -131,6 +133,15 @@ const openExternalUrl = async (url: string) => {
     }
   } else {
     window.open(url, "_blank");
+  }
+};
+
+// ── 运行日志（exe目录\log\yyyy-MM-dd HH-mm.log）──
+const openLogDir = async () => {
+  try {
+    await invoke("log_open_dir");
+  } catch (e) {
+    console.error("打开日志目录失败:", e);
   }
 };
 
@@ -477,6 +488,16 @@ const bgmResultText = computed(() => {
         <div class="flex items-center justify-between">
           <span class="text-muted-foreground">{{ $t('settings.license') }}</span>
           <span class="font-medium text-foreground">AGPL-3.0</span>
+        </div>
+        <!-- 运行日志：exe目录\log\yyyy-MM-dd HH-mm.log，排查问题必备 -->
+        <div class="flex items-center justify-between">
+          <span class="text-muted-foreground">{{ $t('settings.logDir') }}</span>
+          <button
+            @click="openLogDir"
+            class="state-layer flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs text-muted-foreground transition-colors hover:border-primary/40 hover:text-primary"
+          >
+            <FolderOpen class="h-3.5 w-3.5" /> {{ $t('settings.openLogs') }}
+          </button>
         </div>
       </div>
 
