@@ -338,6 +338,20 @@ export async function fetchMe(): Promise<BgmUser | null> {
 
 // ── v0 接口 ──
 
+/**
+ * 当前用户的路径标识。
+ * 读路径（GET 收藏列表/单条）按规范只支持 /v0/users/{username}/...，
+ * 不支持 `-` 简写（那是写操作 POST/PATCH 专属）；username 优先，
+ * 未设置用户名时回退 uid（规范：设置了用户名后无法用 UID 查询）。
+ */
+async function currentPathIdent(): Promise<string> {
+  let u = cachedUser();
+  if (!u) u = await fetchMe();
+  if (!u) throw new BgmAPIError("not logged in", 0);
+  const name = (u.username ?? "").trim();
+  return encodeURIComponent(name || String(u.id));
+}
+
 /** 按关键词搜索条目（type=2 动画）。 */
 export async function searchSubjects(keyword: string, limit = 5): Promise<BgmSearchResult> {
   const body: BgmSearchBody = { keyword, filter: { type: [2] }, limit };
@@ -346,8 +360,9 @@ export async function searchSubjects(keyword: string, limit = 5): Promise<BgmSea
 
 /** 获取当前用户某条目的收藏（无收藏返回 404 → null）。 */
 export async function getMyCollection(subjectId: number): Promise<BgmCollectionItem | null> {
+  const ident = await currentPathIdent();
   try {
-    return await api<BgmCollectionItem>("GET", `/v0/users/-/collections/${subjectId}`);
+    return await api<BgmCollectionItem>("GET", `/v0/users/${ident}/collections/${subjectId}`);
   } catch (e) {
     if (e instanceof BgmAPIError && e.status === 404) return null;
     throw e;
@@ -391,17 +406,18 @@ export async function markEpisodesSeen(subjectId: number, episodeIds: number[]):
   }
 }
 
-/** 当前用户的动画收藏列表（自动翻页；type=2 subject_type 为动画）。 */
+/** 当前用户的动画收藏列表（自动翻页；subject_type=2 为动画）。读路径必须用 username。 */
 export async function getMyCollections(
   onBatch?: (batch: BgmCollectionItem[]) => void
 ): Promise<BgmCollectionItem[]> {
+  const ident = await currentPathIdent();
   const all: BgmCollectionItem[] = [];
   const limit = 50;
   let offset = 0;
   for (;;) {
-    const res = await api<{ data?: BgmCollectionItem[] }>(
+    const res = await api<{ data?: BgmCollectionItem[]; total?: number }>(
       "GET",
-      `/v0/users/-/collections?subject_type=2&limit=${limit}&offset=${offset}`
+      `/v0/users/${ident}/collections?subject_type=2&limit=${limit}&offset=${offset}`
     );
     const batch = res.data ?? [];
     all.push(...batch);
