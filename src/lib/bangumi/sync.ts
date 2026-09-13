@@ -403,6 +403,9 @@ export async function pullAll(onProgress?: (p: SyncProgress) => void): Promise<P
           },
           status
         );
+        // 云端评分导入（需求 2026-09-13：评分双向同步 —— 上行走 auto-sync setScore，
+        // 下行在此处把 bgm 收藏的 rate 带回本地；rate>0 才覆盖）
+        library.applyCloudScore(existing.id, Number(item.rate) || 0);
         await reconcileCloudEpisodes(existing.id, subject.id);
         result.imported++;
         continue;
@@ -465,6 +468,7 @@ export async function pullAll(onProgress?: (p: SyncProgress) => void): Promise<P
           );
           await reconcileCloudEpisodes(match.id, subject.id);
         }
+        library.applyCloudScore(match.id, Number(item.rate) || 0);
         result.imported++;
         await sleep(300);
       } else {
@@ -481,6 +485,7 @@ export async function pullAll(onProgress?: (p: SyncProgress) => void): Promise<P
           },
           status
         );
+        library.applyCloudScore(-subject.id, Number(item.rate) || 0);
         await reconcileCloudEpisodes(-subject.id, subject.id);
         result.imported++;
       }

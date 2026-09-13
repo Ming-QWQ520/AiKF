@@ -444,6 +444,18 @@ export const useLibraryStore = defineStore("library", {
       };
       this._persist();
     },
+    /** 云端评分导入（拉取时调用）：rate>0 才覆盖本地（0 = 云端未评分，不动本地）。
+     *  由此 pushEntries 里「本地 0 分不覆盖云端」的保守策略不会造成评分丢失：
+     *  云端有评分 → 拉取时导入本地；本地改分 → auto-sync 推回云端。
+     *  注意：不加入 auto-sync WATCHED_ACTIONS —— 这是云端来源的变更，不回推。 */
+    applyCloudScore(id: number, rate: number) {
+      const e = this.entries[id];
+      if (!e) return;
+      const r = Math.round(Number(rate) || 0);
+      if (r <= 0 || r > 10 || r === e.score) return;
+      this.entries = { ...this.entries, [id]: { ...e, score: r, updatedAt: Date.now() } };
+      this._persist();
+    },
     clearAll() {
       this.entries = {};
       this._persist();

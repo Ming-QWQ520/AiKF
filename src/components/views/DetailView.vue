@@ -310,6 +310,12 @@ const unfav = () => {
   library.remove(ui.detailId);
   statusMenuOpen.value = false;
 };
+/** 设置我的评分（下拉菜单内 10 星）：0 = 清除本地评分。
+ *  变更经 auto-sync 自动推送到 Bangumi（rate 字段）。 */
+const setEntryScore = (n: number) => {
+  if (ui.detailId == null) return;
+  library.setScore(ui.detailId, n);
+};
 const closeStatusMenu = () => { statusMenuOpen.value = false; };
 
 // ── 角色/制作人员详情弹窗（需求：角色/制作可点击查看详情）──
@@ -460,8 +466,8 @@ const applyRematch = (hit: any) => {
                   {{ entry ? `${$t('detail.favorited')} · ${$t(STATUS_I18N_KEYS[entry.status])}` : $t('detail.fav') }}
                   <ChevronDown v-if="entry" :class="cn('h-3 w-3 transition-transform', statusMenuOpen && 'rotate-180')" />
                 </button>
-                <!-- 状态菜单 -->
-                <div v-if="statusMenuOpen && entry" class="absolute left-0 top-full z-30 mt-1.5 w-40 overflow-hidden rounded-xl border border-border bg-card py-1 shadow-xl shadow-black/10 dark:shadow-black/50">
+                <!-- 状态菜单（含我的评分：Bangumi 1-10 分制，点击即存并经 auto-sync 同步云端） -->
+                <div v-if="statusMenuOpen && entry" class="absolute left-0 top-full z-30 mt-1.5 w-52 overflow-hidden rounded-xl border border-border bg-card py-1 shadow-xl shadow-black/10 dark:shadow-black/50">
                   <button
                     v-for="s in STATUS_ORDER"
                     :key="s"
@@ -473,6 +479,33 @@ const applyRematch = (hit: any) => {
                     {{ $t(STATUS_I18N_KEYS[s]) }}
                     <span v-if="entry.status === s" class="ml-auto text-[10px]">✓</span>
                   </button>
+                  <div class="my-1 h-px bg-border/60" />
+                  <div class="px-3 py-1.5">
+                    <p class="mb-1 text-[10px] font-medium text-muted-foreground">
+                      {{ $t('library.myScore') }}
+                      <span v-if="entry.score > 0" class="ml-1 font-bold tabular-nums text-tertiary">{{ entry.score }}</span>
+                    </p>
+                    <div class="flex items-center gap-0.5">
+                      <button
+                        v-for="n in 10"
+                        :key="`rs${n}`"
+                        type="button"
+                        @click="setEntryScore(entry.score === n ? 0 : n)"
+                        class="p-px"
+                        :aria-label="$t('library.rateN', { n })"
+                      >
+                        <Star :class="cn('h-3.5 w-3.5 transition-colors', n <= entry.score ? 'fill-tertiary text-tertiary' : 'text-muted-foreground/35 hover:text-tertiary/70')" />
+                      </button>
+                    </div>
+                    <button
+                      v-if="entry.score > 0"
+                      type="button"
+                      @click="setEntryScore(0)"
+                      class="mt-1 text-[10px] text-muted-foreground transition-colors hover:text-destructive"
+                    >
+                      {{ $t('library.scoreClear') }}
+                    </button>
+                  </div>
                   <div class="my-1 h-px bg-border/60" />
                   <button type="button" @click="openRematch" class="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-foreground transition-colors hover:bg-foreground/5">
                     <RefreshCw class="h-3 w-3" /> {{ $t('detail.rematch') }}

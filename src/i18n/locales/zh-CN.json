@@ -169,7 +169,10 @@
     "progress": "观看进度",
     "watchedN": "已看 {n} 话",
     "continueAt": "继续观看 第{n}话",
-    "markNext": "标记下一话",
+    "continueEp": "继续 {n} 话",
+    "myScore": "我的评分",
+    "myScoreN": "我的评分：{n}",
+    "scoreClear": "清除评分",
     "rateN": "评分 {n}",
     "status": {
       "watching": "在看",

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from "vue";
-import { Bookmark, Trash2, Play, CheckCircle2, Star, Library, CircleUserRound, ChevronDown, Loader2 } from "lucide-vue-next";
+import { Bookmark, Trash2, Play, Star, Library, CircleUserRound, ChevronDown, Loader2 } from "lucide-vue-next";
 import { useLibraryStore, STATUS_I18N_KEYS, STATUS_ORDER, STATUS_STYLES, type TrackStatus, type LibraryEntry } from "@/stores/library";
 import { useUIStore } from "@/stores/ui";
 import { anich } from "@/lib/anich/api-client";
@@ -27,7 +27,6 @@ const bgm = useBangumi();
 // 逐个拉取集数列表补全（请求经 withCache + in-flight 去重，失败静默）。
 onMounted(async () => {
   const broken = library.list.filter((e) => (e.totalEpisodes ?? 0) <= 0);
-  if (broken.length === 0) return;
   await Promise.allSettled(
     broken.map(async (e) => {
       try {
@@ -40,6 +39,15 @@ onMounted(async () => {
       }
     })
   );
+  // 默认展开的条目：错峰预取云端逐集状态（芯片三色 + 云端对齐）。
+  // 200ms 间隔串行化，避免同时打开几十个请求触发限流。
+  if (bgmApi.isLoggedIn()) {
+    library.list
+      .filter((e) => e.bgmId && isEpExpanded(e))
+      .forEach((e, i) => {
+        setTimeout(() => void ensureCloudEpisodes(e), Math.min(i * 200, 2000));
+      });
+  }
 });
 
 const all = computed(() => library.list);
@@ -60,9 +68,31 @@ const doClear = () => {
 };
 
 // ── 集数明细（需求：观看过的集数不连续时，追番库提供逐集明细展示）──
-// 展开后显示全部集数芯片；点击芯片可切换已看/未看
-// （变更经 auto-sync 自动推送到 Bangumi，无需手动同步）。
-const epDetailExpanded = ref<Set<number>>(new Set());
+// 需求 2026-09-13：集数明细「默认展开」，且展开/收起的选择要被记住 ——
+// 此前展开状态只存在组件内存里，切页/重启后一律收回默认，用户视角即
+// 「默认状态无法更改」。现改为 localStorage 持久化（按条目 id 记忆收起列表），
+// 没有记录的条目（含新入库番剧）一律默认展开。
+const EP_COLLAPSED_KEY = "aikf:library-epdetail:v1";
+
+function loadEpCollapsed(): Set<number> {
+  try {
+    const raw = JSON.parse(localStorage.getItem(EP_COLLAPSED_KEY) || "[]") as number[];
+    return new Set(Array.isArray(raw) ? raw.filter((n) => Number.isFinite(n)) : []);
+  } catch {
+    return new Set();
+  }
+}
+
+function persistEpCollapsed(s: Set<number>) {
+  try {
+    localStorage.setItem(EP_COLLAPSED_KEY, JSON.stringify([...s]));
+  } catch {
+    /* storage full / unavailable */
+  }
+}
+
+const epCollapsed = ref<Set<number>>(loadEpCollapsed());
+const isEpExpanded = (entry: LibraryEntry) => !epCollapsed.value.has(entry.id);
 
 // ── 云端逐集观看状态（需求：观看集数不连续时显示真实明细）──
 // 展开「集数明细」时，若条目已绑定 Bangumi 且已登录，拉取逐集收藏状态
@@ -75,13 +105,18 @@ const cloudEpLoading = ref<Set<number>>(new Set());
 const cloudEpDone = new Set<number>(); // 本次运行内已拉取过的条目
 
 const toggleEpDetail = (entry: LibraryEntry) => {
-  const s = new Set(epDetailExpanded.value);
-  if (s.has(entry.id)) s.delete(entry.id);
-  else {
+  const s = new Set(epCollapsed.value);
+  let expanded: boolean;
+  if (s.has(entry.id)) {
+    s.delete(entry.id);
+    expanded = true;
+  } else {
     s.add(entry.id);
-    void ensureCloudEpisodes(entry);
+    expanded = false;
   }
-  epDetailExpanded.value = s;
+  epCollapsed.value = s;
+  persistEpCollapsed(s);
+  if (expanded) void ensureCloudEpisodes(entry);
 };
 
 async function ensureCloudEpisodes(entry: LibraryEntry) {
@@ -131,6 +166,23 @@ async function ensureCloudEpisodes(entry: LibraryEntry) {
 }
 
 const isWatched = (entry: LibraryEntry, n: number) => entry.watchedEpisodes.includes(n);
+
+/** 点击集数芯片：本地 toggle + 同步更新云端状态缓存。
+ *  需求 2026-09-13 修复：此前云端缓存（cloudEpTypes）在点击后仍是旧值，
+ *  芯片样式里「ct===2 强制已看色」会压过本地变更 —— 表现为点击后
+ *  界面纹丝不动，但 auto-sync 已把变更推到 API（云端变了、界面没变）。 */
+const clickEpisode = (entry: LibraryEntry, n: number) => {
+  const willWatch = !entry.watchedEpisodes.includes(n);
+  library.toggleEpisode(entry.id, n, entry.totalEpisodes);
+  const cur = cloudEpTypes.value.get(entry.id);
+  if (cur) {
+    const nextEntry = new Map(cur);
+    nextEntry.set(n, willWatch ? 2 : 0);
+    const next = new Map(cloudEpTypes.value);
+    next.set(entry.id, nextEntry);
+    cloudEpTypes.value = next;
+  }
+};
 
 /** 真实观看数（≤ 总集数）：与集数芯片同源，统一从逐集记录取长度。
  *  此前计数器误用 currentEpisode（「看到第几话」指针），会出现
@@ -221,9 +273,22 @@ function chipTip(entry: LibraryEntry, n: number): string {
       <TransitionGroup name="lib">
         <div v-for="(entry, i) in list" :key="entry.id" :style="{ animationDelay: `${Math.min(i * 0.02, 0.2)}s` }" class="surface rounded-2xl p-3 fade-up hover:border-foreground/20 sm:p-4">
           <div class="flex gap-3 sm:gap-4">
-            <button @click="ui.openDetail(entry.id, entry.image)" class="shrink-0">
-              <CoverImage :src="entry.image" :alt="entry.title" ratio="portrait" class="h-28 w-20 sm:h-32 sm:w-24" rounded="rounded-xl" />
-            </button>
+            <div class="relative shrink-0">
+              <button @click="ui.openDetail(entry.id, entry.image)" class="block">
+                <CoverImage :src="entry.image" :alt="entry.title" ratio="portrait" class="h-28 w-20 sm:h-32 sm:w-24" rounded="rounded-xl" />
+              </button>
+              <!-- 继续观看：封面底部悬浮（需求：去除卡片底部「标记下一话」，
+                   继续观看移到封面底部；点击直接跳播放器续看） -->
+              <button
+                v-if="entry.currentEpisode > 0"
+                @click="ui.openPlayer({ bangumiID: entry.id, episode: Math.max(1, entry.currentEpisode), title: entry.title, cover: entry.image })"
+                class="absolute inset-x-0 bottom-0 flex items-center justify-center gap-1 rounded-b-xl bg-black/70 py-1.5 text-[10px] font-semibold text-white transition-colors hover:bg-primary/90"
+                v-tip="$t('library.continueAt', { n: Math.max(1, entry.currentEpisode) })"
+              >
+                <Play class="h-2.5 w-2.5 fill-current" />
+                <span class="whitespace-nowrap">{{ $t('library.continueEp', { n: Math.max(1, entry.currentEpisode) }) }}</span>
+              </button>
+            </div>
             <div class="flex min-w-0 flex-1 flex-col">
               <div class="flex items-start justify-between gap-2">
                 <button @click="ui.openDetail(entry.id, entry.image)" class="min-w-0 text-left">
@@ -267,21 +332,21 @@ function chipTip(entry: LibraryEntry, n: number): string {
 
                 <!-- 集数明细（需求：观看集数不连续时提供逐集明细；点击芯片可切换已看/未看）
                      bgmOnly 条目总集数未知时也可展开 —— 展开时会先从云端补全总集数 -->
-                <div v-if="entry.totalEpisodes > 0 || entry.bgmId" class="mt-1.5">
+                <div v-if="(entry.totalEpisodes > 0 || entry.bgmId)" class="mt-1.5">
                   <button
                     @click="toggleEpDetail(entry)"
                     class="flex items-center gap-1 rounded px-0.5 py-0.5 text-[11px] text-muted-foreground transition-colors hover:text-foreground"
                   >
                     <Loader2 v-if="cloudEpLoading.has(entry.id)" class="h-3 w-3 animate-spin" />
-                    <ChevronDown v-else :class="cn('h-3 w-3 transition-transform duration-200', epDetailExpanded.has(entry.id) && 'rotate-180')" />
+                    <ChevronDown v-else :class="cn('h-3 w-3 transition-transform duration-200', isEpExpanded(entry) && 'rotate-180')" />
                     {{ $t('library.epDetail') }}
                     <span class="tabular-nums">{{ realWatched(entry) }}{{ entry.totalEpisodes > 0 ? `/${entry.totalEpisodes}` : '' }}</span>
                   </button>
-                  <div v-if="epDetailExpanded.has(entry.id) && entry.totalEpisodes > 0" class="mt-1.5 flex max-h-[88px] flex-wrap gap-1 overflow-y-auto">
+                  <div v-if="isEpExpanded(entry) && entry.totalEpisodes > 0" class="mt-1.5 flex max-h-[88px] flex-wrap gap-1 overflow-y-auto">
                     <button
                       v-for="n in entry.totalEpisodes"
                       :key="n"
-                      @click="library.toggleEpisode(entry.id, n, entry.totalEpisodes)"
+                      @click="clickEpisode(entry, n)"
                       :class="cn(
                         'h-6 min-w-[26px] rounded-md px-1 text-[10px] font-semibold tabular-nums transition-colors',
                         chipClass(entry, n)
@@ -292,17 +357,23 @@ function chipTip(entry: LibraryEntry, n: number): string {
                 </div>
               </div>
 
+              <!-- 评分（需求 2026-09-13：Bangumi 1-10 分制，本地存储 + auto-sync 自动同步云端；
+                   再次点击当前分数 = 清除本地评分） -->
               <div class="mt-3 flex flex-wrap items-center gap-2">
-                <button v-if="entry.currentEpisode > 0" @click="ui.openPlayer({ bangumiID: entry.id, episode: Math.max(1, entry.currentEpisode), title: entry.title, cover: entry.image })" class="state-layer flex items-center gap-1.5 rounded-lg bg-primary px-3.5 py-1.5 text-xs font-semibold text-primary-foreground transition-opacity hover:opacity-90">
-                  <Play class="h-3 w-3 fill-current" /> {{ $t('library.continueAt', { n: Math.max(1, entry.currentEpisode) }) }}
-                </button>
-                <button @click="library.toggleEpisode(entry.id, entry.currentEpisode + 1, entry.totalEpisodes)" class="state-layer flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-foreground hover:bg-foreground/5">
-                  <CheckCircle2 class="h-3 w-3" /> {{ $t('library.markNext') }}
-                </button>
-                <div class="flex items-center gap-0.5">
-                  <button v-for="n in 10" :key="n" @click="library.setScore(entry.id, n)" class="state-layer p-0.5" :aria-label="$t('library.rateN', { n })">
-                    <Star :class="cn('h-3.5 w-3.5 transition-colors', n <= entry.score ? 'fill-tertiary text-tertiary' : 'text-muted-foreground/40')" />
+                <div
+                  class="flex items-center gap-0.5"
+                  v-tip="entry.score > 0 ? $t('library.myScoreN', { n: entry.score }) : $t('library.myScore')"
+                >
+                  <button
+                    v-for="n in 10"
+                    :key="n"
+                    @click="library.setScore(entry.id, entry.score === n ? 0 : n)"
+                    class="state-layer rounded p-0.5"
+                    :aria-label="$t('library.rateN', { n })"
+                  >
+                    <Star :class="cn('h-4 w-4 transition-colors', n <= entry.score ? 'fill-tertiary text-tertiary' : 'text-muted-foreground/35 hover:text-tertiary/70')" />
                   </button>
+                  <span v-if="entry.score > 0" class="ml-1 text-xs font-bold tabular-nums text-tertiary">{{ entry.score }}</span>
                 </div>
               </div>
             </div>

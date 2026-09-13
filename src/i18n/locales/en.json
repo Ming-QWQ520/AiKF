@@ -169,7 +169,10 @@
     "progress": "Progress",
     "watchedN": "{n} watched",
     "continueAt": "Continue Ep. {n}",
-    "markNext": "Mark next episode",
+    "continueEp": "Continue EP{n}",
+    "myScore": "My rating",
+    "myScoreN": "My rating: {n}",
+    "scoreClear": "Clear rating",
     "rateN": "Rate {n}",
     "status": {
       "watching": "Watching",
