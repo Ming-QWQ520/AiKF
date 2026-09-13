@@ -44,11 +44,15 @@ const viewComponent = () => {
 };
 
 // GSAP-powered view transitions (smoother than CSS transitions)
-// 动画等级分级（任务 29）：off → 直接完成；basic → 仅 opacity 淡入淡出（无 blur/y 位移，
-// filter 模糊属于逐帧重绘高开销属性）；full → 默认完整动画。
+// 动画等级分级（任务 29）：off → 跳过动画直接完成；basic → 仅 opacity 淡入淡出（无 blur/y
+// 位移，filter 模糊属于逐帧重绘高开销属性）；full → 默认完整动画。
+// ⚠️ off 分支绝不能同步调用 done()：Vue out-in 模式的 leave 同步完成会与组件卸载/
+// 重渲染竞态（生产环境实测大量 "Cannot read properties of null (reading 'parentNode')"
+// + 整页白屏）。必须用 rAF 异步完成，给 Vue 一个渲染 tick 收尾。
+const doneAsync = (done: () => void) => requestAnimationFrame(() => done());
 const onEnter = (el: Element, done: () => void) => {
   const lv = settings.data.animLevel ?? "full";
-  if (lv === "off") { done(); return; }
+  if (lv === "off") { gsap.set(el, { opacity: 1 }); doneAsync(done); return; }
   if (lv === "basic") {
     gsap.fromTo(el, { opacity: 0 },
       { opacity: 1, duration: 0.18, ease: "power1.out", clearProps: "all", onComplete: done });
@@ -64,7 +68,7 @@ const onEnter = (el: Element, done: () => void) => {
 };
 const onLeave = (el: Element, done: () => void) => {
   const lv = settings.data.animLevel ?? "full";
-  if (lv === "off") { done(); return; }
+  if (lv === "off") { doneAsync(done); return; }
   if (lv === "basic") {
     gsap.to(el, { opacity: 0, duration: 0.12, ease: "power1.in", onComplete: done });
     return;

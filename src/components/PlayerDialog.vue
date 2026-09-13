@@ -749,7 +749,9 @@ function createArt(container: HTMLElement, url: string) {
         // 顺带补全追番库条目的总集数（旧数据 totalEpisodes=0 时进度无法显示）。
         // episodes 与 vod 并行加载，video:play 时通常已就绪；未就绪时传
         // undefined，store 侧保持原值不受影响。
-        library.markEpisode(bangumiID.value, episode.value, episodesList.value.length || undefined);
+        // 播放行为属于用户真实标记 → 走 markPlayedEpisode（记入 played，
+        // 云端逐集对齐时不会被顺序假设清理误删）
+        library.markPlayedEpisode(bangumiID.value, episode.value, episodesList.value.length || undefined);
       }
     });
 

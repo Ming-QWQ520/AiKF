@@ -101,6 +101,7 @@ async function ensureCloudEpisodes(entry: LibraryEntry) {
     }
     const items = await bgmApi.getSubjectEpisodeCollection(entry.bgmId);
     const m = new Map<number, number>();
+    const cloudWatched: number[] = [];
     for (const it of items) {
       if (!it?.episode) continue;
       const num =
@@ -111,11 +112,11 @@ async function ensureCloudEpisodes(entry: LibraryEntry) {
             : Number.NaN;
       if (!Number.isInteger(num) || num < 1) continue;
       m.set(num, Number(it.type) || 0);
-      // 云端看过 → 本地补标（并集语义：不覆盖、不删除本地已有记录）
-      if (Number(it.type) === 2 && !entry.watchedEpisodes.includes(num)) {
-        library.markEpisode(entry.id, num);
-      }
+      if (Number(it.type) === 2) cloudWatched.push(num);
     }
+    // 与拉取时同一对齐通道：watchedEpisodes := 云端看过 ∪ 本应用内真实标记（played），
+    // 旧版顺序假设的虚假标记（如云端没看过的 1/2）在这里同样被清除
+    if (cloudWatched.length > 0) library.reconcileEpisodes(entry.id, cloudWatched);
     const next = new Map(cloudEpTypes.value);
     next.set(entry.id, m);
     cloudEpTypes.value = next;

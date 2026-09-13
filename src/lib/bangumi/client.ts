@@ -190,7 +190,10 @@ async function api<T>(method: string, path: string, body?: unknown, retried = fa
     return api<T>(method, path, body, true);
   }
   if (!res.ok) throw new BgmAPIError(`Bangumi ${method} ${path} -> HTTP ${res.status}: ${res.body.slice(0, 200)}`, res.status);
-  return JSON.parse(res.body) as T;
+  // POST/PATCH 收藏类接口常返回 202/204 且响应体为空 —— JSON.parse("") 会抛
+  // SyntaxError 导致整次推送被判失败（章节标记全被跳过），空体直接返回 undefined。
+  const text = res.body.trim();
+  return (text ? JSON.parse(text) : undefined) as T;
 }
 
 // ── OAuth 登录 ──

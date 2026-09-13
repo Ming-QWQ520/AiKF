@@ -10,7 +10,9 @@
  *   - 已绑定 AniCh 的条目（bgmId 直连）不再重复搜索；
  *   - 反查结果持久化（aikf:bgm-anich-map:v1），未命中缓存 3 天后重试；
  *   - 未匹配到 AniCh 的条目以 bgmOnly 占位入库（详情页惰性重试 + 可手动重绑）；
- *   - 云端 ep_status（已看集数）导入本地：顺序标记第 1..N 集看过（取并集不减）。
+ *   - 云端逐集观看状态导入本地：GET /v0/users/-/collections/{subject_id}/episodes
+ *     精确逐集对齐（看过 ∪ 本应用内真实标记 played），不再用 ep_status 顺序假设
+ *     （旧版会制造虚假进度：只看了 3/4/5/6/26 却显示 1/2/3/4/5/26）。
  *
  * 自动同步（默认开启，无开关）：库变更 → auto-sync.ts 监听 → 防抖后
  * pushEntries 单条推送；pull 期间静音避免原样回推。
@@ -324,15 +326,35 @@ function savePullMap(m: Record<string, PullMapEntry>) {
 const PULL_RETRY_MS = 3 * 24 * 60 * 60 * 1000;
 
 /**
- * 把云端 ep_status（已看集数）合并进本地条目：顺序标记第 1..N 集看过。
- * markEpisode 为并集语义（已标记的不动、不删本地多看的集数），
- * 总集数钳制在 markEpisode 内部处理。云端看不到具体看了哪几集，
- * 按顺序假设覆盖绝大多数场景。
+ * 云端逐集观看状态对齐（拉取时调用，替代旧版 ep_status 顺序假设）。
+ *
+ * 流程：GET /v0/users/-/collections/{subject_id}/episodes 取逐集收藏状态 →
+ * cloudWatched = type=2（看过）的集数 → library.reconcileEpisodes：
+ *   watchedEpisodes := cloudWatched ∪ played（用户在本应用内的真实标记）。
+ * 效果：云端不确认的旧顺序假设标记（如 1/2）会被清除；用户在本应用内
+ * 看过/手动标记的集数（played）永不丢失。
+ *
+ * 逐集拉取失败时静默跳过（本地保持原样，下次拉取重试），不阻断导入。
  */
-function applyCloudEpisodeProgress(id: number, epStatus: unknown) {
+async function reconcileCloudEpisodes(entryId: number, subjectId: number) {
   const library = useLibraryStore();
-  const n = Math.max(0, Math.min(2000, Math.floor(Number(epStatus) || 0)));
-  for (let e = 1; e <= n; e++) library.markEpisode(id, e);
+  try {
+    const items = await bgm.getSubjectEpisodeCollection(subjectId);
+    const watched: number[] = [];
+    for (const it of items) {
+      if (!it?.episode || Number(it.type) !== 2) continue;
+      const num =
+        typeof it.episode.ep === "number"
+          ? it.episode.ep
+          : it.episode.order
+            ? parseFloat(it.episode.order)
+            : Number.NaN;
+      if (Number.isInteger(num) && num >= 1) watched.push(num);
+    }
+    if (watched.length > 0) library.reconcileEpisodes(entryId, watched);
+  } catch {
+    /* 逐集拉取失败：保持本地进度原样，下次拉取重试 */
+  }
 }
 
 export interface PullResult {
@@ -346,7 +368,7 @@ export interface PullResult {
  * 仅导入类型 1 想看 / 3 在看 / 2 看过 的动画条目。
  * 需求：无论 AniCh 是否有资源都添加至追番库 —— 未匹配到 AniCh 条目时
  * 用 Bangumi 数据入库（负数占位 id + bgmOnly 标记），详情页打开时惰性重试匹配。
- * 同时导入云端观看集数进度（ep_status），未同步/无资源番剧也能显示进度。
+ * 同时逐集对齐云端观看进度（看过 ∪ 本地真实标记），未同步/无资源番剧也能显示进度。
  */
 export async function pullAll(onProgress?: (p: SyncProgress) => void): Promise<PullResult> {
   const library = useLibraryStore();
@@ -381,7 +403,7 @@ export async function pullAll(onProgress?: (p: SyncProgress) => void): Promise<P
           },
           status
         );
-        applyCloudEpisodeProgress(existing.id, item.ep_status);
+        await reconcileCloudEpisodes(existing.id, subject.id);
         result.imported++;
         continue;
       }
@@ -428,7 +450,7 @@ export async function pullAll(onProgress?: (p: SyncProgress) => void): Promise<P
         if (existing?.bgmOnly) {
           // 惰性重试命中：bgmOnly 占位条目升级为真实 AniCh 条目（合并观看记录）
           library.upgradeBgmOnly(existing.id, match);
-          applyCloudEpisodeProgress(match.id, item.ep_status);
+          await reconcileCloudEpisodes(match.id, subject.id);
         } else {
           library.addOrUpdate(
             {
@@ -441,7 +463,7 @@ export async function pullAll(onProgress?: (p: SyncProgress) => void): Promise<P
             },
             status
           );
-          applyCloudEpisodeProgress(match.id, item.ep_status);
+          await reconcileCloudEpisodes(match.id, subject.id);
         }
         result.imported++;
         await sleep(300);
@@ -459,7 +481,7 @@ export async function pullAll(onProgress?: (p: SyncProgress) => void): Promise<P
           },
           status
         );
-        applyCloudEpisodeProgress(-subject.id, item.ep_status);
+        await reconcileCloudEpisodes(-subject.id, subject.id);
         result.imported++;
       }
     } catch (e: any) {

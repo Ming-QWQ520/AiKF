@@ -95,6 +95,30 @@ const TABS = [
   { key: "bgmRelated", labelKey: "detail.tabBgmRelated" },
 ] as const;
 
+// ── Tab bar 滑动指示条（需求：切换 Tab 时 hover 指示条平滑移动，而非逐键出现/消失）──
+// 单一元素 + left/width CSS 过渡；字体加载/语言切换/容器尺寸变化时重测量。
+const tabBarRef = ref<HTMLElement | null>(null);
+const tabBtnEls = new Map<string, HTMLElement>();
+const setTabBtnRef = (key: string, el: unknown) => {
+  if (el) tabBtnEls.set(key, el as HTMLElement);
+  else tabBtnEls.delete(key);
+};
+const indicator = ref({ x: 0, w: 0, ready: false });
+const updateIndicator = () => {
+  const el = tabBtnEls.get(activeTab.value);
+  if (!el) return;
+  // offsetLeft 相对 offsetParent（即带 relative 的 tabBar 行），含行内 padding
+  indicator.value = { x: el.offsetLeft, w: el.offsetWidth, ready: true };
+};
+watch(activeTab, () => nextTick(updateIndicator), { immediate: true });
+onMounted(() => {
+  nextTick(updateIndicator);
+  // 字体异步加载/语言切换后文字宽度变化；窗口缩放同样重测
+  window.addEventListener("resize", updateIndicator, { passive: true });
+  if (document.fonts?.ready) void document.fonts.ready.then(updateIndicator).catch(() => {});
+});
+onBeforeUnmount(() => window.removeEventListener("resize", updateIndicator));
+
 // ── Hero helpers ──
 const LANG_KEY: Record<string, string> = {
   ja: "common.langNames.ja",
@@ -478,12 +502,13 @@ const applyRematch = (hit: any) => {
       </div>
     </div>
 
-    <!-- ═══ Tab bar ═══ -->
+    <!-- ═══ Tab bar（指示条单一元素随激活 Tab 平滑滑动，不再逐键出现/消失）═══ -->
     <div class="border-b border-border/70">
-      <div class="mx-auto flex max-w-[1200px] gap-7 px-4 sm:px-6">
+      <div ref="tabBarRef" class="relative mx-auto flex max-w-[1200px] gap-7 px-4 sm:px-6">
         <button
           v-for="t in TABS"
           :key="t.key"
+          :ref="(el) => setTabBtnRef(t.key, el)"
           @click="activeTab = t.key"
           :class="cn(
             'relative pb-2.5 pt-1 text-sm font-medium transition-colors',
@@ -492,8 +517,13 @@ const applyRematch = (hit: any) => {
         >
           {{ t.labelKey ? $t(t.labelKey) : '' }}
           <span v-if="t.key === 'comments' && commentCount" class="text-[10px]"> {{ commentCount }}</span>
-          <span v-if="activeTab === t.key" class="absolute inset-x-0 -bottom-px h-0.5 rounded-full bg-primary" />
         </button>
+        <!-- 滑动指示条：transform/left 过渡由 CSS 接管（低耗）;
+             opacity:0 兜底首帧未测量时不闪烁；data-anim=off 时全局规则自动把过渡时长压到 0.01ms -->
+        <span
+          class="tab-indicator absolute bottom-0 left-0 h-0.5 rounded-full bg-primary transition-[left,width] duration-300 ease-out"
+          :style="{ left: `${indicator.x}px`, width: `${indicator.w}px`, opacity: indicator.ready ? 1 : 0 }"
+        />
       </div>
     </div>
 

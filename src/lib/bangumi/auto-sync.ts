@@ -23,12 +23,14 @@ const WATCHED_ACTIONS = new Set([
   "addOrUpdate",
   "setStatus",
   "markEpisode",
+  "markPlayedEpisode",
   "unmarkEpisode",
   "toggleEpisode",
   "setCurrentEpisode",
   "setScore",
   "upgradeBgmOnly",
   "rebindEntry",
+  "reconcileEpisodes",
 ]);
 
 const pending = new Set<number>();

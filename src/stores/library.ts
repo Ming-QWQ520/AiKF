@@ -50,6 +50,11 @@ export interface LibraryEntry {
   bgmId?: number;
   /** 无 AniCh 资源：来自 Bangumi 导入、尚未匹配到 AniCh 条目（id 为负数占位，详情页打开时惰性重试匹配） */
   bgmOnly?: boolean;
+  /** 用户在本应用内的真实标记记录（播放 >90% 看完 / 手动点击芯片）。
+   *  与 watchedEpisodes 的区别：云端拉取合并进来的集数不算。
+   *  用途：拉取时按「云端逐集看过 ∪ played」重建 watchedEpisodes，
+   *  既能清除旧版顺序假设的虚假标记，又不丢用户在本应用内的真实进度。 */
+  played?: number[];
 }
 
 interface LibraryState {
@@ -357,6 +362,18 @@ export const useLibraryStore = defineStore("library", {
       };
       this._persist();
     },
+    /** 用户真实动作标记（播放 >90% 看完 / 手动点击芯片）：记入 played。
+     *  云端拉取合并（markEpisode）不算 played —— 那部分进度以云端为准。 */
+    markPlayedEpisode(id: number, episode: number, totalEpisodes?: number) {
+      const e = this.entries[id];
+      if (e && !e.played?.includes(episode)) {
+        this.entries = {
+          ...this.entries,
+          [id]: { ...e, played: [...(e.played ?? []), episode].sort((a, b) => a - b) },
+        };
+      }
+      this.markEpisode(id, episode, totalEpisodes);
+    },
     unmarkEpisode(id: number, episode: number) {
       const e = this.entries[id];
       if (!e) return;
@@ -365,8 +382,32 @@ export const useLibraryStore = defineStore("library", {
         [id]: {
           ...e,
           watchedEpisodes: e.watchedEpisodes.filter((x) => x !== episode),
+          // 用户手动取消 = 本应用内也不再算真实标记
+          played: e.played?.filter((x) => x !== episode),
           updatedAt: Date.now(),
         },
+      };
+      this._persist();
+    },
+    /** 云端逐集进度对齐（拉取时调用）：watchedEpisodes := 云端看过 ∪ 本应用内真实标记。
+     *  - 仅当云端逐集数据非空时才动本地（云端无信号时本地可能是唯一真实记录，不可清）；
+     *  - 可清除旧版「ep_status 顺序标记 1..N」产生的虚假进度（如只看了 3/4/5/6/26
+     *    却显示 1/2/3/4/5/26）；
+     *  - 集合无变化时不写入，避免空转触发自动同步推送。 */
+    reconcileEpisodes(id: number, cloudWatched: number[]) {
+      const e = this.entries[id];
+      if (!e || cloudWatched.length === 0) return;
+      const total = e.totalEpisodes > 0 ? e.totalEpisodes : 0;
+      const ok = (n: number) => (total > 0 ? n >= 1 && n <= total : n >= 1);
+      const merged = new Set<number>();
+      for (const n of cloudWatched) if (ok(Math.trunc(n))) merged.add(Math.trunc(n));
+      for (const n of e.played ?? []) if (ok(Math.trunc(n))) merged.add(Math.trunc(n));
+      const next = [...merged].sort((a, b) => a - b);
+      const cur = e.watchedEpisodes;
+      if (next.length === cur.length && next.every((n, i) => n === cur[i])) return;
+      this.entries = {
+        ...this.entries,
+        [id]: { ...e, watchedEpisodes: next, updatedAt: Date.now() },
       };
       this._persist();
     },
@@ -374,13 +415,13 @@ export const useLibraryStore = defineStore("library", {
       const e = this.entries[id];
       if (!e) {
         this.addOrUpdate({ id, title: "", image: "", totalEpisodes }, "watching");
-        this.markEpisode(id, episode, totalEpisodes);
+        this.markPlayedEpisode(id, episode, totalEpisodes);
         return;
       }
       if (e.watchedEpisodes.includes(episode)) {
         this.unmarkEpisode(id, episode);
       } else {
-        this.markEpisode(id, episode, totalEpisodes);
+        this.markPlayedEpisode(id, episode, totalEpisodes);
       }
     },
     setCurrentEpisode(id: number, episode: number) {
@@ -411,8 +452,9 @@ export const useLibraryStore = defineStore("library", {
       const e = this.entries[id];
       if (!e) return;
       if (duration > 0 && time / duration > 0.9) {
-        // 真实看完（>90%）才计入观看数据（markEpisode 内部有总集数钳制）
-        this.markEpisode(id, episode);
+        // 真实看完（>90%）才计入观看数据（markEpisode 内部有总集数钳制），
+        // 且属于用户真实动作 → 记入 played
+        this.markPlayedEpisode(id, episode);
       }
       if (!e.playbackProgress) e.playbackProgress = {};
       e.playbackProgress[episode] = { time, duration };
