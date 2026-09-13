@@ -279,10 +279,16 @@
     color: var(--foreground);
   }
 
-  /* 交互态叠层：极轻的中性反馈 */
+  /* 交互态叠层：极轻的中性反馈
+     ⚠️ position:relative 只能作为「无定位类时的兜底」——本规则与 Tailwind
+     utilities 同层且物理位置靠后，若无条件写 position:relative 会把
+     `state-layer absolute`（如我的页登出键）的 absolute 覆盖掉，
+     导致按钮掉回文档流（表现为错位到横幅左上角）。 */
   .state-layer {
-    position: relative;
     isolation: isolate;
+  }
+  .state-layer:not(.absolute):not(.fixed):not(.sticky) {
+    position: relative;
   }
   .state-layer::after {
     content: "";
@@ -392,4 +398,89 @@
 }
 .aikf-tip-arrow.aikf-tip-arrow-t {
   bottom: -3.5px;
+}
+
+/* ============================================================
+   动画等级（设置页可调：off 关闭 / basic 基础 / full 完整）
+   实现约定：<html data-anim="..."> 由 App.vue 按设置实时写入。
+   - full：全部动画（默认观感）
+   - basic：只保留低消耗动画（透明度/颜色过渡、spinner），
+     关闭 shimmer 位移扫光（改 opacity 脉动）、hover 缩放、
+     图片载入位移/模糊（由 CoverImage 配合降级）
+   - off：全部动画关闭（仅保留 spinner，避免加载态看似卡死）
+   ============================================================ */
+html[data-anim="off"] *,
+html[data-anim="off"] *::before,
+html[data-anim="off"] *::after {
+  animation-duration: 0.01ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.01ms !important;
+  scroll-behavior: auto !important;
+}
+/* off 档豁免：加载 spinner（静止的 Loader 看起来像卡死） */
+@keyframes aikf-spin {
+  to { transform: rotate(360deg); }
+}
+html[data-anim="off"] .animate-spin {
+  animation: aikf-spin 1s linear infinite !important;
+}
+
+/* basic 档：shimmer 扫光 → 透明度脉动（无大幅 translate 层合成，GPU 更省） */
+@keyframes aikf-shimmer-pulse {
+  0%, 100% { opacity: 0.25; }
+  50% { opacity: 0.9; }
+}
+html[data-anim="basic"] .shimmer::after {
+  animation: aikf-shimmer-pulse 1.6s ease-in-out infinite;
+  transform: none !important;
+}
+html[data-anim="basic"] .shimmer {
+  will-change: auto;
+}
+/* basic 档：hover 缩放一律关闭（属性选择器按字面匹配 class，避免转义 Tailwind 类名）
+   !important 保证压过 Tailwind 的 .group:hover .group-hover:scale-* 规则 */
+html[data-anim="basic"] [class*="group-hover:scale"],
+html[data-anim="basic"] [class*="hover:scale"] {
+  transform: none !important;
+  transition-property: opacity, filter, background-color, border-color, color, box-shadow !important;
+}
+
+/* ── 详情页 Tab 切换动画（低耗：仅 opacity + translateY，随动画等级启停） ── */
+.tabfade-enter-active { transition: opacity 0.18s ease, transform 0.18s ease; }
+.tabfade-leave-active { transition: opacity 0.12s ease; }
+.tabfade-enter-from { opacity: 0; transform: translateY(8px); }
+.tabfade-leave-to { opacity: 0; }
+
+/* ── 回到顶部圆键淡入（Teleport 到 body，脱离 main 的 contain:layout） ── */
+.backtop-enter-active, .backtop-leave-active { transition: opacity 0.15s ease, transform 0.15s ease; }
+.backtop-enter-from, .backtop-leave-to { opacity: 0; transform: translateY(6px); }
+
+/* ── 长列表渲染减负：评论卡片超出视口后跳过布局/绘制 ── */
+.comment-item {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 150px;
+}
+
+/* ── 制作/关联条目分组减负：视口外分组跳过布局/绘制（制作页可达上百人）── */
+.detail-section {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 240px;
+}
+
+/* ── CoverImage 载入动画按动画等级降级（配合任务 29）──
+   full：scale(1.05)+blur(md) → 正常（默认，模板内联类）
+   basic：仅保留 opacity 淡入（transform/filter 一律禁用，避免逐帧合成）
+   off：直接显示 */
+html[data-anim="basic"] .cover-img {
+  transition-property: opacity !important;
+  transform: none !important;
+  filter: none !important;
+  will-change: auto !important;
+}
+html[data-anim="off"] .cover-img {
+  transition: none !important;
+  transform: none !important;
+  filter: none !important;
+  opacity: 1 !important;
+  will-change: auto !important;
 }

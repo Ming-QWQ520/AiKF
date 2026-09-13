@@ -13,12 +13,22 @@ import LibraryView from "@/components/views/LibraryView.vue";
 import DetailView from "@/components/views/DetailView.vue";
 import SettingsView from "@/components/views/SettingsView.vue";
 import { initThemeOnLoad } from "@/composables/useTheme";
+import { useSettingsStore, type AnimLevel } from "@/stores/settings";
 import { gsap } from "gsap";
+import { watch } from "vue";
 
 const ui = useUIStore();
+const settings = useSettingsStore();
 
 // Initialize theme system (watches settings store for live theme switching)
 initThemeOnLoad();
+
+// ── 动画等级（任务 29）：设置实时写入 <html data-anim="...">，驱动 globals.css
+//    内的全局分级规则（shimmer 扫光降级/hover 缩放关闭/全部关闭/封面载入降级）
+const applyAnimLevel = (lv: AnimLevel) => {
+  document.documentElement.dataset.anim = lv || "full";
+};
+watch(() => settings.data.animLevel, applyAnimLevel, { immediate: true });
 
 const viewComponent = () => {
   switch (ui.view) {
@@ -34,7 +44,16 @@ const viewComponent = () => {
 };
 
 // GSAP-powered view transitions (smoother than CSS transitions)
+// 动画等级分级（任务 29）：off → 直接完成；basic → 仅 opacity 淡入淡出（无 blur/y 位移，
+// filter 模糊属于逐帧重绘高开销属性）；full → 默认完整动画。
 const onEnter = (el: Element, done: () => void) => {
+  const lv = settings.data.animLevel ?? "full";
+  if (lv === "off") { done(); return; }
+  if (lv === "basic") {
+    gsap.fromTo(el, { opacity: 0 },
+      { opacity: 1, duration: 0.18, ease: "power1.out", clearProps: "all", onComplete: done });
+    return;
+  }
   gsap.fromTo(el,
     { opacity: 0, y: 12, filter: "blur(4px)" },
     // clearProps: "all" —— 残留的内联 transform/filter 会创建 containing block，
@@ -44,6 +63,12 @@ const onEnter = (el: Element, done: () => void) => {
   );
 };
 const onLeave = (el: Element, done: () => void) => {
+  const lv = settings.data.animLevel ?? "full";
+  if (lv === "off") { done(); return; }
+  if (lv === "basic") {
+    gsap.to(el, { opacity: 0, duration: 0.12, ease: "power1.in", onComplete: done });
+    return;
+  }
   gsap.to(el,
     { opacity: 0, y: -8, filter: "blur(4px)", duration: 0.22, ease: "power2.in", onComplete: done }
   );

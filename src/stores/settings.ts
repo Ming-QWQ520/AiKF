@@ -25,6 +25,13 @@ export type ThemeMode = "light" | "dark" | "system";
 /** 界面语言（多语言支持：默认简体中文，设置页可切换） */
 export type Language = "zh-CN" | "en";
 
+/** 动画等级（任务 29：设置页可调，控制全局动画性能消耗）
+ *  - full  : 全部动画（默认观感）
+ *  - basic : 只保留低消耗动画（透明度/颜色过渡、spinner），关闭缩放/模糊/位移扫光
+ *  - off   : 全部动画关闭（仅保留 spinner，避免加载态看似卡死）
+ *  实现约定：<html data-anim="..."> 由 App.vue 按设置实时写入，CSS 见 globals.css */
+export type AnimLevel = "off" | "basic" | "full";
+
 /** 弹幕设置（显示区域为画面高度占比：0.25=1/4屏 0.5=半屏 0.75=3/4屏 1=满屏） */
 export interface DanmakuSettings {
   enabled: boolean;
@@ -59,6 +66,8 @@ export interface AppSettings {
   theme: ThemeMode;
   /** 界面语言（zh-CN = 简体中文默认 / en = English） */
   language: Language;
+  /** 动画等级：off 关闭 / basic 基础（低消耗）/ full 完整（默认） */
+  animLevel: AnimLevel;
   /** m3u8 下载分片线程数（每集内部，1–32，默认 6） */
   cacheThreads: number;
   /** 并发下载集数（同时缓存几集，全部线路类型通用；1–12，默认 3）。存储键沿用 cacheMp4Threads */
@@ -81,6 +90,8 @@ const DEFAULTS: AppSettings = {
   theme: "dark",
   // 需求：多语言支持默认使用中文
   language: "zh-CN",
+  // 动画等级默认完整观感（任务 29：设置页可降级省 GPU）
+  animLevel: "full",
   cacheThreads: 6,
   // 需求：并发下载默认 3 集（最高可同时缓存三集），最高 12；全部线路类型生效
   cacheMp4Threads: 3,
@@ -132,6 +143,10 @@ function load(): AppSettings {
     merged.danmaku.speed = Math.min(10, Math.max(1, Number(merged.danmaku.speed) || 5));
     // 界面语言钳制：仅接受支持的语言，否则回退默认中文
     if (merged.language !== "zh-CN" && merged.language !== "en") merged.language = DEFAULTS.language;
+    // 动画等级钳制：仅接受 off/basic/full，否则回退完整
+    if (merged.animLevel !== "off" && merged.animLevel !== "basic" && merged.animLevel !== "full") {
+      merged.animLevel = DEFAULTS.animLevel;
+    }
     return merged;
   } catch {
     return { ...DEFAULTS };

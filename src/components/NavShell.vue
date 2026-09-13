@@ -84,9 +84,11 @@ onMounted(() => {
 const mainRef = ref<HTMLElement | null>(null);
 
 // ── Library entry progress helpers ──
-// 真实播放数据：currentEpisode 优先，观看数不超过总集数
+// 真实观看数：与追番库集数芯片同源（watchedEpisodes 长度，≤ 总集数）。
+// 此前误用 currentEpisode（「看到第几话」指针）导致侧栏显示假进度
+//（如计数 26/26 但逐集明细只亮 7 集）；指针仅用于「继续观看」。
 const currentEp = (entry: { currentEpisode: number; watchedEpisodes: number[]; totalEpisodes: number }): number => {
-  const raw = entry.currentEpisode || entry.watchedEpisodes.length || 0;
+  const raw = entry.watchedEpisodes?.length ?? 0;
   return entry.totalEpisodes > 0 ? Math.min(raw, entry.totalEpisodes) : raw;
 };
 const watchedPct = (entry: { currentEpisode: number; watchedEpisodes: number[]; totalEpisodes: number }): number => {

@@ -131,6 +131,14 @@ async function ensureCloudEpisodes(entry: LibraryEntry) {
 
 const isWatched = (entry: LibraryEntry, n: number) => entry.watchedEpisodes.includes(n);
 
+/** 真实观看数（≤ 总集数）：与集数芯片同源，统一从逐集记录取长度。
+ *  此前计数器误用 currentEpisode（「看到第几话」指针），会出现
+ *  「计数 26/26 但芯片只亮 7 集」的假进度 —— 指针现在只用于「继续观看」。 */
+const realWatched = (entry: LibraryEntry): number =>
+  entry.totalEpisodes > 0
+    ? Math.min(entry.watchedEpisodes.length, entry.totalEpisodes)
+    : entry.watchedEpisodes.length;
+
 /** 集数芯片样式：云端状态优先级展示（看过=主色 / 想看=琥珀 / 抛弃=红） */
 function chipClass(entry: LibraryEntry, n: number): string {
   const ct = cloudEpTypes.value.get(entry.id)?.get(n) ?? 0;
@@ -234,8 +242,8 @@ function chipTip(entry: LibraryEntry, n: number): string {
                   <span class="text-muted-foreground">{{ $t('library.progress') }}</span>
                   <span class="font-medium text-foreground tabular-nums">
                     <template v-if="entry.totalEpisodes > 0">
-                      {{ $t('common.episodesOf', { cur: entry.currentEpisode || entry.watchedEpisodes.length, total: entry.totalEpisodes }) }}
-                      <span class="ml-1 text-muted-foreground">· {{ Math.min(100, Math.round(((entry.currentEpisode || entry.watchedEpisodes.length) / entry.totalEpisodes) * 100)) }}%</span>
+                      {{ $t('common.episodesOf', { cur: realWatched(entry), total: entry.totalEpisodes }) }}
+                      <span class="ml-1 text-muted-foreground">· {{ Math.min(100, Math.round((realWatched(entry) / entry.totalEpisodes) * 100)) }}%</span>
                     </template>
                     <template v-else-if="entry.watchedEpisodes.length > 0">
                       {{ $t('library.watchedN', { n: entry.watchedEpisodes.length }) }}
@@ -250,7 +258,7 @@ function chipTip(entry: LibraryEntry, n: number): string {
                     class="h-full rounded-full bg-primary transition-all duration-500"
                     :style="{
                       width: `${entry.totalEpisodes > 0
-                        ? Math.min(100, Math.round(((entry.currentEpisode || entry.watchedEpisodes.length) / entry.totalEpisodes) * 100))
+                        ? Math.min(100, Math.round((realWatched(entry) / entry.totalEpisodes) * 100))
                         : 0}%`
                     }"
                   />
@@ -266,7 +274,7 @@ function chipTip(entry: LibraryEntry, n: number): string {
                     <Loader2 v-if="cloudEpLoading.has(entry.id)" class="h-3 w-3 animate-spin" />
                     <ChevronDown v-else :class="cn('h-3 w-3 transition-transform duration-200', epDetailExpanded.has(entry.id) && 'rotate-180')" />
                     {{ $t('library.epDetail') }}
-                    <span class="tabular-nums">{{ entry.watchedEpisodes.length }}{{ entry.totalEpisodes > 0 ? `/${entry.totalEpisodes}` : '' }}</span>
+                    <span class="tabular-nums">{{ realWatched(entry) }}{{ entry.totalEpisodes > 0 ? `/${entry.totalEpisodes}` : '' }}</span>
                   </button>
                   <div v-if="epDetailExpanded.has(entry.id) && entry.totalEpisodes > 0" class="mt-1.5 flex max-h-[88px] flex-wrap gap-1 overflow-y-auto">
                     <button

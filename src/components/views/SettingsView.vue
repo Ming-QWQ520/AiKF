@@ -9,6 +9,9 @@ import {
   Monitor,
   RotateCcw,
   Zap,
+  ZapOff,
+  Feather,
+  Sparkles,
   ImageIcon,
   Upload,
   Eye,
@@ -35,7 +38,7 @@ import {
   BadgeCheck,
 } from "lucide-vue-next";
 import { invoke } from "@tauri-apps/api/core";
-import { useSettingsStore, type ThemeMode, type Language } from "@/stores/settings";
+import { useSettingsStore, type ThemeMode, type Language, type AnimLevel } from "@/stores/settings";
 import { useLibraryStore, STATUS_I18N_KEYS, STATUS_STYLES, type TrackStatus } from "@/stores/library";
 import { useUIStore } from "@/stores/ui";
 import { LOCALE_OPTIONS } from "@/i18n";
@@ -58,6 +61,13 @@ const themeOptions: { value: ThemeMode; labelKey: string; icon: any }[] = [
   { value: "light", labelKey: "theme.light", icon: Sun },
   { value: "dark", labelKey: "theme.dark", icon: Moon },
   { value: "system", labelKey: "theme.system", icon: Monitor },
+];
+
+// 动画等级（任务 29：性能消耗可在设置中调节）
+const animOptions: { value: AnimLevel; labelKey: string; icon: any }[] = [
+  { value: "off", labelKey: "settings.anim.off", icon: ZapOff },
+  { value: "basic", labelKey: "settings.anim.basic", icon: Feather },
+  { value: "full", labelKey: "settings.anim.full", icon: Sparkles },
 ];
 
 // — Tauri runtime detection —
@@ -326,13 +336,18 @@ const careerText = (p: bgm.BgmUserPersonCollection) =>
       <!-- ─── 我的（已登录）─── -->
       <template v-else>
         <!-- 账户横幅：大头像 + 昵称 + @username + UID + 注册时间 + 签名 -->
-        <div class="relative -m-5 mb-5 overflow-hidden rounded-t-2xl bg-gradient-to-br from-primary/15 via-primary/5 to-transparent p-5">
-          <button
-            @click="bgmCtx.logout()"
-            class="state-layer absolute right-4 top-4 flex items-center gap-1.5 rounded-lg border border-border bg-card/80 px-3 py-1.5 text-xs text-muted-foreground backdrop-blur transition-colors hover:border-destructive/40 hover:text-destructive"
-          >
-            <LogOut class="h-3.5 w-3.5" /> {{ $t('settings.bgm.logout') }}
-          </button>
+        <!-- 登出键：文档流内右对齐（此前 absolute 定位被 .state-layer 的
+             position:relative 同层覆盖导致掉回文档流错位到左上角，
+             改为 flex 行布局，从根上规避层叠冲突且窄屏不再与昵称重叠） -->
+        <div class="-m-5 mb-5 overflow-hidden rounded-t-2xl bg-gradient-to-br from-primary/15 via-primary/5 to-transparent p-5">
+          <div class="mb-2 flex justify-end">
+            <button
+              @click="bgmCtx.logout()"
+              class="state-layer flex items-center gap-1.5 rounded-lg border border-border bg-card/80 px-3 py-1.5 text-xs text-muted-foreground backdrop-blur transition-colors hover:border-destructive/40 hover:text-destructive"
+            >
+              <LogOut class="h-3.5 w-3.5" /> {{ $t('settings.bgm.logout') }}
+            </button>
+          </div>
           <div class="flex items-center gap-4">
             <img
               v-if="bgmCtx.user.value?.avatar?.large"
@@ -343,7 +358,7 @@ const careerText = (p: bgm.BgmUserPersonCollection) =>
             <span v-else class="flex h-20 w-20 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground ring-2 ring-background">
               <CircleUserRound class="h-10 w-10" />
             </span>
-            <div class="min-w-0 flex-1 pr-24">
+            <div class="min-w-0 flex-1">
               <h2 class="truncate text-2xl font-extrabold tracking-tight text-foreground">
                 {{ bgmCtx.user.value?.nickname || bgmCtx.user.value?.username || $t('settings.bgm.user') }}
               </h2>
@@ -544,6 +559,24 @@ const careerText = (p: bgm.BgmUserPersonCollection) =>
             <span :class="cn('text-xs font-semibold', s.theme === opt.value ? 'text-primary' : 'text-foreground')">{{ $t(opt.labelKey) }}</span>
           </button>
         </div>
+      </div>
+
+      <!-- 动画等级（任务 29：低性能消耗动画，等级可调） -->
+      <div>
+        <p class="mb-2 text-xs font-medium text-muted-foreground">{{ $t('settings.animLevel') }}</p>
+        <div class="grid grid-cols-3 gap-3">
+          <button
+            v-for="opt in animOptions" :key="opt.value"
+            @click="settings.update('animLevel', opt.value)"
+            :class="cn('flex flex-col items-center gap-2 rounded-xl px-3 py-4 transition-colors', s.animLevel === opt.value ? 'bg-primary/10 ring-1 ring-primary/40' : 'bg-muted hover:bg-accent')"
+          >
+            <span :class="cn('flex h-10 w-10 items-center justify-center rounded-lg', s.animLevel === opt.value ? 'bg-primary text-primary-foreground' : 'text-muted-foreground')">
+              <component :is="opt.icon" class="h-5 w-5" />
+            </span>
+            <span :class="cn('text-xs font-semibold', s.animLevel === opt.value ? 'text-primary' : 'text-foreground')">{{ $t(opt.labelKey) }}</span>
+          </button>
+        </div>
+        <p class="mt-1.5 text-[11px] text-muted-foreground">{{ $t('settings.animLevelHint') }}</p>
       </div>
     </section>
 

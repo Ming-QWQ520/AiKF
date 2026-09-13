@@ -377,6 +377,13 @@
     "themeHint": "Theme (synced with the toggle next to the top search bar)",
     "language": "Language",
     "languageHint": "Switch the interface language. Applies immediately.",
+    "animLevel": "Animation level",
+    "animLevelHint": "Cost: Off < Basic < Full. Lower levels keep only opacity/color transitions and loading spinners for smoother, GPU-friendly rendering.",
+    "anim": {
+      "off": "Off",
+      "basic": "Basic",
+      "full": "Full"
+    },
     "background": "Custom background",
     "bgDesc": "Set an image as the window background behind the whole window (including the title bar).",
     "bgEnable": "Enable custom background",

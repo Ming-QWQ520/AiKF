@@ -295,7 +295,12 @@ const openEntity = (kind: "character" | "person", id: number, name?: string, ima
   entity.value = { kind, id, name, image };
 };
 
-// ── 评论页回到顶部按键（需求：评论页面增加回到顶部）──
+// ── 回到顶部按键（需求：评论页/制作页等长内容页右下角固定悬浮）──
+// 显示范围 = 全部 Tab（评论/制作/关联条目/剧集/角色均可能超长，阈值 320px 统一处理）。
+// ⚠️ 渲染位置：必须 Teleport 到 body —— main 滚动容器带 contain:layout，会成为
+// fixed 后代的 containing block，且其 padding box 锚定在滚动内容坐标空间上，
+// 按钮会随内容滚走（表现为「右下角永远不出现」）；脱离 main 子树后 fixed
+// 重新锚定视口，稳定固定于视口右下角。
 const showBackTop = ref(false);
 let mainScroller: HTMLElement | null = null;
 let scrollerBound = false;
@@ -311,13 +316,11 @@ const bindMainScroller = () => {
   scrollerBound = true;
 };
 onMounted(() => nextTick(bindMainScroller));
-watch(activeTab, (t) => {
-  if (t === "comments") {
-    nextTick(() => {
-      bindMainScroller();
-      onMainScroll();
-    });
-  }
+watch(activeTab, () => {
+  nextTick(() => {
+    bindMainScroller();
+    onMainScroll();
+  });
 });
 onBeforeUnmount(() => {
   mainScroller?.removeEventListener("scroll", onMainScroll);
@@ -494,10 +497,11 @@ const applyRematch = (hit: any) => {
       </div>
     </div>
 
-    <!-- ═══ Tab content ═══ -->
+    <!-- ═══ Tab content（需求：切换时低耗 CSS 动画；mode=out-in 先卸后挂降低同时布局开销）═══ -->
     <div class="mx-auto min-h-[420px] max-w-[1200px] px-4 py-6 sm:px-6">
+    <Transition name="tabfade" mode="out-in">
       <!-- ── 详情 ── -->
-      <div v-if="activeTab === 'info'" class="space-y-7">
+      <div v-if="activeTab === 'info'" key="info" class="space-y-7">
         <p v-if="detail?.overview" class="whitespace-pre-line text-sm leading-7 text-foreground/90">【{{ detail.overview }}】</p>
         <p v-else-if="!detailLoading" class="text-sm text-muted-foreground">{{ $t('detail.noOverview') }}</p>
 
@@ -519,7 +523,7 @@ const applyRematch = (hit: any) => {
       </div>
 
       <!-- ── 剧集：缩略图卡片网格 ── -->
-      <div v-else-if="activeTab === 'episodes'">
+      <div v-else-if="activeTab === 'episodes'" key="episodes">
         <div v-if="!episodes || episodes.length === 0" class="py-10 text-center text-sm text-muted-foreground">{{ $t('detail.noEpisodes') }}</div>
         <div v-else ref="epGridRef" class="w-full overflow-hidden" :style="{ ...epGridStyle, contain: 'layout', maxWidth: '100%' }">
           <button
@@ -549,11 +553,12 @@ const applyRematch = (hit: any) => {
       </div>
 
       <!-- ── 评论 ── -->
-      <div v-else-if="activeTab === 'comments'">
+      <div v-else-if="activeTab === 'comments'" key="comments">
         <div v-if="commentsLoading" class="space-y-3"><div v-for="i in 3" :key="i" class="h-20 rounded-lg shimmer" /></div>
         <div v-else-if="comments.length === 0" class="py-10 text-center text-sm text-muted-foreground">{{ $t('detail.noComments') }}</div>
         <div v-else class="space-y-4">
-          <div v-for="c in comments" :key="c.id" class="surface rounded-xl p-4">
+          <!-- content-visibility：视口外评论卡跳过布局/绘制，长评论列表滚动大幅减负 -->
+          <div v-for="c in comments" :key="c.id" class="comment-item surface rounded-xl p-4">
             <div class="flex items-center gap-2">
               <img v-if="c.user?.avatar" :src="c.user.avatar" alt="" class="h-7 w-7 rounded-full object-cover" draggable="false" />
               <div v-else class="flex h-7 w-7 items-center justify-center rounded-full bg-primary/20 text-xs font-bold text-primary">{{ (c.user?.name || "?").charAt(0) }}</div>
@@ -589,7 +594,7 @@ const applyRematch = (hit: any) => {
       </div>
 
       <!-- ── 角色（需求：可点击查看详情）── -->
-      <div v-else-if="activeTab === 'characters'">
+      <div v-else-if="activeTab === 'characters'" key="characters">
         <div v-if="!characters || characters.length === 0" class="py-10 text-center text-sm text-muted-foreground">{{ $t('detail.noCharacters') }}</div>
         <div v-else ref="charGridRef" class="w-full overflow-hidden" :style="{ ...charGridStyle, contain: 'layout', maxWidth: '100%' }">
           <button
@@ -610,13 +615,13 @@ const applyRematch = (hit: any) => {
       </div>
 
       <!-- ── 制作（需求：角色项右侧新增；数据 = AniCh 代理 Bangumi 制作人员，按职务分组）── -->
-      <div v-else-if="activeTab === 'staff'">
+      <div v-else-if="activeTab === 'staff'" key="staff">
         <div v-if="staffLoading" class="grid grid-cols-[repeat(auto-fill,minmax(96px,1fr))] gap-3">
           <div v-for="i in 8" :key="i" class="aspect-square rounded-xl shimmer" />
         </div>
         <div v-else-if="staffGroups.length === 0" class="py-10 text-center text-sm text-muted-foreground">{{ $t('detail.noStaff') }}</div>
         <div v-else class="space-y-5">
-          <section v-for="g in staffGroups" :key="g.job">
+          <section v-for="g in staffGroups" :key="g.job" class="detail-section">
             <h4 class="mb-2 flex items-center gap-2 text-sm font-bold text-foreground">
               {{ g.job === '—' ? $t('detail.staffOther') : g.job }}
               <span class="text-[10px] font-normal tabular-nums text-muted-foreground">{{ g.people.length }}</span>
@@ -648,10 +653,10 @@ const applyRematch = (hit: any) => {
       </div>
 
       <!-- ── 关联条目（需求：角色项右侧新增；原推荐 Tab 同数据源升级为完整分组展示，点击进入应用内详情）── -->
-      <div v-else-if="activeTab === 'bgmRelated'">
+      <div v-else-if="activeTab === 'bgmRelated'" key="bgmRelated">
         <div v-if="!related || related.length === 0" class="py-10 text-center text-sm text-muted-foreground">{{ $t('detail.noRelated') }}</div>
         <div v-else class="space-y-5">
-          <section v-for="g in relatedGroups" :key="g.type">
+          <section v-for="g in relatedGroups" :key="g.type" class="detail-section">
             <h4 class="mb-2 flex items-center gap-2 text-sm font-bold text-foreground">
               {{ g.type === '—' ? $t('detail.relatedOther') : g.type }}
               <span class="text-[10px] font-normal tabular-nums text-muted-foreground">{{ g.items.length }}</span>
@@ -672,23 +677,27 @@ const applyRematch = (hit: any) => {
           </section>
         </div>
       </div>
+    </Transition>
     </div>
 
     <!-- 状态菜单遮罩：点击空白处关闭 -->
     <div v-if="statusMenuOpen" class="fixed inset-0 z-20" @click="closeStatusMenu" />
 
-    <!-- ── 评论页回到顶部（需求：固定悬浮于内容区右下角，不随评论滚动）── -->
-    <!-- main 有 contain:layout（会成为 fixed 后代的 containing block），故定位基准=内容区边缘，
-         恰好等价于视口右下角；移动端抬高避开底部导航，桌面端贴角落。 -->
-    <button
-      v-if="activeTab === 'comments' && showBackTop"
-      @click="backToTop"
-      class="fixed bottom-20 right-5 z-40 flex h-10 w-10 items-center justify-center rounded-full border border-border bg-card text-muted-foreground shadow-lg shadow-black/10 transition-all hover:text-foreground active:scale-95 md:bottom-6 md:right-6 dark:shadow-black/50"
-      v-tip="$t('common.backTop')"
-      :aria-label="$t('common.backTop')"
-    >
-      <ChevronUp class="h-4.5 w-4.5" />
-    </button>
+    <!-- ── 回到顶部（评论/制作等长内容页通用）：Teleport 到 body，真视口 fixed 右下角 ──
+         移动端抬高避开底部导航，桌面端贴角落；淡入淡出见 globals.css .backtop-* -->
+    <Teleport to="body">
+      <Transition name="backtop">
+        <button
+          v-if="showBackTop"
+          @click="backToTop"
+          class="fixed bottom-20 right-5 z-[60] flex h-10 w-10 items-center justify-center rounded-full border border-border bg-card text-muted-foreground shadow-lg shadow-black/10 transition-colors hover:text-foreground active:scale-95 md:bottom-6 md:right-6 dark:shadow-black/50"
+          v-tip="$t('common.backTop')"
+          :aria-label="$t('common.backTop')"
+        >
+          <ChevronUp class="h-4.5 w-4.5" />
+        </button>
+      </Transition>
+    </Teleport>
 
     <!-- ── 重新匹配弹窗：搜索 AniCh 并手动选择正确条目 ── -->
     <div v-if="rematchOpen" class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm" @click.self="closeRematch">
