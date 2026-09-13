@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch } from "vue";
+import { computed, reactive, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import {
   CircleUserRound,
@@ -23,19 +23,36 @@ import {
   LogOut,
   Loader2,
   FolderOpen,
+  RefreshCw,
+  Star,
+  Tv,
+  BookOpen,
+  Music2,
+  Gamepad2,
+  UsersRound,
+  Heart,
+  Clock3,
+  BadgeCheck,
 } from "lucide-vue-next";
 import { invoke } from "@tauri-apps/api/core";
 import { useSettingsStore, type ThemeMode, type Language } from "@/stores/settings";
+import { useLibraryStore, STATUS_I18N_KEYS, STATUS_STYLES, type TrackStatus } from "@/stores/library";
+import { useUIStore } from "@/stores/ui";
 import { LOCALE_OPTIONS } from "@/i18n";
 import { AIKF_VERSION } from "@/lib/version";
 import { cn } from "@/lib/utils";
 import ToggleSwitch from "@/components/ToggleSwitch.vue";
+import CoverImage from "@/components/CoverImage.vue";
+import BgmEntityDialog from "@/components/BgmEntityDialog.vue";
 import { useBangumi } from "@/lib/bangumi/useBangumi";
+import * as bgm from "@/lib/bangumi/client";
 
 const settings = useSettingsStore();
 const s = computed(() => settings.data);
 const bg = computed(() => settings.data.background);
-const { t } = useI18n();
+const library = useLibraryStore();
+const ui = useUIStore();
+const { t, d } = useI18n();
 
 const themeOptions: { value: ThemeMode; labelKey: string; icon: any }[] = [
   { value: "light", labelKey: "theme.light", icon: Sun },
@@ -78,7 +95,6 @@ const pickFile = async () => {
       const parts = selected.replace(/\\/g, "/").split("/").pop() || selected;
       pickedFileName.value = parts;
       settings.updateBackground("url", fileUrl);
-      if (!bg.value.enabled) settings.updateBackground("enabled", true);
     }
   } catch (e) {
     console.error("dialog open failed:", e);
@@ -96,19 +112,16 @@ const onFileChange = (e: Event) => {
   urlInput.value = objUrl;
   pickedFileName.value = file.name;
   settings.updateBackground("url", objUrl);
-  if (!bg.value.enabled) settings.updateBackground("enabled", true);
 };
 
 const applyUrl = () => {
   settings.updateBackground("url", urlInput.value);
-  if (urlInput.value && !bg.value.enabled) settings.updateBackground("enabled", true);
 };
 
 const clearBackground = () => {
   urlInput.value = "";
   pickedFileName.value = "";
   settings.updateBackground("url", "");
-  settings.updateBackground("enabled", false);
 };
 
 // — open external URL (GitHub / Douyin) via Tauri opener plugin —
@@ -150,13 +163,121 @@ const doBgmLoginManual = () => {
   if (!manualCode.value.trim()) return;
   bgmCtx.login(manualCode.value.trim());
 };
+
+// ─────────────────────────────────────────────────────────────
+// 我的 —— Bangumi 账户主页（彻底重构：更多官方 API 丰富界面）
+//
+// 数据源（全部懒加载，进入页面且已登录时并行请求一次）：
+// - GET /v0/me                    → 头像/昵称/@username/UID/签名/注册时间
+// - GET /v0/users/{u}/collections?subject_type=N&limit=1
+//                                 → 各类型云端收藏总数（信封 total，开销极小）
+// - GET /v0/users/{u}/collections?subject_type=2&limit=12
+//                                 → 最近更新的动画收藏
+// - GET /v0/users/{u}/collections/-/characters → 收藏的角色
+// - GET /v0/users/{u}/collections/-/persons    → 收藏的人物
+// - 本地追番库统计（在看/想看/看过/搁置/抛弃 + 已看集数）为即时计算
+// ─────────────────────────────────────────────────────────────
+const profile = reactive({
+  loading: false,
+  loaded: false,
+  counts: { anime: 0, book: 0, music: 0, game: 0, real: 0 } as Record<string, number>,
+  recent: [] as bgm.BgmCollectionItem[],
+  chars: [] as bgm.BgmUserCharacterCollection[],
+  persons: [] as bgm.BgmUserPersonCollection[],
+});
+
+const localStats = computed(() => {
+  const c: Record<string, number> = { watching: 0, planned: 0, completed: 0, onhold: 0, dropped: 0 };
+  let eps = 0;
+  for (const e of library.list) {
+    c[e.status] = (c[e.status] ?? 0) + 1;
+    eps += e.watchedEpisodes?.length ?? 0;
+  }
+  return { c, eps, total: library.list.length };
+});
+
+const regDateText = computed(() => {
+  const rt = bgmCtx.user.value?.reg_time;
+  if (!rt) return "";
+  const dt = new Date(rt);
+  return Number.isNaN(dt.getTime()) ? "" : d(dt, "long");
+});
+
+async function loadProfile(force = false) {
+  if (!bgmCtx.loggedIn.value) return;
+  if (profile.loading || (profile.loaded && !force)) return;
+  profile.loading = true;
+  try {
+    const [anime, book, music, game, real, recent, chars, persons] = await Promise.allSettled([
+      bgm.getCollectionsCount(2),
+      bgm.getCollectionsCount(1),
+      bgm.getCollectionsCount(3),
+      bgm.getCollectionsCount(4),
+      bgm.getCollectionsCount(6),
+      bgm.getRecentCollections(12),
+      bgm.getCharacterCollections(),
+      bgm.getPersonCollections(),
+    ]);
+    if (anime.status === "fulfilled") profile.counts.anime = anime.value;
+    if (book.status === "fulfilled") profile.counts.book = book.value;
+    if (music.status === "fulfilled") profile.counts.music = music.value;
+    if (game.status === "fulfilled") profile.counts.game = game.value;
+    if (real.status === "fulfilled") profile.counts.real = real.value;
+    if (recent.status === "fulfilled") profile.recent = recent.value.slice(0, 12);
+    if (chars.status === "fulfilled") profile.chars = chars.value.slice(0, 24);
+    if (persons.status === "fulfilled") profile.persons = persons.value.slice(0, 24);
+    profile.loaded = true;
+  } finally {
+    profile.loading = false;
+  }
+}
+
+watch(
+  () => bgmCtx.loggedIn.value,
+  (v) => {
+    if (v) void loadProfile();
+  },
+  { immediate: true }
+);
+
+// — 最近收藏卡片辅助 —
+const recentCover = (it: bgm.BgmCollectionItem) =>
+  it.subject?.images?.large ||
+  it.subject?.images?.common ||
+  it.subject?.images?.medium ||
+  it.images?.large ||
+  it.images?.common ||
+  it.images?.medium ||
+  "";
+const recentTitle = (it: bgm.BgmCollectionItem) =>
+  it.subject?.name_cn || it.subject?.name || it.name || it.name_cn || `#${it.subject_id ?? it.id ?? ""}`;
+const recentStatus = (it: bgm.BgmCollectionItem): TrackStatus =>
+  (bgm.BGM_TO_STATUS[Number(it.type)] as TrackStatus) ?? "watching";
+
+function openRecent(it: bgm.BgmCollectionItem) {
+  const sid = it.subject?.id ?? it.subject_id;
+  if (!sid) return;
+  const entry = Object.values(library.entries).find((e) => e.bgmId === sid);
+  if (entry) ui.openDetail(entry.id, entry.image);
+  else void openExternalUrl(`https://bgm.tv/subject/${sid}`);
+}
+
+// — 收藏角色/人物（点击 → BgmEntityDialog 查看详情，与详情页共用）—
+const entity = ref<{ kind: "character" | "person"; id: number; name?: string; image?: string } | null>(null);
+const openEntity = (kind: "character" | "person", id: number, name?: string, image?: string) => {
+  if (id == null) return;
+  entity.value = { kind, id, name, image };
+};
+const charImg = (x: { images?: { large?: string; medium?: string; small?: string; grid?: string } | null }) =>
+  x.images?.large || x.images?.medium || x.images?.grid || x.images?.small || "";
+const careerText = (p: bgm.BgmUserPersonCollection) =>
+  (p.career ?? []).slice(0, 2).join(" / ");
 </script>
 
 <template>
   <div class="mx-auto max-w-3xl">
-    <!-- ─── 个人资料（我的：未登录 → 登录入口 / 已登录 → 头像+昵称+ID）─── -->
+    <!-- ─── 我的（未登录 → 登录入口）─── -->
     <section class="surface mb-4 rounded-2xl p-5">
-      <!-- 未登录 -->
       <template v-if="!bgmCtx.loggedIn.value">
         <div class="mb-4 flex items-center gap-4">
           <span class="flex h-16 w-16 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground ring-1 ring-border">
@@ -202,33 +323,187 @@ const doBgmLoginManual = () => {
         </div>
       </template>
 
-      <!-- 已登录：大头像 + 昵称 + Bangumi ID + 签名 -->
+      <!-- ─── 我的（已登录）─── -->
       <template v-else>
-        <div class="flex items-center gap-4">
-          <img
-            v-if="bgmCtx.user.value?.avatar?.large"
-            :src="bgmCtx.user.value.avatar.large"
-            class="h-16 w-16 shrink-0 rounded-full object-cover ring-1 ring-border"
-            draggable="false"
-          />
-          <span v-else class="flex h-16 w-16 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground ring-1 ring-border">
-            <CircleUserRound class="h-8 w-8" />
-          </span>
-          <div class="min-w-0 flex-1">
-            <h2 class="truncate text-xl font-bold tracking-tight text-foreground">{{ bgmCtx.user.value?.nickname || bgmCtx.user.value?.username || $t('settings.bgm.user') }}</h2>
-            <p class="mt-0.5 truncate text-xs tabular-nums text-muted-foreground">
-              {{ $t('settings.profile.id', { id: bgmCtx.session.value?.user?.id ?? '—' }) }}
-              <template v-if="bgmCtx.user.value?.username"> · @{{ bgmCtx.user.value.username }}</template>
-            </p>
-          </div>
+        <!-- 账户横幅：大头像 + 昵称 + @username + UID + 注册时间 + 签名 -->
+        <div class="relative -m-5 mb-5 overflow-hidden rounded-t-2xl bg-gradient-to-br from-primary/15 via-primary/5 to-transparent p-5">
           <button
             @click="bgmCtx.logout()"
-            class="state-layer flex shrink-0 items-center gap-1.5 rounded-lg border border-border px-3 py-2 text-xs text-muted-foreground transition-colors hover:border-destructive/40 hover:text-destructive"
+            class="state-layer absolute right-4 top-4 flex items-center gap-1.5 rounded-lg border border-border bg-card/80 px-3 py-1.5 text-xs text-muted-foreground backdrop-blur transition-colors hover:border-destructive/40 hover:text-destructive"
           >
             <LogOut class="h-3.5 w-3.5" /> {{ $t('settings.bgm.logout') }}
           </button>
+          <div class="flex items-center gap-4">
+            <img
+              v-if="bgmCtx.user.value?.avatar?.large"
+              :src="bgmCtx.user.value.avatar.large"
+              class="h-20 w-20 shrink-0 rounded-full object-cover shadow-lg shadow-black/10 ring-2 ring-background"
+              draggable="false"
+            />
+            <span v-else class="flex h-20 w-20 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground ring-2 ring-background">
+              <CircleUserRound class="h-10 w-10" />
+            </span>
+            <div class="min-w-0 flex-1 pr-24">
+              <h2 class="truncate text-2xl font-extrabold tracking-tight text-foreground">
+                {{ bgmCtx.user.value?.nickname || bgmCtx.user.value?.username || $t('settings.bgm.user') }}
+              </h2>
+              <p v-if="bgmCtx.user.value?.username" class="mt-0.5 truncate text-xs text-muted-foreground">@{{ bgmCtx.user.value.username }}</p>
+              <div class="mt-2 flex flex-wrap items-center gap-1.5">
+                <span class="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-semibold text-primary">
+                  <BadgeCheck class="h-3 w-3" />
+                  {{ $t('settings.profile.id', { id: bgmCtx.user.value?.id ?? '—' }) }}
+                </span>
+                <span v-if="regDateText" class="text-[10px] text-muted-foreground">{{ $t('settings.profile.joined', { date: regDateText }) }}</span>
+              </div>
+            </div>
+          </div>
+          <p v-if="bgmCtx.user.value?.sign" class="mt-3 line-clamp-3 text-xs leading-relaxed text-foreground/75">{{ bgmCtx.user.value.sign }}</p>
         </div>
-        <p v-if="bgmCtx.user.value?.sign" class="mt-3 line-clamp-2 text-xs leading-relaxed text-muted-foreground">{{ bgmCtx.user.value.sign }}</p>
+
+        <!-- 数据总览 -->
+        <div class="mt-6 mb-2 flex items-center justify-between px-1">
+          <h3 class="flex items-center gap-2 text-sm font-semibold text-foreground">
+            <Zap class="h-4 w-4 text-primary" /> {{ $t('settings.profile.statsTitle') }}
+          </h3>
+          <button
+            @click="loadProfile(true)"
+            class="state-layer flex items-center gap-1 rounded-lg px-2 py-1 text-[11px] text-muted-foreground transition-colors hover:text-foreground"
+            v-tip="$t('settings.profile.refresh')"
+          >
+            <RefreshCw :class="cn('h-3 w-3', profile.loading && 'animate-spin')" /> {{ $t('settings.profile.refresh') }}
+          </button>
+        </div>
+
+        <!-- 云端收藏（五类计数） -->
+        <div class="grid grid-cols-2 gap-2.5 sm:grid-cols-5">
+          <div v-for="c in [
+              { k: 'anime', icon: Tv, key: 'cntAnime' },
+              { k: 'book', icon: BookOpen, key: 'cntBook' },
+              { k: 'music', icon: Music2, key: 'cntMusic' },
+              { k: 'game', icon: Gamepad2, key: 'cntGame' },
+              { k: 'real', icon: UsersRound, key: 'cntReal' },
+            ]" :key="c.k"
+            class="surface flex items-center gap-3 rounded-xl p-3"
+          >
+            <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+              <component :is="c.icon" class="h-4.5 w-4.5" />
+            </span>
+            <div class="min-w-0">
+              <p class="text-lg font-extrabold leading-none tabular-nums text-foreground">
+                <Loader2 v-if="profile.loading && !profile.loaded" class="h-4 w-4 animate-spin text-muted-foreground" />
+                <template v-else>{{ profile.counts[c.k] }}</template>
+              </p>
+              <p class="mt-1 truncate text-[10px] text-muted-foreground">{{ $t(`settings.profile.${c.key}`) }}</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- 本地追番库统计 -->
+        <div class="mt-2.5 flex flex-wrap items-center gap-2 rounded-xl surface p-3">
+          <span class="mr-1 text-[11px] font-medium text-muted-foreground">{{ $t('settings.profile.localStats') }}</span>
+          <span
+            v-for="st in (['watching','planned','completed','onhold','dropped'] as TrackStatus[])"
+            :key="st"
+            :class="cn('flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold', STATUS_STYLES[st].chip)"
+          >
+            <span :class="cn('h-1.5 w-1.5 rounded-full', STATUS_STYLES[st].dot)" />
+            {{ $t(STATUS_I18N_KEYS[st]) }} <span class="tabular-nums opacity-80">{{ localStats.c[st] }}</span>
+          </span>
+          <span class="ml-auto text-[11px] tabular-nums text-muted-foreground">
+            {{ $t('settings.profile.watchedEps', { n: localStats.eps }) }}
+          </span>
+        </div>
+
+        <!-- 最近更新的收藏 -->
+        <div class="mt-5 mb-2 flex items-center gap-2 px-1">
+          <h3 class="flex items-center gap-2 text-sm font-semibold text-foreground">
+            <Clock3 class="h-4 w-4 text-primary" /> {{ $t('settings.profile.recentTitle') }}
+          </h3>
+        </div>
+        <div v-if="profile.loading && !profile.loaded" class="flex gap-3 overflow-hidden">
+          <div v-for="i in 5" :key="i" class="w-[104px] shrink-0"><div class="aspect-[3/4] rounded-xl shimmer" /></div>
+        </div>
+        <div v-else-if="profile.recent.length === 0" class="rounded-xl surface p-4 text-center text-xs text-muted-foreground">
+          {{ $t('settings.profile.recentEmpty') }}
+        </div>
+        <div v-else class="no-scrollbar flex gap-3 overflow-x-auto pb-1">
+          <button
+            v-for="(it, i) in profile.recent"
+            :key="it.subject?.id ?? it.subject_id ?? i"
+            @click="openRecent(it)"
+            class="group w-[104px] shrink-0 text-left"
+            v-tip="recentTitle(it)"
+          >
+            <div class="relative overflow-hidden rounded-xl">
+              <CoverImage :src="recentCover(it)" :alt="recentTitle(it)" ratio="portrait" rounded="rounded-xl" class="transition-transform group-hover:scale-[1.04]" />
+              <span :class="cn('absolute left-1.5 top-1.5 rounded-full px-1.5 py-0.5 text-[9px] font-bold', STATUS_STYLES[recentStatus(it)].chip)">
+                {{ $t(STATUS_I18N_KEYS[recentStatus(it)]) }}
+              </span>
+            </div>
+            <p class="mt-1.5 line-clamp-1 text-[11px] font-medium text-foreground transition-colors group-hover:text-primary">{{ recentTitle(it) }}</p>
+            <p class="mt-0.5 flex items-center gap-1 text-[10px] tabular-nums text-muted-foreground">
+              <template v-if="(it.ep_status ?? 0) > 0">{{ $t('settings.profile.epsN', { n: it.ep_status }) }}</template>
+              <template v-if="(it.rate ?? 0) > 0"><Star class="h-2.5 w-2.5 fill-tertiary text-tertiary" />{{ it.rate }}</template>
+            </p>
+          </button>
+        </div>
+
+        <!-- 收藏的角色 -->
+        <div class="mt-5 mb-2 flex items-center gap-2 px-1">
+          <h3 class="flex items-center gap-2 text-sm font-semibold text-foreground">
+            <Heart class="h-4 w-4 text-primary" /> {{ $t('settings.profile.charsTitle') }}
+          </h3>
+        </div>
+        <div v-if="profile.loading && !profile.loaded" class="flex gap-3 overflow-hidden">
+          <div v-for="i in 6" :key="i" class="w-24 shrink-0"><div class="aspect-square rounded-xl shimmer" /></div>
+        </div>
+        <div v-else-if="profile.chars.length === 0" class="rounded-xl surface p-4 text-center text-xs text-muted-foreground">
+          {{ $t('settings.profile.charsEmpty') }}
+        </div>
+        <div v-else class="no-scrollbar flex gap-3 overflow-x-auto pb-1">
+          <button
+            v-for="c in profile.chars"
+            :key="c.id"
+            @click="openEntity('character', c.id, c.name, charImg(c))"
+            class="group w-24 shrink-0 text-center"
+            v-tip="c.name"
+          >
+            <div class="aspect-square w-full overflow-hidden rounded-xl bg-muted ring-1 ring-transparent transition-shadow group-hover:ring-primary/40">
+              <img v-if="charImg(c)" :src="charImg(c)" :alt="c.name" loading="lazy" class="h-full w-full object-cover object-top" @error="($event.target as HTMLElement).style.opacity = '0'" />
+              <span v-else class="flex h-full w-full items-center justify-center text-lg font-bold text-muted-foreground">{{ (c.name || '?').slice(0, 1) }}</span>
+            </div>
+            <p class="mt-1.5 line-clamp-1 text-[11px] font-medium text-foreground transition-colors group-hover:text-primary">{{ c.name }}</p>
+          </button>
+        </div>
+
+        <!-- 收藏的人物 -->
+        <div class="mt-5 mb-2 flex items-center gap-2 px-1">
+          <h3 class="flex items-center gap-2 text-sm font-semibold text-foreground">
+            <UsersRound class="h-4 w-4 text-primary" /> {{ $t('settings.profile.personsTitle') }}
+          </h3>
+        </div>
+        <div v-if="profile.loading && !profile.loaded" class="flex gap-3 overflow-hidden">
+          <div v-for="i in 6" :key="i" class="w-24 shrink-0"><div class="aspect-square rounded-xl shimmer" /></div>
+        </div>
+        <div v-else-if="profile.persons.length === 0" class="rounded-xl surface p-4 text-center text-xs text-muted-foreground">
+          {{ $t('settings.profile.personsEmpty') }}
+        </div>
+        <div v-else class="no-scrollbar flex gap-3 overflow-x-auto pb-1">
+          <button
+            v-for="p in profile.persons"
+            :key="p.id"
+            @click="openEntity('person', p.id, p.name, charImg(p))"
+            class="group w-24 shrink-0 text-center"
+            v-tip="p.name"
+          >
+            <div class="aspect-square w-full overflow-hidden rounded-xl bg-muted ring-1 ring-transparent transition-shadow group-hover:ring-primary/40">
+              <img v-if="charImg(p)" :src="charImg(p)" :alt="p.name" loading="lazy" class="h-full w-full object-cover object-top" @error="($event.target as HTMLElement).style.opacity = '0'" />
+              <span v-else class="flex h-full w-full items-center justify-center text-lg font-bold text-muted-foreground">{{ (p.name || '?').slice(0, 1) }}</span>
+            </div>
+            <p class="mt-1.5 line-clamp-1 text-[11px] font-medium text-foreground transition-colors group-hover:text-primary">{{ p.name }}</p>
+            <p v-if="careerText(p)" class="mt-0.5 line-clamp-1 text-[9px] text-muted-foreground">{{ careerText(p) }}</p>
+          </button>
+        </div>
       </template>
     </section>
 
@@ -272,14 +547,13 @@ const doBgmLoginManual = () => {
       </div>
     </section>
 
-    <!-- ─── Custom Background ─── -->
+    <!-- ─── Custom Background（需求：勾选启用后才展开选图与样式调整）─── -->
     <section class="surface mb-4 rounded-2xl p-5">
       <h3 class="mb-4 flex items-center gap-2 text-sm font-semibold text-foreground">
         <ImageIcon class="h-4 w-4 text-primary" /> {{ $t('settings.background') }}
       </h3>
-      <p class="mb-4 text-[11px] text-muted-foreground">{{ $t('settings.bgDesc') }}</p>
 
-      <!-- enable toggle -->
+      <!-- enable toggle（未启用时仅展示此行） -->
       <div class="flex items-center justify-between rounded-2xl px-2 py-3 hover:bg-foreground/5">
         <div class="flex items-center gap-3">
           <span class="flex h-8 w-8 items-center justify-center rounded-lg bg-foreground/5 text-muted-foreground">
@@ -293,106 +567,116 @@ const doBgmLoginManual = () => {
         <ToggleSwitch :on="bg.enabled" @toggle="settings.updateBackground('enabled', !bg.enabled)" />
       </div>
 
-      <!-- image source -->
-      <div class="mt-3 rounded-xl bg-muted p-4">
-        <!-- preview -->
-        <div v-if="bg.url" class="mb-3 overflow-hidden rounded-lg ring-1 ring-border">
-          <img :src="bg.url" :alt="$t('settings.bgPreview')" class="h-32 w-full object-cover" draggable="false" />
-        </div>
-
-        <!-- picked file name display -->
-        <p v-if="pickedFileName" class="mb-2 truncate text-[11px] text-muted-foreground">📁 {{ pickedFileName }}</p>
-
-        <!-- pick from local file (Tauri dialog) -->
-        <input ref="fileInput" type="file" accept="image/*" class="hidden" @change="onFileChange" />
-        <button
-          @click="pickFile"
-          class="mb-2 flex w-full items-center justify-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground transition-opacity hover:opacity-90"
-        >
-          <Upload class="h-4 w-4" /> {{ $t('settings.pickImage') }}
-        </button>
-
-        <!-- url input (for remote URLs or pasted asset: URLs) -->
-        <div class="flex gap-2">
-          <input
-            v-model="urlInput"
-            @blur="applyUrl"
-            @keydown.enter="applyUrl"
-            type="text"
-            :placeholder="$t('settings.urlPlaceholder')"
-            class="min-w-0 flex-1 rounded-lg bg-card px-3 py-2 text-xs text-foreground outline-none ring-1 ring-border placeholder:text-muted-foreground/60 focus:ring-2 focus:ring-primary/40"
-          />
-          <button
-            @click="applyUrl"
-            class="shrink-0 rounded-lg bg-foreground px-3 py-2 text-xs font-semibold text-background transition-opacity hover:opacity-90"
-          >
-            {{ $t('settings.apply') }}
-          </button>
-        </div>
-
-        <!-- clear -->
-        <button
-          v-if="bg.url"
-          @click="clearBackground"
-          class="mt-2 w-full rounded-lg bg-destructive/10 px-4 py-2 text-xs font-medium text-destructive transition-colors hover:bg-destructive/20"
-        >
-          {{ $t('settings.clearBg') }}
-        </button>
-      </div>
-
-      <!-- opacity slider -->
-      <div class="mt-3 rounded-2xl px-2 py-3">
-        <div class="mb-2 flex items-center gap-3">
-          <span class="flex h-8 w-8 items-center justify-center rounded-lg bg-foreground/5 text-muted-foreground"><Droplet class="h-4 w-4" /></span>
-          <div class="flex-1">
-            <div class="flex items-center justify-between">
-              <p class="text-sm font-medium text-foreground">{{ $t('settings.opacity') }}</p>
-              <span class="text-xs font-mono text-muted-foreground">{{ bg.opacity }}%</span>
+      <!-- 以下配置仅在启用后展开 -->
+      <Transition
+        enter-active-class="transition duration-200 ease-out"
+        enter-from-class="opacity-0 -translate-y-1.5"
+        leave-active-class="transition duration-150 ease-in"
+        leave-to-class="opacity-0 -translate-y-1.5"
+      >
+        <div v-if="bg.enabled">
+          <!-- image source -->
+          <div class="mt-3 rounded-xl bg-muted p-4">
+            <!-- preview -->
+            <div v-if="bg.url" class="mb-3 overflow-hidden rounded-lg ring-1 ring-border">
+              <img :src="bg.url" :alt="$t('settings.bgPreview')" class="h-32 w-full object-cover" draggable="false" />
             </div>
+
+            <!-- picked file name display -->
+            <p v-if="pickedFileName" class="mb-2 truncate text-[11px] text-muted-foreground">📁 {{ pickedFileName }}</p>
+
+            <!-- pick from local file (Tauri dialog) -->
+            <input ref="fileInput" type="file" accept="image/*" class="hidden" @change="onFileChange" />
+            <button
+              @click="pickFile"
+              class="mb-2 flex w-full items-center justify-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground transition-opacity hover:opacity-90"
+            >
+              <Upload class="h-4 w-4" /> {{ $t('settings.pickImage') }}
+            </button>
+
+            <!-- url input (for remote URLs or pasted asset: URLs) -->
+            <div class="flex gap-2">
+              <input
+                v-model="urlInput"
+                @blur="applyUrl"
+                @keydown.enter="applyUrl"
+                type="text"
+                :placeholder="$t('settings.urlPlaceholder')"
+                class="min-w-0 flex-1 rounded-lg bg-card px-3 py-2 text-xs text-foreground outline-none ring-1 ring-border placeholder:text-muted-foreground/60 focus:ring-2 focus:ring-primary/40"
+              />
+              <button
+                @click="applyUrl"
+                class="shrink-0 rounded-lg bg-foreground px-3 py-2 text-xs font-semibold text-background transition-opacity hover:opacity-90"
+              >
+                {{ $t('settings.apply') }}
+              </button>
+            </div>
+
+            <!-- clear -->
+            <button
+              v-if="bg.url"
+              @click="clearBackground"
+              class="mt-2 w-full rounded-lg bg-destructive/10 px-4 py-2 text-xs font-medium text-destructive transition-colors hover:bg-destructive/20"
+            >
+              {{ $t('settings.clearBg') }}
+            </button>
+          </div>
+
+          <!-- opacity slider -->
+          <div class="mt-3 rounded-2xl px-2 py-3">
+            <div class="mb-2 flex items-center gap-3">
+              <span class="flex h-8 w-8 items-center justify-center rounded-lg bg-foreground/5 text-muted-foreground"><Droplet class="h-4 w-4" /></span>
+              <div class="flex-1">
+                <div class="flex items-center justify-between">
+                  <p class="text-sm font-medium text-foreground">{{ $t('settings.opacity') }}</p>
+                  <span class="text-xs font-mono text-muted-foreground">{{ bg.opacity }}%</span>
+                </div>
+              </div>
+            </div>
+            <input
+              type="range" min="0" max="100" :value="bg.opacity"
+              @input="settings.updateBackground('opacity', Number(($event.target as HTMLInputElement).value))"
+              class="ml-11 w-[calc(100%-2.75rem)] accent-primary"
+            />
+          </div>
+
+          <!-- blur slider -->
+          <div class="rounded-2xl px-2 py-3">
+            <div class="mb-2 flex items-center gap-3">
+              <span class="flex h-8 w-8 items-center justify-center rounded-lg bg-foreground/5 text-muted-foreground"><Focus class="h-4 w-4" /></span>
+              <div class="flex-1">
+                <div class="flex items-center justify-between">
+                  <p class="text-sm font-medium text-foreground">{{ $t('settings.blur') }}</p>
+                  <span class="text-xs font-mono text-muted-foreground">{{ bg.blur }}px</span>
+                </div>
+              </div>
+            </div>
+            <input
+              type="range" min="0" max="30" :value="bg.blur"
+              @input="settings.updateBackground('blur', Number(($event.target as HTMLInputElement).value))"
+              class="ml-11 w-[calc(100%-2.75rem)] accent-primary"
+            />
+          </div>
+
+          <!-- scale slider -->
+          <div class="rounded-2xl px-2 py-3">
+            <div class="mb-2 flex items-center gap-3">
+              <span class="flex h-8 w-8 items-center justify-center rounded-lg bg-foreground/5 text-muted-foreground"><Maximize2 class="h-4 w-4" /></span>
+              <div class="flex-1">
+                <div class="flex items-center justify-between">
+                  <p class="text-sm font-medium text-foreground">{{ $t('settings.scale') }}</p>
+                  <span class="text-xs font-mono text-muted-foreground">{{ bg.scale }}%</span>
+                </div>
+              </div>
+            </div>
+            <input
+              type="range" min="50" max="200" :value="bg.scale"
+              @input="settings.updateBackground('scale', Number(($event.target as HTMLInputElement).value))"
+              class="ml-11 w-[calc(100%-2.75rem)] accent-primary"
+            />
           </div>
         </div>
-        <input
-          type="range" min="0" max="100" :value="bg.opacity"
-          @input="settings.updateBackground('opacity', Number(($event.target as HTMLInputElement).value))"
-          class="ml-11 w-[calc(100%-2.75rem)] accent-primary"
-        />
-      </div>
-
-      <!-- blur slider -->
-      <div class="rounded-2xl px-2 py-3">
-        <div class="mb-2 flex items-center gap-3">
-          <span class="flex h-8 w-8 items-center justify-center rounded-lg bg-foreground/5 text-muted-foreground"><Focus class="h-4 w-4" /></span>
-          <div class="flex-1">
-            <div class="flex items-center justify-between">
-              <p class="text-sm font-medium text-foreground">{{ $t('settings.blur') }}</p>
-              <span class="text-xs font-mono text-muted-foreground">{{ bg.blur }}px</span>
-            </div>
-          </div>
-        </div>
-        <input
-          type="range" min="0" max="30" :value="bg.blur"
-          @input="settings.updateBackground('blur', Number(($event.target as HTMLInputElement).value))"
-          class="ml-11 w-[calc(100%-2.75rem)] accent-primary"
-        />
-      </div>
-
-      <!-- scale slider -->
-      <div class="rounded-2xl px-2 py-3">
-        <div class="mb-2 flex items-center gap-3">
-          <span class="flex h-8 w-8 items-center justify-center rounded-lg bg-foreground/5 text-muted-foreground"><Maximize2 class="h-4 w-4" /></span>
-          <div class="flex-1">
-            <div class="flex items-center justify-between">
-              <p class="text-sm font-medium text-foreground">{{ $t('settings.scale') }}</p>
-              <span class="text-xs font-mono text-muted-foreground">{{ bg.scale }}%</span>
-            </div>
-          </div>
-        </div>
-        <input
-          type="range" min="50" max="200" :value="bg.scale"
-          @input="settings.updateBackground('scale', Number(($event.target as HTMLInputElement).value))"
-          class="ml-11 w-[calc(100%-2.75rem)] accent-primary"
-        />
-      </div>
+      </Transition>
     </section>
 
     <!-- ─── About ─── -->
@@ -478,5 +762,15 @@ const doBgmLoginManual = () => {
         <RotateCcw class="h-4 w-4" /> {{ $t('settings.reset') }}
       </button>
     </div>
+
+    <!-- ─── 收藏角色/人物详情弹窗（与详情页共用组件）─── -->
+    <BgmEntityDialog
+      v-if="entity"
+      :kind="entity.kind"
+      :id="entity.id"
+      :initial-name="entity.name"
+      :initial-image="entity.image"
+      @close="entity = null"
+    />
   </div>
 </template>

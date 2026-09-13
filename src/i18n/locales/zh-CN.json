@@ -180,7 +180,9 @@
     },
     "epDetail": "集数明细",
     "epWatched": "第 {n} 集 · 已看",
-    "epUnwatched": "第 {n} 集 · 未看"
+    "epUnwatched": "第 {n} 集 · 未看",
+    "epWish": "第 {n} 话 · 想看",
+    "epDropped": "第 {n} 话 · 抛弃"
   },
   "cache": {
     "title": "本地缓存",
@@ -414,7 +416,24 @@
     },
     "profile": {
       "hint": "登录 Bangumi 账号后可云同步收藏与观看进度",
-      "id": "Bangumi ID {id}"
+      "id": "Bangumi ID {id}",
+      "joined": "注册于 {date}",
+      "statsTitle": "数据总览",
+      "refresh": "刷新",
+      "cntAnime": "动画",
+      "cntBook": "书籍",
+      "cntMusic": "音乐",
+      "cntGame": "游戏",
+      "cntReal": "三次元",
+      "localStats": "本地追番",
+      "watchedEps": "已看 {n} 集",
+      "recentTitle": "最近更新的收藏",
+      "recentEmpty": "云端暂无动画收藏",
+      "charsTitle": "收藏的角色",
+      "charsEmpty": "还没有收藏的角色",
+      "personsTitle": "收藏的人物",
+      "personsEmpty": "还没有收藏的人物",
+      "epsN": "已看 {n} 话"
     }
   },
   "time": {

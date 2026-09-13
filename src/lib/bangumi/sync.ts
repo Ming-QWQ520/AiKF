@@ -206,15 +206,42 @@ export async function pushEntries(
       // 评分一并同步（0 分不覆盖云端已评分）
       await bgm.updateCollection(subject.id, { type: bgmType, rate: entry.score || undefined });
 
-      // 章节进度（仅当本地有观看记录）
+      // 章节进度（仅当本地有观看记录时做双向对齐；watchedEpisodes 全空时跳过，
+      // 避免纯状态/评分修改也产生 2 次章节请求）
       if (entry.watchedEpisodes.length > 0) {
         try {
           const eps = await bgm.getEpisodes(subject.id);
           const idByNum = buildEpisodeIndex(eps);
-          const epIds = entry.watchedEpisodes
+          // 1) 本地已看 → 云端标记看过（type=2）
+          const seenIds = entry.watchedEpisodes
             .map((n) => idByNum.get(n))
             .filter((x): x is number => typeof x === "number");
-          await bgm.markEpisodesSeen(subject.id, epIds);
+          await bgm.markEpisodesSeen(subject.id, seenIds);
+          // 2) 本地未看但云端标记过 → 取消云端标记（type=0）。
+          //    旧版只推「标记」不推「取消」，本地点掉看错的集数后云端仍显示已看。
+          //    逐集状态来自 GET /v0/users/-/collections/{id}/episodes（观看集数
+          //    不连续时也能精确对齐，不依赖 ep_status 顺序假设）。
+          const cloudItems = await bgm.getSubjectEpisodeCollection(subject.id);
+          const watchedNums = new Set(entry.watchedEpisodes);
+          const staleIds: number[] = [];
+          for (const it of cloudItems) {
+            if (Number(it.type) !== 2 || !it.episode) continue;
+            const num =
+              typeof it.episode.ep === "number"
+                ? it.episode.ep
+                : it.episode.order
+                  ? parseFloat(it.episode.order)
+                  : Number.NaN;
+            if (
+              Number.isInteger(num) &&
+              !watchedNums.has(num) &&
+              idByNum.has(num) &&
+              !seenIds.includes(idByNum.get(num)!)
+            ) {
+              staleIds.push(idByNum.get(num)!);
+            }
+          }
+          if (staleIds.length > 0) await bgm.setEpisodesStatus(subject.id, staleIds, 0);
         } catch (e) {
           // 章节标记失败不阻断状态同步
           console.warn("[AiKF] 章节标记失败:", entry.title, e);

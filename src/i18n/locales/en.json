@@ -180,7 +180,9 @@
     },
     "epDetail": "Episode detail",
     "epWatched": "Ep {n} · watched",
-    "epUnwatched": "Ep {n} · not watched"
+    "epUnwatched": "Ep {n} · not watched",
+    "epWish": "EP {n} · Plan to Watch",
+    "epDropped": "EP {n} · Dropped"
   },
   "cache": {
     "title": "Downloads",
@@ -414,7 +416,24 @@
     },
     "profile": {
       "hint": "Sign in to Bangumi to sync collections & progress",
-      "id": "Bangumi ID {id}"
+      "id": "Bangumi ID {id}",
+      "joined": "Joined {date}",
+      "statsTitle": "Overview",
+      "refresh": "Refresh",
+      "cntAnime": "Anime",
+      "cntBook": "Books",
+      "cntMusic": "Music",
+      "cntGame": "Games",
+      "cntReal": "Live-Action",
+      "localStats": "Local Library",
+      "watchedEps": "{n} eps watched",
+      "recentTitle": "Recently Updated Collections",
+      "recentEmpty": "No anime collections in the cloud yet",
+      "charsTitle": "Favorite Characters",
+      "charsEmpty": "No favorite characters yet",
+      "personsTitle": "Favorite Persons",
+      "personsEmpty": "No favorite persons yet",
+      "epsN": "{n} eps watched"
     }
   },
   "time": {

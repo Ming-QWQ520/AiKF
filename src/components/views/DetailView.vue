@@ -60,6 +60,14 @@ const { data: episodes } = useAsync(() => anich.episodes(anichId.value!), { enab
 const { data: related } = useAsync(() => anich.related(anichId.value!), { enabled: anichId, source: anichId });
 const { data: characters } = useAsync(() => anich.characters(anichId.value!), { enabled: anichId, source: anichId });
 
+// ── Tabs（需求：角色项右侧新增「制作」与「关联条目」，原「推荐」Tab 即关联条目
+// 数据源，合并升级为分组完整展示，避免两个 Tab 内容重复）──
+// ⚠️ TDZ 教训（生产包 "Cannot access 'C' before initialization"）：useAsync 内部
+// watch(immediate) 会在 setup 期间同步求值 enabled → staffTabActive → activeTab，
+// 因此 activeTab 必须先于下方 staff 的 useAsync 声明，否则制作 Tab 的数据请求
+// 永远不会发出（staff 列表永远为空）。
+const activeTab = ref<"info" | "episodes" | "comments" | "characters" | "staff" | "bgmRelated">("info");
+
 // ── 制作人员（需求：角色项右侧新增制作 Tab）——进入该 Tab 时才拉取 ──
 const staffTabActive = computed(() => activeTab.value === "staff");
 const { data: staff, isLoading: staffLoading } = useAsync(() => anich.persons(anichId.value!), {
@@ -78,7 +86,6 @@ const onCharImgError = (e: Event) => {
 
 // ── Tabs（需求：角色项右侧新增「制作」与「关联条目」，原「推荐」Tab 即关联条目
 // 数据源，合并升级为分组完整展示，避免两个 Tab 内容重复）──
-const activeTab = ref<"info" | "episodes" | "comments" | "characters" | "staff" | "bgmRelated">("info");
 const TABS = [
   { key: "info", labelKey: "detail.tabInfo" },
   { key: "episodes", labelKey: "detail.tabEpisodes" },
@@ -670,11 +677,13 @@ const applyRematch = (hit: any) => {
     <!-- 状态菜单遮罩：点击空白处关闭 -->
     <div v-if="statusMenuOpen" class="fixed inset-0 z-20" @click="closeStatusMenu" />
 
-    <!-- ── 评论页回到顶部（需求：评论页面增加回到顶部按键）── -->
+    <!-- ── 评论页回到顶部（需求：固定悬浮于内容区右下角，不随评论滚动）── -->
+    <!-- main 有 contain:layout（会成为 fixed 后代的 containing block），故定位基准=内容区边缘，
+         恰好等价于视口右下角；移动端抬高避开底部导航，桌面端贴角落。 -->
     <button
       v-if="activeTab === 'comments' && showBackTop"
       @click="backToTop"
-      class="fixed bottom-24 right-6 z-40 flex h-10 w-10 items-center justify-center rounded-full border border-border bg-card text-muted-foreground shadow-lg shadow-black/10 transition-colors hover:text-foreground dark:shadow-black/50"
+      class="fixed bottom-20 right-5 z-40 flex h-10 w-10 items-center justify-center rounded-full border border-border bg-card text-muted-foreground shadow-lg shadow-black/10 transition-all hover:text-foreground active:scale-95 md:bottom-6 md:right-6 dark:shadow-black/50"
       v-tip="$t('common.backTop')"
       :aria-label="$t('common.backTop')"
     >

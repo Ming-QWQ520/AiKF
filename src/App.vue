@@ -37,7 +37,10 @@ const viewComponent = () => {
 const onEnter = (el: Element, done: () => void) => {
   gsap.fromTo(el,
     { opacity: 0, y: 12, filter: "blur(4px)" },
-    { opacity: 1, y: 0, filter: "blur(0px)", duration: 0.35, ease: "power2.out", clearProps: "filter", onComplete: done }
+    // clearProps: "all" —— 残留的内联 transform/filter 会创建 containing block，
+    // 导致视图内 fixed 定位元素（如评论页回到顶部按钮）锚定到整个滚动内容
+    // 而不是视口右下角；动画结束后必须清干净。
+    { opacity: 1, y: 0, filter: "blur(0px)", duration: 0.35, ease: "power2.out", clearProps: "all", onComplete: done }
   );
 };
 const onLeave = (el: Element, done: () => void) => {

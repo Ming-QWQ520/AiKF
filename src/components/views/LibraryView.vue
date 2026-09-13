@@ -1,16 +1,19 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from "vue";
-import { Bookmark, Trash2, Play, CheckCircle2, Star, Library, CircleUserRound, ChevronDown } from "lucide-vue-next";
-import { useLibraryStore, STATUS_I18N_KEYS, STATUS_ORDER, STATUS_STYLES, type TrackStatus } from "@/stores/library";
+import { Bookmark, Trash2, Play, CheckCircle2, Star, Library, CircleUserRound, ChevronDown, Loader2 } from "lucide-vue-next";
+import { useLibraryStore, STATUS_I18N_KEYS, STATUS_ORDER, STATUS_STYLES, type TrackStatus, type LibraryEntry } from "@/stores/library";
 import { useUIStore } from "@/stores/ui";
 import { anich } from "@/lib/anich/api-client";
+import * as bgmApi from "@/lib/bangumi/client";
 import { useBangumi } from "@/lib/bangumi/useBangumi";
+import { useI18n } from "vue-i18n";
 import SectionCard from "@/components/SectionCard.vue";
 import CoverImage from "@/components/CoverImage.vue";
 import { cn } from "@/lib/utils";
 
 const library = useLibraryStore();
 const ui = useUIStore();
+const { t } = useI18n();
 
 const filter = ref<TrackStatus | "all">("all");
 const confirmClear = ref(false);
@@ -57,16 +60,92 @@ const doClear = () => {
 };
 
 // ── 集数明细（需求：观看过的集数不连续时，追番库提供逐集明细展示）──
-// 展开后显示全部集数芯片：已看=主色实底；点击芯片可切换已看/未看
+// 展开后显示全部集数芯片；点击芯片可切换已看/未看
 // （变更经 auto-sync 自动推送到 Bangumi，无需手动同步）。
 const epDetailExpanded = ref<Set<number>>(new Set());
-const toggleEpDetail = (id: number) => {
+
+// ── 云端逐集观看状态（需求：观看集数不连续时显示真实明细）──
+// 展开「集数明细」时，若条目已绑定 Bangumi 且已登录，拉取逐集收藏状态
+// （GET /v0/users/-/collections/{id}/episodes）并与本地观看记录合并：
+// - 云端「看过」→ 并入本地观看记录（并集语义，不删本地多看的集数）；
+// - 云端「想看/抛弃」→ 芯片以对应颜色展示（本地模型无此粒度，仅展示）；
+// - bgmOnly 条目总集数未知时，顺带用云端章节列表补全。
+const cloudEpTypes = ref<Map<number, Map<number, number>>>(new Map());
+const cloudEpLoading = ref<Set<number>>(new Set());
+const cloudEpDone = new Set<number>(); // 本次运行内已拉取过的条目
+
+const toggleEpDetail = (entry: LibraryEntry) => {
   const s = new Set(epDetailExpanded.value);
-  if (s.has(id)) s.delete(id);
-  else s.add(id);
+  if (s.has(entry.id)) s.delete(entry.id);
+  else {
+    s.add(entry.id);
+    void ensureCloudEpisodes(entry);
+  }
   epDetailExpanded.value = s;
 };
-const isWatched = (entry: { watchedEpisodes: number[] }, n: number) => entry.watchedEpisodes.includes(n);
+
+async function ensureCloudEpisodes(entry: LibraryEntry) {
+  if (!bgmApi.isLoggedIn() || !entry.bgmId) return;
+  if (cloudEpDone.has(entry.id) || cloudEpLoading.value.has(entry.id)) return;
+  cloudEpLoading.value = new Set(cloudEpLoading.value).add(entry.id);
+  try {
+    // bgmOnly / 总集数未知 → 先用云端章节列表补全（数本篇话数）
+    if ((entry.totalEpisodes ?? 0) <= 0) {
+      try {
+        const eps = await bgmApi.getEpisodes(entry.bgmId);
+        const n = eps.filter((e) => e.type === 0).length;
+        if (n > 0) library.syncMeta(entry.id, { totalEpisodes: n });
+      } catch {
+        /* 补全失败不影响后续流程 */
+      }
+    }
+    const items = await bgmApi.getSubjectEpisodeCollection(entry.bgmId);
+    const m = new Map<number, number>();
+    for (const it of items) {
+      if (!it?.episode) continue;
+      const num =
+        typeof it.episode.ep === "number"
+          ? it.episode.ep
+          : it.episode.order
+            ? parseFloat(it.episode.order)
+            : Number.NaN;
+      if (!Number.isInteger(num) || num < 1) continue;
+      m.set(num, Number(it.type) || 0);
+      // 云端看过 → 本地补标（并集语义：不覆盖、不删除本地已有记录）
+      if (Number(it.type) === 2 && !entry.watchedEpisodes.includes(num)) {
+        library.markEpisode(entry.id, num);
+      }
+    }
+    const next = new Map(cloudEpTypes.value);
+    next.set(entry.id, m);
+    cloudEpTypes.value = next;
+  } catch {
+    /* 拉取失败静默：明细仍显示本地观看记录 */
+  } finally {
+    const s2 = new Set(cloudEpLoading.value);
+    s2.delete(entry.id);
+    cloudEpLoading.value = s2;
+    cloudEpDone.add(entry.id);
+  }
+}
+
+const isWatched = (entry: LibraryEntry, n: number) => entry.watchedEpisodes.includes(n);
+
+/** 集数芯片样式：云端状态优先级展示（看过=主色 / 想看=琥珀 / 抛弃=红） */
+function chipClass(entry: LibraryEntry, n: number): string {
+  const ct = cloudEpTypes.value.get(entry.id)?.get(n) ?? 0;
+  if (isWatched(entry, n) || ct === 2) return "bg-primary text-primary-foreground";
+  if (ct === 1) return "bg-amber-500/15 text-amber-600 ring-1 ring-amber-500/40 dark:text-amber-400";
+  if (ct === 3) return "bg-destructive/10 text-destructive ring-1 ring-destructive/30";
+  return "bg-foreground/[0.06] text-muted-foreground hover:bg-foreground/10 hover:text-foreground";
+}
+
+function chipTip(entry: LibraryEntry, n: number): string {
+  const ct = cloudEpTypes.value.get(entry.id)?.get(n) ?? 0;
+  if (ct === 1) return t("library.epWish", { n });
+  if (ct === 3) return t("library.epDropped", { n });
+  return isWatched(entry, n) ? t("library.epWatched", { n }) : t("library.epUnwatched", { n });
+}
 // 注：云同步已全自动化 —— 每次修改约 3 秒后自动推送变更条目（auto-sync.ts），
 // 登录/启动时自动从云端拉取（useBangumi），页面不再提供任何手动同步按钮。</script>
 
@@ -177,28 +256,28 @@ const isWatched = (entry: { watchedEpisodes: number[] }, n: number) => entry.wat
                   />
                 </div>
 
-                <!-- 集数明细（需求：观看集数不连续时提供逐集明细；点击芯片可切换已看/未看） -->
-                <div v-if="entry.totalEpisodes > 0" class="mt-1.5">
+                <!-- 集数明细（需求：观看集数不连续时提供逐集明细；点击芯片可切换已看/未看）
+                     bgmOnly 条目总集数未知时也可展开 —— 展开时会先从云端补全总集数 -->
+                <div v-if="entry.totalEpisodes > 0 || entry.bgmId" class="mt-1.5">
                   <button
-                    @click="toggleEpDetail(entry.id)"
+                    @click="toggleEpDetail(entry)"
                     class="flex items-center gap-1 rounded px-0.5 py-0.5 text-[11px] text-muted-foreground transition-colors hover:text-foreground"
                   >
-                    <ChevronDown :class="cn('h-3 w-3 transition-transform duration-200', epDetailExpanded.has(entry.id) && 'rotate-180')" />
+                    <Loader2 v-if="cloudEpLoading.has(entry.id)" class="h-3 w-3 animate-spin" />
+                    <ChevronDown v-else :class="cn('h-3 w-3 transition-transform duration-200', epDetailExpanded.has(entry.id) && 'rotate-180')" />
                     {{ $t('library.epDetail') }}
-                    <span class="tabular-nums">{{ entry.watchedEpisodes.length }}/{{ entry.totalEpisodes }}</span>
+                    <span class="tabular-nums">{{ entry.watchedEpisodes.length }}{{ entry.totalEpisodes > 0 ? `/${entry.totalEpisodes}` : '' }}</span>
                   </button>
-                  <div v-if="epDetailExpanded.has(entry.id)" class="mt-1.5 flex max-h-[88px] flex-wrap gap-1 overflow-y-auto">
+                  <div v-if="epDetailExpanded.has(entry.id) && entry.totalEpisodes > 0" class="mt-1.5 flex max-h-[88px] flex-wrap gap-1 overflow-y-auto">
                     <button
                       v-for="n in entry.totalEpisodes"
                       :key="n"
                       @click="library.toggleEpisode(entry.id, n, entry.totalEpisodes)"
                       :class="cn(
                         'h-6 min-w-[26px] rounded-md px-1 text-[10px] font-semibold tabular-nums transition-colors',
-                        isWatched(entry, n)
-                          ? 'bg-primary text-primary-foreground'
-                          : 'bg-foreground/[0.06] text-muted-foreground hover:bg-foreground/10 hover:text-foreground'
+                        chipClass(entry, n)
                       )"
-                      v-tip="isWatched(entry, n) ? $t('library.epWatched', { n }) : $t('library.epUnwatched', { n })"
+                      v-tip="chipTip(entry, n)"
                     >{{ n }}</button>
                   </div>
                 </div>

@@ -13,6 +13,12 @@ export interface BgmUser {
   nickname: string;
   avatar?: BgmUserAvatar;
   sign?: string;
+  /** /v0/me 专属字段：注册时间（ISO 8601 字符串，如 2017-12-03T08:51:16+08:00） */
+  reg_time?: string;
+  /** /v0/me 专属字段：绑定邮箱（不在界面展示，仅预留） */
+  email?: string;
+  /** 用户组 id（1=普通用户，仅预留） */
+  user_group?: number;
 }
 
 /** OAuth token 响应（bgm.tv/oauth/access_token） */
@@ -91,4 +97,43 @@ export interface BgmSearchResult {
   total?: number;
   offset?: number;
   limit?: number;
+}
+
+/** 通用分页信封（Page）：{ total, limit, offset, data } */
+export interface BgmPage<T> {
+  total: number;
+  limit: number;
+  offset: number;
+  data?: T[];
+}
+
+/** GET /v0/users/-/collections/{subject_id}/episodes 条目（逐集观看状态） */
+export interface BgmEpisodeCollectionItem {
+  /** 章节完整信息（含 ep / order 序号，用于映射到本地集数） */
+  episode: BgmEpisode;
+  /** EpisodeCollectionType：0 未收藏 / 1 想看 / 2 看过 / 3 抛弃 */
+  type: number;
+  /** unix 秒，0 表示未知 */
+  updated_at?: number;
+}
+
+/** GET /v0/users/{username}/collections/-/characters 条目（收藏的角色） */
+export interface BgmUserCharacterCollection {
+  id: number;
+  name: string;
+  /** 角色/机体/舰船/组织... */
+  type?: number;
+  images?: { large?: string; medium?: string; small?: string; grid?: string } | null;
+  created_at?: string;
+}
+
+/** GET /v0/users/{username}/collections/-/persons 条目（收藏的人物） */
+export interface BgmUserPersonCollection {
+  id: number;
+  name: string;
+  /** 1 个人 / 2 公司 / 3 组合 */
+  type?: number;
+  career?: string[];
+  images?: { large?: string; medium?: string; small?: string; grid?: string } | null;
+  created_at?: string;
 }

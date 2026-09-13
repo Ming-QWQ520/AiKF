@@ -17,14 +17,27 @@ import { logError, logInfo, logWarn } from "@/lib/logger";
 import type {
   BgmCollectionItem,
   BgmEpisode,
+  BgmEpisodeCollectionItem,
+  BgmPage,
   BgmSearchBody,
   BgmSearchResult,
   BgmSession,
   BgmTokenResp,
   BgmUser,
+  BgmUserCharacterCollection,
+  BgmUserPersonCollection,
 } from "./types";
 
-export type { BgmSession, BgmCollectionItem, BgmEpisode, BgmSearchResult, BgmUser };
+export type {
+  BgmSession,
+  BgmCollectionItem,
+  BgmEpisode,
+  BgmEpisodeCollectionItem,
+  BgmSearchResult,
+  BgmUser,
+  BgmUserCharacterCollection,
+  BgmUserPersonCollection,
+};
 
 // ── 应用凭据（Bangumi 开发者后台注册）──
 export const BGM_CLIENT_ID = "bgm71176aa5120285808";
@@ -396,14 +409,44 @@ export async function getEpisodes(subjectId: number, limit = 200): Promise<BgmEp
 
 /** 批量标记章节看过（type=2）。 */
 export async function markEpisodesSeen(subjectId: number, episodeIds: number[]): Promise<void> {
+  return setEpisodesStatus(subjectId, episodeIds, 2);
+}
+
+/**
+ * 批量设置章节观看状态（EpisodeCollectionType）。
+ * 0=未收藏（取消标记）/ 1=想看 / 2=看过 / 3=抛弃。
+ * 对应 PATCH /v0/users/-/collections/{subject_id}/episodes（写操作用 `-` 简写）。
+ */
+export async function setEpisodesStatus(
+  subjectId: number,
+  episodeIds: number[],
+  type: number
+): Promise<void> {
   if (!episodeIds.length) return;
   // 分批（每批 100，防超大 payload）
   for (let i = 0; i < episodeIds.length; i += 100) {
     await api<unknown>("PATCH", `/v0/users/-/collections/${subjectId}/episodes`, {
       episode_id: episodeIds.slice(i, i + 100),
-      type: 2,
+      type,
     });
   }
+}
+
+/**
+ * 获取某条目的逐集观看状态（需求：观看集数不连续时提供准确明细）。
+ * 对应 GET /v0/users/-/collections/{subject_id}/episodes（规范允许此读路径用 `-`
+ * 简写指代当前用户，与收藏列表的 /v0/users/{username}/... 不同）。
+ * 返回：该条目下每话的 { episode, type }（type=0 未收藏也会返回）。
+ */
+export async function getSubjectEpisodeCollection(
+  subjectId: number,
+  limit = 1000
+): Promise<BgmEpisodeCollectionItem[]> {
+  const res = await api<BgmPage<BgmEpisodeCollectionItem>>(
+    "GET",
+    `/v0/users/-/collections/${subjectId}/episodes?limit=${limit}&offset=0`
+  );
+  return res.data ?? [];
 }
 
 /** 当前用户的动画收藏列表（自动翻页；subject_type=2 为动画）。读路径必须用 username。 */
@@ -427,6 +470,49 @@ export async function getMyCollections(
     if (offset > 2000) break; // 安全上限
   }
   return all;
+}
+
+/**
+ * 某一类型的云端收藏总数（limit=1 只取信封里的 total，开销极小）。
+ * subjectType：1 书籍 / 2 动画 / 3 音乐 / 4 游戏 / 6 三次元。
+ */
+export async function getCollectionsCount(subjectType: number): Promise<number> {
+  const ident = await currentPathIdent();
+  const res = await api<BgmPage<unknown>>(
+    "GET",
+    `/v0/users/${ident}/collections?subject_type=${subjectType}&limit=1&offset=0`
+  );
+  return Number(res.total) || 0;
+}
+
+/** 最近更新的动画收藏（单页，不翻页；用于「我的」页最近收藏展示）。 */
+export async function getRecentCollections(limit = 12): Promise<BgmCollectionItem[]> {
+  const ident = await currentPathIdent();
+  const res = await api<BgmPage<BgmCollectionItem>>(
+    "GET",
+    `/v0/users/${ident}/collections?subject_type=2&limit=${limit}&offset=0`
+  );
+  return res.data ?? [];
+}
+
+/** 收藏的角色（GET /v0/users/{username}/collections/-/characters，规范无分页参数，一次性返回）。 */
+export async function getCharacterCollections(): Promise<BgmUserCharacterCollection[]> {
+  const ident = await currentPathIdent();
+  const res = await api<BgmPage<BgmUserCharacterCollection>>(
+    "GET",
+    `/v0/users/${ident}/collections/-/characters`
+  );
+  return res.data ?? [];
+}
+
+/** 收藏的人物（GET /v0/users/{username}/collections/-/persons，规范无分页参数，一次性返回）。 */
+export async function getPersonCollections(): Promise<BgmUserPersonCollection[]> {
+  const ident = await currentPathIdent();
+  const res = await api<BgmPage<BgmUserPersonCollection>>(
+    "GET",
+    `/v0/users/${ident}/collections/-/persons`
+  );
+  return res.data ?? [];
 }
 
 // ── 本地 TrackStatus ↔ Bangumi 收藏类型 ──
