@@ -82,6 +82,8 @@ export interface BgmEpisode {
   /** 展示序号（如 "01"、"SP"） */
   order?: string;
   duration?: string;
+  /** 首播日期（如 "2015-04-29"，接口实测返回，规范文档未列出） */
+  airdate?: string;
 }
 
 /** POST /v0/search/subjects 请求体 */

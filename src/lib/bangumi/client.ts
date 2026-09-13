@@ -393,6 +393,15 @@ export async function updateCollection(
   await api<unknown>("POST", `/v0/users/-/collections/${subjectId}`, payload);
 }
 
+/**
+ * 取消收藏（需求 2026-09-13：追番库「取消追番」= 本地移除 + 云端同步删除）。
+ * 对应 DELETE /v0/users/-/collections/{subject_id}（写操作用 `-` 简写）。
+ * 注意：auto-sync 刻意不做删除同步（防误触），此处是用户显式确认后的唯一删除通道。
+ */
+export async function deleteCollection(subjectId: number): Promise<void> {
+  await api<unknown>("DELETE", `/v0/users/-/collections/${subjectId}`);
+}
+
 /** 章节列表（type=0 普通/1 SP/2 OP/3 ED/4 广告...，这里取全部再由调用方过滤）。 */
 export async function getEpisodes(subjectId: number, limit = 200): Promise<BgmEpisode[]> {
   const out: BgmEpisode[] = [];

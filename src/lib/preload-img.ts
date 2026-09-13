@@ -39,7 +39,9 @@ const observer = typeof IntersectionObserver !== "undefined"
   : null;
 
 const preloadImg: Directive<HTMLImageElement> = {
-  mounted(el) {
+  mounted(el, binding) {
+    // 显式传 false（v-preload-img="!eager"）：跳过懒加载，src 已由 :src 直接绑定
+    if (binding.value === false) return;
     if (observer) {
       observer.observe(el);
     } else {

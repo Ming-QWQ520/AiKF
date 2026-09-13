@@ -168,8 +168,6 @@
     "remove": "Remove",
     "progress": "Progress",
     "watchedN": "{n} watched",
-    "continueAt": "Continue Ep. {n}",
-    "continueEp": "Continue EP{n}",
     "myScore": "My rating",
     "myScoreN": "My rating: {n}",
     "scoreClear": "Clear rating",
@@ -179,13 +177,28 @@
       "planned": "Plan to watch",
       "completed": "Completed",
       "onhold": "On hold",
-      "dropped": "Dropped"
+      "dropped": "Dropped",
+      "cancel": "Stop Tracking"
     },
     "epDetail": "Episode detail",
     "epWatched": "Ep {n} · watched",
     "epUnwatched": "Ep {n} · not watched",
     "epWish": "EP {n} · Plan to Watch",
-    "epDropped": "EP {n} · Dropped"
+    "epDropped": "EP {n} · Dropped",
+    "changeStatus": "Change status",
+    "cancelWarnTitle": "Stop tracking this anime?",
+    "cancelWarnDesc": "It will be removed from your library and its collection on Bangumi will be deleted.",
+    "cancelKeep": "Keep",
+    "cancelConfirm": "Remove",
+    "actWatched": "Watched",
+    "actWatchedTo": "Watched up to",
+    "actWish": "Want to Watch",
+    "actDrop": "Dropped",
+    "actUndo": "Undo",
+    "epTitleCn": "Title (CN)",
+    "epAirdate": "Air date",
+    "epDuration": "Duration",
+    "epNoMeta": "No episode info"
   },
   "cache": {
     "title": "Downloads",
@@ -444,7 +457,9 @@
       "personsTitle": "Favorite Persons",
       "personsEmpty": "No favorite persons yet",
       "epsN": "{n} eps watched"
-    }
+    },
+    "thanks": "Anime data & covers are provided by Bangumi TV",
+    "thanksTitle": "Bangumi TV"
   },
   "time": {
     "w0": "Sun",

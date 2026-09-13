@@ -9,8 +9,11 @@ const props = withDefaults(
     ratio?: "portrait" | "square" | "wide";
     rounded?: string;
     class?: string;
+    /** 立即加载（不懒加载）：适合首屏/小图横滑条，避免滚动时懒载入
+     *  重复触发缩放淡入动画（表现为「图片刷新摆动」） */
+    eager?: boolean;
   }>(),
-  { ratio: "portrait", rounded: "rounded-2xl" }
+  { ratio: "portrait", rounded: "rounded-2xl", eager: false }
 );
 
 const loaded = ref(false);
@@ -42,15 +45,16 @@ const ratioClass = computed(
     <div v-if="!loaded && !errored" class="absolute inset-0 shimmer" />
     <img
       v-if="src && !errored"
-      v-preload-img
-      :data-src="src"
+      v-preload-img="!eager"
+      :src="eager ? src : undefined"
+      :data-src="eager ? undefined : src"
       :alt="alt"
-      loading="lazy"
+      :loading="eager ? 'eager' : 'lazy'"
       decoding="async"
       draggable="false"
       @load="loaded = true"
       @error="errored = true"
-      :class="cn('cover-img h-full w-full object-cover pointer-events-none select-none will-change-[opacity,transform] transition-[opacity,transform] duration-500 ease-out', loaded ? 'scale-100 opacity-100 blur-0' : 'scale-105 opacity-0 blur-md')"
+      :class="cn('cover-img h-full w-full object-cover pointer-events-none select-none transition-[opacity,transform] duration-500 ease-out', loaded ? 'scale-100 opacity-100 blur-0 will-change-auto' : 'scale-105 opacity-0 blur-md will-change-[opacity,transform]')"
     />
     <div v-else class="absolute inset-0 flex items-center justify-center">
       <svg viewBox="0 0 24 24" fill="none" class="h-8 w-8 text-muted-foreground/60" stroke="currentColor" stroke-width="1.5">

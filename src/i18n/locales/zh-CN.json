@@ -168,8 +168,6 @@
     "remove": "移除",
     "progress": "观看进度",
     "watchedN": "已看 {n} 话",
-    "continueAt": "继续观看 第{n}话",
-    "continueEp": "继续 {n} 话",
     "myScore": "我的评分",
     "myScoreN": "我的评分：{n}",
     "scoreClear": "清除评分",
@@ -179,13 +177,28 @@
       "planned": "想看",
       "completed": "看过",
       "onhold": "搁置",
-      "dropped": "弃番"
+      "dropped": "弃番",
+      "cancel": "取消追番"
     },
     "epDetail": "集数明细",
     "epWatched": "第 {n} 集 · 已看",
     "epUnwatched": "第 {n} 集 · 未看",
     "epWish": "第 {n} 话 · 想看",
-    "epDropped": "第 {n} 话 · 抛弃"
+    "epDropped": "第 {n} 话 · 抛弃",
+    "changeStatus": "切换状态",
+    "cancelWarnTitle": "确认取消追番？",
+    "cancelWarnDesc": "将从追番库移除该番剧，并同步删除 Bangumi 上的收藏记录。",
+    "cancelKeep": "保留",
+    "cancelConfirm": "确认取消",
+    "actWatched": "看过",
+    "actWatchedTo": "看到",
+    "actWish": "想看",
+    "actDrop": "抛弃",
+    "actUndo": "撤销",
+    "epTitleCn": "中文标题",
+    "epAirdate": "首播",
+    "epDuration": "时长",
+    "epNoMeta": "暂无章节信息"
   },
   "cache": {
     "title": "本地缓存",
@@ -444,7 +457,9 @@
       "personsTitle": "收藏的人物",
       "personsEmpty": "还没有收藏的人物",
       "epsN": "已看 {n} 话"
-    }
+    },
+    "thanks": "番剧数据与封面来自 Bangumi 番组计划",
+    "thanksTitle": "Bangumi 番组计划"
   },
   "time": {
     "w0": "周日",

@@ -450,7 +450,8 @@ const careerText = (p: bgm.BgmUserPersonCollection) =>
             v-tip="recentTitle(it)"
           >
             <div class="relative overflow-hidden rounded-xl">
-              <CoverImage :src="recentCover(it)" :alt="recentTitle(it)" ratio="portrait" rounded="rounded-xl" class="transition-transform group-hover:scale-[1.04]" />
+              <!-- eager：12 张小图直接加载，避免横向滑动时懒载入重复触发缩放淡入动画（图片刷新摆动） -->
+              <CoverImage :src="recentCover(it)" :alt="recentTitle(it)" ratio="portrait" rounded="rounded-xl" eager class="transition-transform group-hover:scale-[1.04]" />
               <span :class="cn('absolute left-1.5 top-1.5 rounded-full px-1.5 py-0.5 text-[9px] font-bold', STATUS_STYLES[recentStatus(it)].chip)">
                 {{ $t(STATUS_I18N_KEYS[recentStatus(it)]) }}
               </span>
@@ -793,6 +794,26 @@ const careerText = (p: bgm.BgmUserPersonCollection) =>
         class="state-layer flex items-center gap-2 rounded-lg border border-border px-5 py-2.5 text-sm font-medium text-muted-foreground transition-colors hover:border-destructive/40 hover:bg-destructive/5 hover:text-destructive"
       >
         <RotateCcw class="h-4 w-4" /> {{ $t('settings.reset') }}
+      </button>
+    </div>
+
+    <!-- ─── 致谢：Bangumi 番组计划（需求 2026-09-13：页面底部官方徽章，系统浏览器打开）─── -->
+    <div class="flex flex-col items-center gap-2 pb-6 pt-1">
+      <p class="text-center text-[11px] leading-relaxed text-muted-foreground">{{ $t('settings.thanks') }}</p>
+      <button
+        @click="openExternalUrl('https://bgm.tv/')"
+        class="state-layer rounded-md p-1 transition-opacity hover:opacity-80"
+        v-tip="$t('settings.thanksTitle')"
+        :aria-label="$t('settings.thanksTitle')"
+      >
+        <img
+          src="https://bgm.tv/img/ico/bgm88-31.gif"
+          alt="Bangumi 番组计划"
+          class="h-[31px] w-[88px]"
+          draggable="false"
+          decoding="async"
+          @error="($event.target as HTMLElement).style.visibility = 'hidden'"
+        />
       </button>
     </div>
 
